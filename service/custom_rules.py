@@ -60,7 +60,6 @@ class AdminRule(ABCRule, ABC):
     async def check(self, event: MessageEvent):
         admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
         admins = list(set(admins).union(ADMINS))
-        print(admins)
         if isinstance(event, MessageEvent):
             return event.user_id in admins
         if isinstance(event, Message):
