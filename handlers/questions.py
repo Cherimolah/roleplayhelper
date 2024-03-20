@@ -77,7 +77,6 @@ async def send_main_menu(m: Message):
     await bot.write_msg(m.peer_id, messages.main_menu, keyboard=await keyboards.main_menu(m.from_id))
 
 
-
 @bot.on.private_message(PayloadRule({"command": "start"}))
 @bot.on.private_message(text=["начать", "регистрация", "заполнить заново"])
 @bot.on.private_message(command="start")
@@ -309,12 +308,13 @@ async def set_character(m: Message):
     is_edit = await db.select([db.Form.is_edit]).where(and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))).gino.scalar()
     count_forms = await db.select([db.func.count()]).where(db.Form.user_id == m.from_id).gino.scalar()
     form, photo = await loads_form(m.from_id, True)
-    admins = await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()
+    admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
+    admins = list(set(admins).union(ADMINS))
     if not is_edit:
         if count_forms == 1:
             states.set(m.from_id, Registration.WAIT)
             await bot.write_msg(m.peer_id, messages.form_ready)
-            await bot.write_msg([x[0] for x in admins], form, photo, keyboard=keyboards.create_accept_form(m.from_id))
+            await bot.write_msg(admins, form, photo, keyboard=keyboards.create_accept_form(m.from_id))
         else:
             is_edit_old = await db.select([db.Form.is_edit]).where(
                 and_(db.Form.user_id == m.from_id, db.Form.is_edit.is_(True))

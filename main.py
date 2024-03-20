@@ -1,3 +1,6 @@
+"""
+Основной файл запуска
+"""
 import asyncio
 from datetime import datetime, timedelta, timezone
 import traceback
@@ -6,9 +9,16 @@ from loader import bot
 import handlers
 from service.db_engine import db
 from service.utils import send_mailing, take_off_payments, quest_over, send_daylics
+from config import ADMINS
 
 
 async def on_startup():
+    """
+    Выполняется при запуске.
+    В бэклог кладутся задачи отправки рассылок, снятия платы за аренду и
+    окончания квеста
+    :return: None
+    """
     mailings = await db.Mailings.query.gino.all()
     for mail in mailings:
         if not mail.send_at:
@@ -34,7 +44,6 @@ async def on_startup():
         asyncio.get_event_loop().create_task(quest_over(cooldown, form_id, quest_id))
 
 
-
 def number_error():
     i = 1
     while True:
@@ -47,11 +56,16 @@ err_num = number_error()
 
 @bot.error_handler.register_error_handler(Exception)
 async def exception(e: Exception):
+    """
+    Информирует о произошедших ошибках
+    :param e:
+    :return:
+    """
     print((datetime.now(timezone(timedelta(hours=5)))).strftime("%d.%m.%Y %H:%M:%S"))
     num = next(err_num)
     print(f"[ERROR] №{num}: {e}")
     print(traceback.format_exc(), "\n")
-    await bot.api.messages.send(peer_id=32650977, message=f"⚠ [Ошибка] №{num}:"
+    await bot.api.messages.send(peer_ids=ADMINS, message=f"⚠ [Ошибка] №{num}:"
                                                           f"\n{traceback.format_exc()}", random_id=0)
 
 

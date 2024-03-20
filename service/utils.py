@@ -144,7 +144,10 @@ async def send_mailing(sleep, message_id, mailing_id):
 
 async def take_off_payments(form_id: int):
     while True:
-        balance, freeze = await db.select([db.Form.balance, db.Form.freeze]).where(db.Form.id == form_id).gino.first()
+        info = await db.select([db.Form.balance, db.Form.freeze]).where(db.Form.id == form_id).gino.first()
+        if not info:
+            break
+        balance, freeze = info
         if not balance or balance < 0 or freeze:
             return
         last_payment = await db.select([db.Form.last_payment]).where(db.Form.id == form_id).gino.scalar()

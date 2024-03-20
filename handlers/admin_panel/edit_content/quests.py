@@ -28,6 +28,7 @@ async def name_quest(m: Message):
     states.set(m.peer_id, f"{Admin.QUEST_DESCRIPTION}*{quest_id}")
     await bot.write_msg(m.peer_id, "Название квеста установлено. Теперь пришлите описание квеста")
 
+
 @bot.on.private_message(StateRule(Admin.QUEST_DESCRIPTION, True), AdminRule())
 async def description_quest(m: Message):
     quest_id = int(states.get(m.peer_id).split("*")[1])
@@ -107,6 +108,7 @@ async def quest_forever(m: Message):
     name = await db.select([db.Quest.name]).where(db.Quest.id == quest_id).gino.scalar()
     await bot.write_msg(m.peer_id, f"Квест «{name}» создан", keyboard=keyboards.gen_type_change_content("quests"))
 
+
 @bot.on.private_message(StateRule(Admin.QUEST_EXECUTION_TIME, True), AdminRule())
 async def quest_expiration_time(m: Message):
     quest_id = int(states.get(m.peer_id).split("*")[1])
@@ -125,6 +127,7 @@ async def select_delete_quest(m: Message):
         reply = f"{reply}{i + 1}. {quest.name}\n"
     states.set(m.peer_id, Admin.QUEST_DELETE)
     await bot.write_msg(m.peer_id, reply, keyboard=Keyboard())
+
 
 @bot.on.private_message(StateRule(Admin.QUEST_DELETE), NumericRule(), AdminRule())
 async def delete_quest(m: Message, value: int):

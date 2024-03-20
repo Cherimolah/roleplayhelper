@@ -12,6 +12,7 @@ import messages
 from service.states import Menu
 import service.keyboards as keyboards
 from service.utils import get_mention_from_message, select_form, get_current_form_id
+from config import ADMINS
 
 
 class StateRule(ABCRule[Message], ABC):
@@ -58,6 +59,8 @@ class AdminRule(ABCRule, ABC):
 
     async def check(self, event: MessageEvent):
         admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
+        admins = list(set(admins).union(ADMINS))
+        print(admins)
         if isinstance(event, MessageEvent):
             return event.user_id in admins
         if isinstance(event, Message):
