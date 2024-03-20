@@ -1,0 +1,61 @@
+import asyncio
+from datetime import datetime, timedelta, timezone
+import traceback
+
+from loader import bot
+import handlers
+from service.db_engine import db
+from service.utils import send_mailing, take_off_payments, quest_over, send_daylics
+
+
+async def on_startup():
+    mailings = await db.Mailings.query.gino.all()
+    for mail in mailings:
+        if not mail.send_at:
+            continue
+        delta = mail.send_at - datetime.now()
+        asyncio.get_event_loop().create_task(send_mailing(delta.seconds, mail.text, mail.id))
+    form_ids = [x[0] for x in await db.select([db.Form.id]).gino.all()]
+    for form_id in form_ids:
+        asyncio.get_event_loop().create_task(take_off_payments(form_id))
+    quests = await db.select([db.Form.id, db.Form.active_quest]).where(db.Form.active_quest.isnot(None)).gino.all()
+    for form_id, quest_id in quests:
+        quest = await db.select([*db.Quest]).where(db.Quest.id == quest_id).gino.first()
+        cooldown = None
+        if not quest.closed_at:
+            if quest.execution_time:
+                cooldown = quest.execution_time
+        else:
+            if not quest.execution_time:
+                cooldown = (quest.closed_at - datetime.now()).total_seconds()
+            else:
+                nearest = min(quest.closed_at.timestamp(), datetime.now().timestamp())
+                cooldown = nearest - datetime.now().timestamp()
+        asyncio.get_event_loop().create_task(quest_over(cooldown, form_id, quest_id))
+
+
+
+def number_error():
+    i = 1
+    while True:
+        yield i
+        i += 1
+
+
+err_num = number_error()
+
+
+@bot.error_handler.register_error_handler(Exception)
+async def exception(e: Exception):
+    print((datetime.now(timezone(timedelta(hours=5)))).strftime("%d.%m.%Y %H:%M:%S"))
+    num = next(err_num)
+    print(f"[ERROR] №{num}: {e}")
+    print(traceback.format_exc(), "\n")
+    await bot.api.messages.send(peer_id=32650977, message=f"⚠ [Ошибка] №{num}:"
+                                                          f"\n{traceback.format_exc()}", random_id=0)
+
+
+if __name__ == '__main__':
+    bot.loop_wrapper.add_task(on_startup())
+    bot.loop_wrapper.add_task(send_daylics())
+    bot.run_forever()
