@@ -186,7 +186,8 @@ async def ask_salary(m: Message):
         await bot.write_msg(m.peer_id, messages.many_salary_requests)
         return
     salary = await db.SalaryRequests.create(user_id=m.from_id)
-    admins = await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()
+    admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
+    admins = list(set(admins).union(ADMINS))
     name, profession_id = await db.select([db.Form.name, db.Form.profession]).select_from(
         db.Form.join(db.User, and_(db.Form.user_id == m.from_id, db.Form.number == db.User.activated_form))
     ).where(db.Form.user_id == m.from_id).gino.first()
@@ -198,7 +199,7 @@ async def ask_salary(m: Message):
     ).add(
         Callback("Отклонить", {"salary_decline": salary.id}), KeyboardButtonColor.NEGATIVE
     )
-    await bot.write_msg([x[0] for x in admins], messages.salery_request.format(name, profession, day),
+    await bot.write_msg(admins, messages.salery_request.format(name, profession, day),
                         keyboard=keyboard)
     await bot.write_msg(m.peer_id, messages.salary_request_send)
 

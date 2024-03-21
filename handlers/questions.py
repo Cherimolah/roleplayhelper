@@ -108,8 +108,9 @@ async def confirm_edit_form(m: Message):
         db.Form.join(db.User, and_(db.User.user_id == db.Form.user_id, db.Form.number == db.User.activated_form))
     ).where(db.Form.user_id == m.from_id).gino.scalar()
     form, photo = await loads_form(m.from_id, True, number)
-    admins = await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()
-    await bot.write_msg([x[0] for x in admins], form, photo, keyboards.create_accept_form_edit(m.from_id))
+    admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
+    admins = list(set(admins).union(ADMINS))
+    await bot.write_msg(admins, form, photo, keyboards.create_accept_form_edit(m.from_id))
     states.set(m.from_id, Menu.MAIN)
     await bot.write_msg(m.peer_id, messages.form_edited, keyboard=await keyboards.main_menu(m.from_id))
 
@@ -326,15 +327,15 @@ async def set_character(m: Message):
                 ).where(and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))).gino.scalar()
                 states.set(m.from_id, Menu.MAIN)
                 await bot.write_msg(m.peer_id, messages.form_edited, keyboard=await keyboards.main_menu(m.from_id))
-                await bot.write_msg([x[0] for x in admins], form, photo,
+                await bot.write_msg(admins, form, photo,
                                     keyboard=keyboards.create_accept_form_edit_all(m.from_id, number))
             else:
                 states.set(m.from_id, Menu.MAIN)
                 await bot.write_msg(m.peer_id, messages.form_ready)
-                await bot.write_msg([x[0] for x in admins], form, photo,
+                await bot.write_msg(admins, form, photo,
                                     keyboard=keyboards.create_accept_form(m.from_id))
     else:
         states.set(m.from_id, Menu.EDIT_FIELDS)
         await bot.write_msg(m.peer_id, messages.form_edited, keyboard=keyboards.confirm_edit_form)
-        await bot.write_msg([x[0] for x in admins], form, photo, keyboard=keyboards.create_accept_form_edit(m.from_id))
+        await bot.write_msg(admins, form, photo, keyboard=keyboards.create_accept_form_edit(m.from_id))
     await db.User.update.values(creating_form=False).where(db.User.user_id == m.from_id).gino.scalar()
