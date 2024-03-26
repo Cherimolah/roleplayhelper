@@ -1,5 +1,8 @@
 vkbottle
 gino
+sqlalchemy
 loguru
 openpyxl
 python-dotenv
+alembic
+psycopg2
