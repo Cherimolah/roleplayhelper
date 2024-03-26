@@ -38,19 +38,20 @@ class StateRule(ABCRule[Message], ABC):
 class NumericRule(ABCRule[Message], ABC):
 
     async def check(self, event: Message):
-        if event.text.isdigit():
+        if event.text.isdigit() and int(event.text) > 0:
             return {"value": int(event.text)}
-        await event.answer("Необходимо ввести число")
+        await event.answer("Необходимо ввести целое число больше 0")
 
 
 class LimitSymbols(ABCRule[Message], ABC):
 
-    def __init__(self, limit: int):
-        self.limit = limit
+    def __init__(self, max_limit: int = 4095, min_limit: int = 1):
+        self.max_limit = max_limit
+        self.min_limit = min_limit
 
     async def check(self, event: Message):
-        if len(event.text) > self.limit:
-            await event.answer(f"На это поле установлен лимит в {self.limit} символов")
+        if not self.min_limit <= len(event.text) <= self.max_limit:
+            await event.answer(f"На это поле установлен лимит в {self.min_limit} - {self.max_limit} символов")
             return False
         return True
 
@@ -153,4 +154,3 @@ class ManyUsersSpecified(ABCRule[Message], ABC):
             form_id = await get_current_form_id(user_id)
             forms.append(tuple([form_id, user_id]))
         return {"forms": forms}
-

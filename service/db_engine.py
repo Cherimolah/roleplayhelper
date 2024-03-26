@@ -213,7 +213,6 @@ class Database(Gino):
 
         self.PerfectEvent = PerfectEvent
 
-
     async def connect(self):
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")
         await self.gino.create_all()
