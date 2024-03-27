@@ -108,8 +108,6 @@ manage_content = Keyboard().add(
 ).add(
     Text("Дейлики", {"edit_content": "daylics"}), KeyboardButtonColor.PRIMARY
 ).row().add(
-    Text("События", {"edit_content": "events"}), KeyboardButtonColor.PRIMARY
-).row().add(
     Text("Назад", {"edit_content": "back"}), KeyboardButtonColor.NEGATIVE
 )
 

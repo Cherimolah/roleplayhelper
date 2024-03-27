@@ -16,7 +16,7 @@ HOST = os.environ.get("HOST")
 PASSWORD = os.environ.get("PASSWORD")
 DATABASE = os.environ.get("DATABASE")
 
-OWNER = os.environ.get("OWNER")
-ADMINS = os.environ.get("ADMINS").split(";")
+OWNER = int(os.environ.get("OWNER"))
+ADMINS = list(map(int, os.environ.get("ADMINS").split(";")))
 
 DATETIME_FORMAT = os.environ.get("DATETIME_FORMAT")
