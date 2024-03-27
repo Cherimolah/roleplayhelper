@@ -52,7 +52,7 @@ class Database(Gino):
             __tablename__ = "forms"
 
             id = Column(BigInteger, primary_key=True)
-            user_id = Column(Integer, ForeignKey("users.user_id"))
+            user_id = Column(Integer, ForeignKey("users.user_id", ondelete='CASCADE'))
             name = Column(Text)
             profession = Column(Integer, ForeignKey("professions.id", ondelete='SET NULL'))
             age = Column(BigInteger)
@@ -98,8 +98,8 @@ class Database(Gino):
             __tablename__ = "transactions"
 
             id = Column(Integer, primary_key=True)
-            from_user = Column(Integer, ForeignKey("forms.id"))
-            to_user = Column(Integer, ForeignKey("forms.id"))
+            from_user = Column(Integer, ForeignKey("forms.id", ondelete='CASCADE'))
+            to_user = Column(Integer, ForeignKey("forms.id", ondelete='CASCADE'))
             amount = Column(BigInteger)
 
         self.Transactions = Transactions
@@ -108,7 +108,7 @@ class Database(Gino):
             __tablename__ = "salary_requests"
 
             id = Column(Integer, primary_key=True)
-            user_id = Column(Integer, ForeignKey("users.user_id"))
+            user_id = Column(Integer, ForeignKey("users.user_id", ondelete='CASCADE'))
 
         self.SalaryRequests = SalaryRequests
 
@@ -134,7 +134,7 @@ class Database(Gino):
             __tablename__ = "donates"
 
             id = Column(Integer, primary_key=True)
-            form_id = Column(Integer, ForeignKey("forms.id"))
+            form_id = Column(Integer, ForeignKey("forms.id", ondelete='CASCADE'))
             amount = Column(Integer)
 
         self.Donate = Donate
@@ -157,7 +157,7 @@ class Database(Gino):
 
             id = Column(Integer, primary_key=True)
             quest_id = Column(Integer, ForeignKey("quests.id", ondelete='SET NULL'))
-            form_id = Column(Integer, ForeignKey("forms.id"))
+            form_id = Column(Integer, ForeignKey("forms.id", ondelete='CASCADE'))
 
         self.ReadyQuest = ReadyQuest
 
