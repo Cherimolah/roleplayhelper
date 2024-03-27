@@ -49,8 +49,6 @@ async def main_menu(user_id: int):
         Text("Банк", {"menu": "bank"}), KeyboardButtonColor.PRIMARY
     ).add(
         Text("Магазин", {"menu": "shop"}), KeyboardButtonColor.PRIMARY
-    ).add(
-        Text("Вылеты", {"menu": "flights"}), KeyboardButtonColor.PRIMARY
     ).row().add(
         Text("Квесты и ежедневные задания", {"menu": "quests and daylics"}), KeyboardButtonColor.PRIMARY
     ).row().add(

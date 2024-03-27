@@ -54,7 +54,7 @@ class Database(Gino):
             id = Column(BigInteger, primary_key=True)
             user_id = Column(Integer, ForeignKey("users.user_id"))
             name = Column(Text)
-            profession = Column(Integer, ForeignKey("professions.id"))
+            profession = Column(Integer, ForeignKey("professions.id", ondelete='SET NULL'))
             age = Column(BigInteger)
             height = Column(Integer)
             weight = Column(Integer)
@@ -67,19 +67,18 @@ class Database(Gino):
             taboo = Column(Text)
             photo = Column(Text)
             cabin = Column(Integer)
-            cabin_type = Column(Integer, ForeignKey("cabins.id"))
+            cabin_type = Column(Integer, ForeignKey("cabins.id", ondelete='SET NULL'))
             is_request = Column(Boolean, default=True)
             number = Column(Integer, default=1)
             is_edit = Column(Boolean, default=False)
             balance = Column(BigInteger, default=1000)
             freeze = Column(Boolean, default=False)
             last_payment = Column(TIMESTAMP, default=datetime.datetime.now)
-            status = Column(Integer, ForeignKey("statuses.id"), default=1)
-            active_quest = Column(Integer, ForeignKey("quests.id"))
-            activated_daylic = Column(Integer, ForeignKey("daylics.id"))
+            status = Column(Integer, ForeignKey("statuses.id", ondelete='SET NULL'), default=1)
+            active_quest = Column(Integer, ForeignKey("quests.id", ondelete='SET NULL'))
+            activated_daylic = Column(Integer, ForeignKey("daylics.id", ondelete='SET NULL'))
             deactivated_daylic = Column(TIMESTAMP, default=datetime.datetime.now)
             medals = Column(Integer, default=0)
-            activated_flight = Column(Integer, ForeignKey("flights.id"))
 
         self.Form = Form
 
@@ -157,7 +156,7 @@ class Database(Gino):
             __tablename__ = "ready_quests"
 
             id = Column(Integer, primary_key=True)
-            quest_id = Column(Integer, ForeignKey("quests.id"))
+            quest_id = Column(Integer, ForeignKey("quests.id", ondelete='SET NULL'))
             form_id = Column(Integer, ForeignKey("forms.id"))
 
         self.ReadyQuest = ReadyQuest
@@ -170,7 +169,7 @@ class Database(Gino):
             description = Column(Text)
             reward = Column(Integer)
             cooldown = Column(Integer)
-            profession_id = Column(Integer, ForeignKey("professions.id"))
+            profession_id = Column(Integer, ForeignKey("professions.id", ondelete='SET NULL'))
 
         self.Daylic = Daylic
 
@@ -179,39 +178,9 @@ class Database(Gino):
 
             id = Column(Integer, primary_key=True)
             form_id = Column(Integer, ForeignKey("forms.id"))
-            daylic_id = Column(Integer, ForeignKey("daylics.id"))
+            daylic_id = Column(Integer, ForeignKey("daylics.id", ondelete='SET NULL'))
 
         self.CompletedDaylic = CompletedDaylic
-
-        class Flight(self.Model):
-            __tablename__ = "flights"
-
-            id = Column(Integer, primary_key=True)
-            organizer = Column(Integer, ForeignKey("forms.id"))
-            started_at = Column(TIMESTAMP)
-
-        self.Flight = Flight
-
-        class Event(self.Model):
-            __tablename__ = "events"
-
-            id = Column(Integer, primary_key=True)
-            title = Column(Text)
-            description = Column(Text)
-            mask = Column(Text)
-
-        self.Event = Event
-
-        class PerfectEvent(self.Model):
-            __tablename__ = "perfect_events"
-
-            id = Column(Integer, primary_key=True)
-            flight_id = Column(Integer, ForeignKey("flights.id"))
-            event_id = Column(Integer, ForeignKey("events.id"))
-            objects = Column(ARRAY(Integer))
-            subjects = Column(ARRAY(Integer))
-
-        self.PerfectEvent = PerfectEvent
 
     async def connect(self):
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")
