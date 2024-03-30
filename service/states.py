@@ -44,6 +44,7 @@ class Menu:
     FLIGHT_DATE = "flight_date"
     SETTING = "settings"
     FREEZE_REQUEST = "freeze_request"
+    FREEZE_REASON = "freeze_reason"
     DELETE_FORM_REQUEST = "delete_form_request"
 
 

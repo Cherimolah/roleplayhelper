@@ -32,23 +32,30 @@ async def change_notifications(m: Message):
 
 @bot.on.private_message(PayloadRule({"settings": "freeze_request"}), StateRule(Menu.SETTING))
 async def send_freeze_request(m: Message):
-    states.set(m.from_id, Menu.FREEZE_REQUEST)
-    freeze = await db.select([db.Form.name, db.Form.freeze]).where(db.Form.user_id == m.from_id).gino.scalar()
-    kb = Keyboard().add(
-        Text(f"Подтвердить", {"freeze": "send_request"}), KeyboardButtonColor.POSITIVE
-    ).row().add(
-        Text("Назад", {"freeze": "back"}), KeyboardButtonColor.NEGATIVE
-    )
-    await m.answer(f"Вы действительно хотите отправить запрос на {'разморозку' if freeze else 'заморозку'} вашей анкеты?",
-                   keyboard=kb)
-
-
-@bot.on.private_message(PayloadRule({"freeze": "send_request"}), StateRule(Menu.FREEZE_REQUEST))
-async def freeze_request_send_accepted(m: Message):
     has_req = await db.select([db.Form.freeze_request]).where(db.Form.user_id == m.from_id).gino.scalar()
     if has_req:
         await m.answer("У вас уже есть отправленный запрос на заморозку/разморозку анкеты")
         return
+    states.set(m.from_id, Menu.FREEZE_REQUEST)
+    freeze = await db.select([db.Form.freeze]).where(db.Form.user_id == m.from_id).gino.scalar()
+    kb = Keyboard().add(
+        Text(f"Подтвердить", {"freeze": "send_request"} if not freeze else {"unfreeze": "send_request"}), KeyboardButtonColor.POSITIVE
+    ).row().add(
+        Text("Назад", {"freeze": "back"}), KeyboardButtonColor.NEGATIVE
+    )
+    await m.answer('Вы действительно готовы "разморозить" свою анкету, чтобы вернуться к активной деятельности на станции?' if freeze else 'Вы действительно хотите оформить запрос для отправки вашей анкеты "на мороз"?\nЕсли ваш ответ "Да", то кратко опишите причину и примерное время вашего отсутствия после подтверждения по кнопке ниже.',
+                   keyboard=kb)
+
+
+@bot.on.private_message(PayloadRule({"freeze": "send_request"}), StateRule(Menu.FREEZE_REQUEST))
+async def ask_reason_freeze(m: Message):
+    states.set(m.from_id, Menu.FREEZE_REASON)
+    await m.answer("Кратко опишите причину и примерное время вашего отсутствия после подтверждения.", keyboard=Keyboard())
+
+
+@bot.on.private_message(PayloadRule({"unfreeze": "send_request"}), StateRule(Menu.FREEZE_REQUEST))
+@bot.on.private_message(StateRule(Menu.FREEZE_REASON))
+async def freeze_request_send_accepted(m: Message):
     admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
     name, freeze = await db.select([db.Form.name, db.Form.freeze]).where(db.Form.user_id == m.from_id).gino.first()
     kb = Keyboard(inline=True).add(
@@ -57,8 +64,12 @@ async def freeze_request_send_accepted(m: Message):
         Callback("Отклонить", {"freeze": "decline", "user_id": m.from_id}), KeyboardButtonColor.NEGATIVE
     )
     await db.Form.update.values(freeze_request=True).where(db.Form.user_id == m.from_id).gino.status()
+    if not freeze:
+        reply = f"Игрок [id{m.from_id}|{name}] хочет заморозить свою анкету по причине:\n{m.text}"
+    else:
+        reply = f"Игрок [id{m.from_id}|{name}] хочет разморозить свою анкету"
     await bot.api.messages.send(admins,
-                                f"Игрок [id{m.from_id}|{name}] хочет {'разморозить' if freeze else 'заморозить'} свою анкету",
+                                reply,
                                 keyboard=kb)
     await m.answer(f"Запрос на {'разморозку' if freeze else 'заморозку'} страницы отправлен")
     states.set(m.from_id, Menu.MAIN)
