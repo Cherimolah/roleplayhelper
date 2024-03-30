@@ -18,7 +18,7 @@ from service.utils import reload_image
 
 @bot.on.private_message(StateRule(Menu.MAIN), PayloadRule({"menu": "call_admin"}))
 async def send_call_admin(m: Message):
-    await bot.write_msg(m.peer_id, messages.call_admin)
+    await m.answer(messages.call_admin)
 
 
 @bot.on.private_message(StateRule(Menu.MAIN), PayloadRule({"menu": "book"}))
@@ -27,7 +27,7 @@ async def send_book(m: Message):
     keyboard = Keyboard().add(
         Text("Назад", {"book": "back"}), KeyboardButtonColor.NEGATIVE
     )
-    await bot.write_msg(m.peer_id, messages.write_petition, keyboard=keyboard)
+    await m.answer(messages.write_petition, keyboard=keyboard)
 
 
 @bot.on.private_message(StateRule(Menu.WRITE_PETITION), PayloadRule({"book": "back"}))
@@ -40,27 +40,25 @@ async def back_from_write(m: Message):
     ).row().add(
         Text("Назад", {"menu": "home"}), KeyboardButtonColor.NEGATIVE
     )
-    await bot.write_msg(m.peer_id, "Выберите раздел", keyboard=keyboard)
+    await m.answer("Выберите раздел", keyboard=keyboard)
 
 
 @bot.on.private_message(StateRule(Menu.WRITE_PETITION))
 async def save_petition(m: Message):
     attachments = []
     if m.attachments:
-        await bot.write_msg(m.peer_id, "Загружаем вложения")
+        await m.answer("Загружаем вложения")
         for i, attach in enumerate(m.attachments):
             if attach.type == attach.type.PHOTO:
                 attachment = await reload_image(attach, f"book{m.from_id}_{i}.jpg", delete=True)
                 attachments.append(attachment)
     attachment_str = ",".join(attachments)
-    name = await db.select([db.Form.name]).select_from(
-        db.Form.join(db.User, and_(db.Form.user_id == db.User.user_id, db.Form.number == db.User.activated_form))
-    ).where(db.Form.user_id == m.from_id).gino.scalar()
+    name = await db.select([db.Form.name]).where(db.Form.user_id == m.from_id).gino.scalar()
     admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
     day = datetime.now(timezone(timedelta(hours=3))).strftime("%d.%m.%Y %H:%M:%S")
-    await bot.write_msg(admins, messages.petition_new.format(f"[id{m.from_id}|{name}]", m.text, day), attachment_str)
+    await bot.api.messages.send(admins, messages.petition_new.format(f"[id{m.from_id}|{name}]", m.text, day), attachment_str)
     states.set(m.from_id, Menu.MAIN)
-    await bot.write_msg(m.peer_id, messages.petition_send, keyboard=await keyboards.main_menu(m.from_id))
+    await m.answer(messages.petition_send, keyboard=await keyboards.main_menu(m.from_id))
 
 
 @bot.on.private_message(PayloadRule({"menu": "quests and daylics"}), StateRule(Menu.MAIN))

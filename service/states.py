@@ -23,6 +23,7 @@ class Menu:
     EDIT_FORM = "edit_form"
     SET_EDIT_FIELD_FORM_NUMBER = "set_edit_field_form_number"
     EDIT_FIELDS = "edit_fields"
+    SELECT_FIELD_EDIT_NUMBER = "select_field_edit_number"
     EDIT_FIELD_NUMBER = "edit_field_number"
     BANK_MENU = "bank_menu"
     SELECT_USER_TO_TRANSFER = "select_user_to_transfer"
@@ -41,6 +42,9 @@ class Menu:
     DAYLICS = "daylics"
     FLIGHTS = "flights"
     FLIGHT_DATE = "flight_date"
+    SETTING = "settings"
+    FREEZE_REQUEST = "freeze_request"
+    DELETE_FORM_REQUEST = "delete_form_request"
 
 
 class Admin:

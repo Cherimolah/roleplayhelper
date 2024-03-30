@@ -25,8 +25,8 @@ class Database(Gino):
             user_id = Column(Integer, primary_key=True)
             admin = Column(Integer, default=0)
             state = Column(Text)
-            activated_form = Column(Integer, default=0)
             creating_form = Column(Boolean, default=True)
+            notification_enabled = Column(Boolean, default=True)
 
         self.User = User
 
@@ -69,8 +69,6 @@ class Database(Gino):
             cabin = Column(Integer)
             cabin_type = Column(Integer, ForeignKey("cabins.id", ondelete='SET NULL'))
             is_request = Column(Boolean, default=True)
-            number = Column(Integer, default=1)
-            is_edit = Column(Boolean, default=False)
             balance = Column(BigInteger, default=1000)
             freeze = Column(Boolean, default=False)
             last_payment = Column(TIMESTAMP, default=datetime.datetime.now)
@@ -78,7 +76,8 @@ class Database(Gino):
             active_quest = Column(Integer, ForeignKey("quests.id", ondelete='SET NULL'))
             activated_daylic = Column(Integer, ForeignKey("daylics.id", ondelete='SET NULL'))
             deactivated_daylic = Column(TIMESTAMP, default=datetime.datetime.now)
-            medals = Column(Integer, default=0)
+            freeze_request = Column(Boolean, default=False)
+            delete_request = Column(Boolean, default=False)
 
         self.Form = Form
 

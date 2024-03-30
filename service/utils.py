@@ -17,6 +17,9 @@ from service.states import Admin
 from service.middleware import states
 import messages
 
+mention_regex = re.compile(r"\[(?P<type>id|club|public)(?P<id>\d*)\|(?P<text>.+)\]")
+link_regex = re.compile(r"https:/(?P<type>/|/m.)vk.com/(?P<screen_name>\w*)")
+
 
 def get_max_size_url(sizes: List[PhotosPhotoSizes]) -> str:
     square = 0
@@ -37,19 +40,13 @@ def parse_orientation(number: int) -> str:
         return "гомо"
 
 
-async def loads_form(user_id: int = None, is_request: bool = None, number: int = 1, form_id: int = None) -> Tuple[str, Optional[str]]:
+async def loads_form(user_id: int = None, is_request: bool = None, form_id: int = None) -> Tuple[str, Optional[str]]:
     if form_id:
         form = await db.select([*db.Form]).where(db.Form.id == form_id).gino.first()
+    elif is_request:
+        form = await db.select([*db.Form]).where(and_(db.Form.is_request.is_(True), db.Form.user_id == user_id)).gino.first()
     else:
-        if is_request:
-            form = await db.select([*db.Form]).where(
-                and_(db.Form.user_id == user_id, db.Form.is_request.is_(is_request))
-            ).gino.first()
-        else:
-            form = await db.select([*db.Form]).where(
-                or_(and_(db.Form.user_id == user_id, db.Form.is_request.is_(is_request)),
-                    and_(db.Form.number == number, db.Form.user_id == user_id))
-            ).gino.first()
+        form = await db.select([*db.Form]).where(db.Form.user_id == user_id).gino.first()
     user = (await bot.api.users.get(user_id))[0]
     if form.profession:
         profession = await db.select([db.Profession.name]).where(db.Profession.id == form.profession).gino.scalar()
@@ -71,25 +68,21 @@ async def loads_form(user_id: int = None, is_request: bool = None, number: int =
             f"Каюта: {form.cabin or 'не присвоена'}\n" \
             f"Тип каюты: {await db.select([db.Cabins.name]).where(db.Cabins.id == form.cabin_type).gino.scalar() or 'Не указан'}\n" \
             f"Баланс: {form.balance}\n" \
-            f"Статус: {await db.select([db.Status.name]).where(db.Status.id == form.status).gino.scalar()}\n" \
-            f"{'Визуальный портрет:' if form.photo else ''}"
+            f"Статус: {await db.select([db.Status.name]).where(db.Status.id == form.status).gino.scalar()}\n"
     return reply, form.photo
 
 
-async def parse_user_id(m: Message, many_users=False) -> Union[int, List[int]]:
+async def parse_ids(m: Message) -> List[int]:
     if m.reply_message:
-        return m.reply_message.from_id
+        return [m.reply_message.from_id]
     elif m.text.isdigit():
-        return int(m.text)
+        return [int(m.text)]
     if m.fwd_messages:
-        user_ids = [x.from_id for x in m.fwd_messages]
-    else:
-        user_ids = []
-    mention_regex = re.compile(r"\[(?P<type>id|club|public)(?P<id>\d*)\|(?P<text>.+)\]")
-    link_regex = re.compile(r"https:/(?P<type>/|/m.)vk.com/(?P<screen_name>\w*)")
+        return [x.from_id for x in m.fwd_messages]
+    user_ids = []
     text = m.text.lower()
     screen_names: List[str] = [x[1] for x in re.findall(link_regex, text)]
-    screen_names.extend(re.findall(mention_regex, text))
+    screen_names.extend([x[1] for x in re.findall(mention_regex, text)])
     if screen_names:
         for screen_name in screen_names:
             if screen_name.isdigit():
@@ -100,26 +93,23 @@ async def parse_user_id(m: Message, many_users=False) -> Union[int, List[int]]:
                     user_ids.append(obj.object_id)
                 else:
                     user_ids.append(-obj.object_id)
+    return user_ids
+
+
+async def get_mention_from_message(m: Message, many_users=False) -> Optional[Union[int, List[int]]]:
+    user_ids = [x for x in await parse_ids(m) if x > 0]
     names = m.text.split("\n")
     for name in names:
-        user_id = await db.select([db.User.user_id]).where(
-                and_(func.lower(db.Form.name) == func.lower(name), db.Form.is_request.is_(False))
-            ).gino.scalar()
+        user_id = await db.select([db.Form.user_id]).where(
+            and_(func.lower(db.Form.name) == name.lower(), db.Form.is_request.is_(False))
+        ).gino.scalar()
         if user_id:
             user_ids.append(user_id)
-    if user_ids:
-        if not many_users:
-            return user_ids[0]
+    if many_users:
         return user_ids
-
-
-async def get_mention_from_message(m: Message, many_users=False):
-    user_id = await parse_user_id(m, many_users)
-    if not many_users:
-        if user_id and await db.select([db.User.user_id]).where(db.User.user_id == user_id).gino.scalar():
-            return user_id
-    else:
-        return user_id
+    if len(user_ids) > 0:
+        return user_ids[0]
+    return None
 
 
 async def reload_image(attachment, name: str, delete: bool = False):
@@ -138,7 +128,7 @@ async def send_mailing(sleep, message_id, mailing_id):
     await asyncio.sleep(sleep)
     user_ids = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
     for i in range(0, len(user_ids), 100):
-        await bot.api.messages.send(peer_ids=user_ids[i:i + 100], forward_messages=message_id, random_id=0)
+        await bot.api.messages.send(peer_ids=user_ids[i:i + 100], forward_messages=message_id, random_id=0, is_notification=True)
     await db.Mailings.delete.where(db.Mailings.id == mailing_id).gino.status()
 
 
@@ -164,21 +154,11 @@ async def take_off_payments(form_id: int):
                 ).gino.status()
                 group_id = (await bot.api.groups.get_by_id())[0].id
                 if (await bot.api.messages.is_messages_from_group_allowed(group_id, user_id=user_id)).is_allowed:
-                    await bot.write_msg(user_id, f"Снята арендная плата в размере {price}\n"
-                                                 f"Доступно на балансе: {balance-price}")
+                    await bot.api.messages.send(user_id, f"Снята арендная плата в размере {price}\n"
+                                                 f"Доступно на балансе: {balance-price}", is_notification=True)
                 await asyncio.sleep(604800)
         else:
             await asyncio.sleep(delta.seconds+10)
-
-
-async def select_form(state: str, user_id: int, m: Message):
-    names = [x[0] for x in await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.all()]
-    user = (await bot.api.users.get(user_id))[0]
-    reply = f"Укажите номер анкеты пользователя [id{user_id}|{user.first_name} {user.last_name}]\n\n"
-    for i, name in enumerate(names):
-        reply = f"{reply}{i + 1}. {name}\n"
-    states.set(m.from_id, f"{Admin.SELECT_NUMBER_FORM}@{user_id}@{state}")
-    await bot.write_msg(m.peer_id, reply)
 
 
 async def send_page_users(m: Union[Message, MessageEvent], page: int = 1):
@@ -203,14 +183,13 @@ async def send_page_users(m: Union[Message, MessageEvent], page: int = 1):
         if page * 15 < count_users:
             keyboard.add(Callback("->", {"users_list": page + 1}), KeyboardButtonColor.PRIMARY)
     if isinstance(m, Message):
-        await bot.edit_msg(m, reply, keyboard=keyboard)
+        await m.answer(reply, keyboard=keyboard)
     elif isinstance(m, MessageEvent):
-        await bot.change_msg(m, reply, keyboard=keyboard)
+        await m.edit_message(reply, keyboard=keyboard)
+
 
 async def get_current_form_id(user_id: int) -> int:
-    return await db.select([db.Form.id]).select_from(
-        db.Form.join(db.User, and_(db.Form.user_id == db.User.user_id, db.Form.number == db.User.activated_form))
-    ).where(db.Form.user_id == user_id).gino.scalar()
+    return await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
 
 
 years = [
@@ -284,7 +263,7 @@ async def quest_over(seconds, form_id, quest_id):
     if current_quest == quest_id:
         name = await db.select([db.Quest.name]).where(db.Quest.id == current_quest).gino.scalar()
         await db.Form.update.values(active_quest=None).where(db.Form.id == form_id).gino.status()
-        await bot.write_msg(user_id, f"Время выполнения квеста «{name}» завершилось")
+        await bot.api.messages.send(user_id, f"Время выполнения квеста «{name}» завершилось", is_notification=True)
 
 
 async def send_daylics():
@@ -300,5 +279,5 @@ async def send_daylics():
             daylic = await db.select([db.Daylic.id]).where(db.Daylic.profession_id == profession_id).order_by(func.random()).gino.scalar()
             if daylic:
                 await db.Form.update.values(activated_daylic=daylic).where(db.Form.id == form_id).gino.status()
-                await bot.write_msg(user_id, "Вам доступно новое ежедневное задание!")
+                await bot.api.messages.send(user_id, "Вам доступно новое ежедневное задание!", is_notification=True)
         await asyncio.sleep(5)

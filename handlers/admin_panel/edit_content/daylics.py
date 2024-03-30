@@ -15,7 +15,7 @@ from service import keyboards
 async def create_daylic(m: Message):
     daylic = await db.Daylic.create()
     states.set(m.from_id, f"{Admin.DAYLIC_NAME}*{daylic.id}")
-    await bot.write_msg(m.from_id, "Введи название дейлика", keyboard=Keyboard())
+    await m.answer("Введи название дейлика", keyboard=Keyboard())
 
 
 @bot.on.private_message(StateRule(Admin.DAYLIC_NAME, True), AdminRule())
@@ -23,7 +23,7 @@ async def set_name_daylic(m: Message):
     daylic_id = int(states.get(m.from_id).split("*")[-1])
     await db.Daylic.update.values(name=m.text).where(db.Daylic.id == daylic_id).gino.status()
     states.set(m.from_id, f"{Admin.DAYLIC_DESCRIPTION}*{daylic_id}")
-    await bot.write_msg(m.from_id, "Название дейлика записал. Теперь отправь описание")
+    await m.answer("Название дейлика записал. Теперь отправь описание")
 
 
 @bot.on.private_message(StateRule(Admin.DAYLIC_DESCRIPTION, True), AdminRule())
@@ -31,7 +31,7 @@ async def set_description_daylic(m: Message):
     daylic_id = int(states.get(m.from_id).split("*")[-1])
     await db.Daylic.update.values(description=m.text).where(db.Daylic.id == daylic_id).gino.status()
     states.set(m.from_id, f"{Admin.DAYLIC_REWARD}*{daylic_id}")
-    await bot.write_msg(m.from_id, "Описание установлено, теперь укажи награду за выполнение")
+    await m.answer("Описание установлено, теперь укажи награду за выполнение")
 
 
 @bot.on.private_message(StateRule(Admin.DAYLIC_REWARD, True), NumericRule(), AdminRule())
@@ -39,7 +39,7 @@ async def set_daylic_reward(m: Message, value: int):
     daylic_id = int(states.get(m.from_id).split("*")[-1])
     await db.Daylic.update.values(reward=value).where(db.Daylic.id == daylic_id).gino.status()
     states.set(m.from_id, f"{Admin.DAYLIC_COOLDOWN}*{daylic_id}")
-    await bot.write_msg(m.from_id, "Награда за выполнение установлена. Теперь пришлите кулдаун в формате "
+    await m.answer("Награда за выполнение установлена. Теперь пришлите кулдаун в формате "
                                    "\"1 день 2 часа 3 минуты\"")
 
 
@@ -52,7 +52,7 @@ async def set_cooldown_daylic(m: Message):
     reply = "Время колдауна установлено. Осталось указать профессию к которй будет привязан дейлик\n\n"
     for i, profession in enumerate(professions):
         reply = f"{reply}{i + 1}. {profession.name}\n"
-    await bot.write_msg(m.from_id, reply)
+    await m.answer(reply)
 
 
 @bot.on.private_message(StateRule(Admin.DAYLIC_PROFESSION, True), NumericRule(), AdminRule())
@@ -65,7 +65,7 @@ async def set_daylic_profession(m: Message, value: int):
     profession_name = await db.select([db.Profession.name]).where(
         db.Profession.id == daylic.profession_id).gino.scalar()
     states.set(m.from_id, Admin.SELECT_ACTION)
-    await bot.write_msg(m.peer_id, f"Дейлик успешно создан\n"
+    await m.answer(f"Дейлик успешно создан\n"
                                    f"Название: {daylic.name}\n"
                                    f"Описание: {daylic.description}\n"
                                    f"Награда: {daylic.reward}\n"
@@ -83,7 +83,7 @@ async def select_delete_daylic(m: Message):
     for i, daylic in enumerate(daylics):
         reply = f"{reply}{i + 1}. {daylic[0]} ({daylic[2]}, {daylic[1]})\n"
     states.set(m.from_id, Admin.DAYLIC_SELECT_ID)
-    await bot.write_msg(m.from_id, reply)
+    await m.answer(reply)
 
 
 @bot.on.private_message(StateRule(Admin.DAYLIC_SELECT_ID), NumericRule(), AdminRule())
@@ -92,5 +92,5 @@ async def delete_daylic(m: Message, value: int):
         value - 1).limit(1).gino.first()
     await db.Daylic.delete.where(db.Daylic.id == daylic_id).gino.status()
     states.set(m.from_id, Admin.SELECT_ACTION)
-    await bot.write_msg(m.from_id, f"Дейлик {daylic_name} удалён",
+    await m.answer(f"Дейлик {daylic_name} удалён",
                         keyboard=keyboards.gen_type_change_content("daylics"))

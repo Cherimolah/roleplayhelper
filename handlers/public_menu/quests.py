@@ -37,7 +37,7 @@ async def send_quest_page(m: Union[Message, MessageEvent], page: int):
                     or_(db.Quest.closed_at > datetime.datetime.now(), db.Quest.closed_at.is_(None)))
     ).gino.scalar()
     if not quest:
-        await bot.write_msg(m.peer_id, "На данный момент нет доступных квестов", keyboard=await keyboards.main_menu(m.from_id))
+        await m.answer("На данный момент нет доступных квестов", keyboard=await keyboards.main_menu(m.from_id))
         return
     sex = (await bot.api.users.get(user_id, fields=["sex"]))[0].sex
     quest_ready = Keyboard()
@@ -49,7 +49,7 @@ async def send_quest_page(m: Union[Message, MessageEvent], page: int):
         Text("Назад", {"menu": "quests and daylics"}), KeyboardButtonColor.NEGATIVE
     )
     if isinstance(m, Message):
-        await bot.write_msg(m.peer_id, "Доступные квесты:", keyboard=quest_ready)
+        await m.answer("Доступные квесты:", keyboard=quest_ready)
     if not quest.closed_at:
         if quest.execution_time:
             execution_time = parse_cooldown(quest.execution_time)
@@ -96,9 +96,9 @@ async def send_quest_page(m: Union[Message, MessageEvent], page: int):
                 keyboard.row()
             keyboard.add(Callback("Беру", {"quest_take": quest.id}), KeyboardButtonColor.POSITIVE)
     if isinstance(m, Message):
-        await bot.write_msg(m.peer_id, reply, keyboard=keyboard)
+        await m.answer(reply, keyboard=keyboard)
     else:
-        await bot.change_msg(m, reply, keyboard=keyboard)
+        await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"quest_take": int}))
@@ -142,7 +142,7 @@ async def take_quest(m: MessageEvent):
         seconds = int(total_seconds - days * 86400 - hours * 3600 - minutes * 60)
         reply += f"{'Закончится через' if active else 'Начнётся через'} {days} дней {hours} часов {minutes} минут " \
                  f"{seconds} секунд\n\n"
-    await bot.change_msg(m, reply)
+    await m.edit_message(reply)
     sex = (await bot.api.users.get(m.user_id, fields=["sex"]))[0].sex
     keyboard = Keyboard().add(
         Text(f"Я выполнил{'а' if sex == sex.female else ''} квест!", {"quest": "ready"}), KeyboardButtonColor.PRIMARY
@@ -151,8 +151,8 @@ async def take_quest(m: MessageEvent):
     )
     if cooldown:
         asyncio.get_event_loop().create_task(quest_over(cooldown, form_id, quest_id))
-    await bot.write_msg(m.peer_id, "После завершения квеста нажмите на кнопку завершения. Вы можете выйти и вернутся "
-                                   "во вкладку квесты", keyboard=keyboard)
+    await m.send_message("После завершения квеста нажмите на кнопку завершения. Вы можете выйти и вернутся "
+                                   "во вкладку квесты", keyboard=keyboard.get_json())
 
 
 @bot.on.private_message(StateRule(Menu.MAIN), PayloadRule({"menu": "quests"}))
@@ -171,7 +171,7 @@ async def select_ready_quest(m: Message):
     form_id = await get_current_form_id(m.from_id)
     quest_id = await db.select([db.Form.active_quest]).where(db.Form.id == form_id).gino.scalar()
     if not quest_id:
-        await bot.write_msg(m.peer_id, "У вас сейчас нет квеста на выполнении. Похоже вы брали когда-то его, "
+        await m.answer("У вас сейчас нет квеста на выполнении. Похоже вы брали когда-то его, "
                                        "но не выполнили")
         return
     name = await db.select([db.Form.name]).where(db.Form.id == form_id).gino.scalar()
@@ -185,11 +185,8 @@ async def select_ready_quest(m: Message):
         Callback("Отклонить", {"quest_ready": False, "request_id": request.id}),
         KeyboardButtonColor.NEGATIVE
     )
-    await bot.write_msg(ADMINS + [OWNER], f"[id{m.from_id}|{name}] выполнил квест {quest.name}",
+    await bot.api.messages.send(ADMINS + [OWNER], f"[id{m.from_id}|{name}] выполнил квест {quest.name}",
                         keyboard=keyboard)
     states.set(m.from_id, Menu.MAIN)
-    await bot.write_msg(m.peer_id, "Поздравляем с завершением квеста. Ваш запрос отправлен администрации, после "
+    await m.answer("Поздравляем с завершением квеста. Ваш запрос отправлен администрации, после "
                                    "проверки вам придёт награда!", keyboard=await keyboards.main_menu(m.from_id))
-
-
-

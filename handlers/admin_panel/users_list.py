@@ -27,7 +27,7 @@ async def change_page_users(m: MessageEvent):
 async def send_administrators(m: Message):
     admin = await db.select([db.User.admin]).where(db.User.user_id == m.from_id).gino.scalar()
     if admin < 2:
-        await bot.write_msg(m.peer_id, messages.only_for_owner)
+        await m.answer(messages.only_for_owner)
         return
     states.set(m.from_id, Admin.SELECT_MANAGE_ADMINS)
-    await bot.write_msg(m.peer_id, messages.manage_admins, keyboard=keyboards.manage_admins)
+    await m.answer(messages.manage_admins, keyboard=keyboards.manage_admins)

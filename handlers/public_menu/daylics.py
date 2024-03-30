@@ -1,5 +1,4 @@
 import datetime
-import json
 
 from vkbottle.bot import Message
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
@@ -20,12 +19,12 @@ async def send_daylics(m: Message):
     form_id = await get_current_form_id(m.from_id)
     deactivated = await db.select([db.Form.deactivated_daylic]).where(db.Form.id == form_id).gino.scalar()
     if deactivated > datetime.datetime.now():
-        await bot.write_msg(m.from_id, "Вы не можете получать дейлики так как на вас перезарядка ещё "
+        await m.answer("Вы не можете получать дейлики так как на вас перезарядка ещё "
                                        f"{parse_cooldown((deactivated - datetime.datetime.now()).total_seconds())}")
         return
     daylic_id = await db.select([db.Form.activated_daylic]).where(db.Form.id == form_id).gino.scalar()
     if not daylic_id:
-        await bot.write_msg(m.from_id, "Сейчас нет доступного дейлика")
+        await m.answer("Сейчас нет доступного дейлика")
         return
     states.set(m.from_id, Menu.DAYLICS)
     daylic = await db.select([*db.Daylic]).where(db.Daylic.id == daylic_id).gino.first()
@@ -34,7 +33,7 @@ async def send_daylics(m: Message):
     ).row().add(
         Text("Назад", {"menu": "quests and daylics"}), KeyboardButtonColor.NEGATIVE
     )
-    await bot.write_msg(m.from_id, "Доступный дейлик:\n"
+    await m.answer("Доступный дейлик:\n"
                                    f"{daylic.name}\n"
                                    f"{daylic.description}\n"
                                    f"Награда: {daylic.reward}\n"
@@ -43,13 +42,13 @@ async def send_daylics(m: Message):
 
 @bot.on.private_message(StateRule(Menu.DAYLICS), PayloadMapRule({"daylic_ready": int}))
 async def send_ready_daylic(m: Message):
-    daylic_id = json.loads(m.payload)['daylic_ready']
+    daylic_id = m.payload['daylic_ready']
     form_id = await get_current_form_id(m.from_id)
     exist = await db.select([db.CompletedDaylic.id]).where(
         and_(db.CompletedDaylic.daylic_id == daylic_id, db.CompletedDaylic.form_id == form_id)
     ).gino.scalar()
     if exist:
-        await bot.write_msg(m.from_id, "Вы уже отправили отчёт о выполненном дейлике, дождитесь, когда администрация "
+        await m.answer("Вы уже отправили отчёт о выполненном дейлике, дождитесь, когда администрация "
                                        "его примет")
         return
     response = await db.CompletedDaylic.create(form_id=form_id, daylic_id=daylic_id)
@@ -60,7 +59,7 @@ async def send_ready_daylic(m: Message):
     ).add(
         Callback("Отклонить", {"daylic_reject": response.id}), KeyboardButtonColor.NEGATIVE
     )
-    await bot.write_msg(ADMINS + [OWNER], f"Отчёт игрока [id{m.from_id}|{name}] о выполненном дейлике {daylic_name}\n"
+    await bot.api.messages.send(ADMINS + [OWNER], f"Отчёт игрока [id{m.from_id}|{name}] о выполненном дейлике {daylic_name}\n"
                                           f"Награда: {reward}", keyboard=keyboard)
-    await bot.write_msg(m.from_id, f"Ваш отчёт о выполнении {daylic_name} отправлен администрации")
+    await m.answer(f"Ваш отчёт о выполнении {daylic_name} отправлен администрации")
 

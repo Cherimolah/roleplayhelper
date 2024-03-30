@@ -3,15 +3,13 @@ from typing import Union
 
 from vkbottle.dispatch.rules import ABCRule
 from vkbottle.bot import Message, MessageEvent
-from sqlalchemy import and_, func
 
 from service.middleware import states
 from service.db_engine import db
-from loader import bot
 import messages
 from service.states import Menu
 import service.keyboards as keyboards
-from service.utils import get_mention_from_message, select_form, get_current_form_id
+from service.utils import get_mention_from_message, get_current_form_id
 from config import ADMINS
 
 
@@ -72,23 +70,17 @@ class ValidateAccount(ABCRule[Message], ABC):
     async def check(self, m: Message):
         if isinstance(m, Message):
             balance, freeze = (await db.select([db.Form.balance, db.Form.freeze])
-                               .select_from(db.Form.join(db.User,
-                                                         and_(db.Form.user_id == db.User.user_id,
-                                                              db.Form.number == db.User.activated_form)))
                                .where(db.Form.user_id == m.from_id).gino.first())
         else:
             balance, freeze = (await db.select([db.Form.balance, db.Form.freeze])
-                               .select_from(db.Form.join(db.User,
-                                                         and_(db.Form.user_id == db.User.user_id,
-                                                              db.Form.number == db.User.activated_form)))
                                .where(db.Form.user_id == m.user_id).gino.first())
         if balance < 0:
             states.set(m.from_id, Menu.BANK_MENU)
-            await bot.write_msg(m.peer_id, messages.banckrot, keyboard=keyboards.bank)
+            await m.answer(messages.banckrot, keyboard=keyboards.bank)
             return False
         if freeze:
             states.set(m.from_id, Menu.BANK_MENU)
-            await bot.write_msg(m.peer_id, messages.freeze, keyboard=keyboards.bank)
+            await m.answer(messages.freeze, keyboard=keyboards.bank)
             return False
         return True
 
@@ -119,19 +111,13 @@ class UserSpecified(ABCRule[Message], ABC):
             return {"form": (form_id, user_id)}
         if len(state.split("*")) > 2:
             return False
-        user_ids = await get_mention_from_message(m, True)
-        if len(user_ids) > 1:
-            return True
-        user_id = user_ids[0]
+        user_id = await get_mention_from_message(m)
         if not user_id:
-            await bot.write_msg(m.peer_id, "Пользователь не указан")
+            await m.answer("Пользователь не указан")
             return
-        names = [x[0] for x in await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.all()]
-        if len(names) == 0:
-            await bot.write_msg(m.peer_id, messages.not_form_id)
-            return False
-        if len(names) > 1:
-            await select_form(self.state, user_id, m)
+        name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
+        if not name:
+            await m.answer(messages.not_form_id)
             return False
         form_id = await get_current_form_id(user_id)
         return {"form": (form_id, user_id)}
@@ -147,7 +133,7 @@ class ManyUsersSpecified(ABCRule[Message], ABC):
             return {"forms": list(zip(form_ids, user_ids))}
         user_ids = await get_mention_from_message(event, True)
         if not user_ids:
-            await bot.write_msg(event.peer_id, "Пользователей не найдено")
+            await event.answer("Пользователей не найдено")
             return
         forms = []
         for user_id in user_ids:

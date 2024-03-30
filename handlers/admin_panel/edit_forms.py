@@ -23,7 +23,7 @@ async def edit_users_forms(m: Message):
     keyboard = Keyboard().add(
         Text("Назад", {"admin_forms_edit": "back"}), KeyboardButtonColor.NEGATIVE
     )
-    await bot.write_msg(m.peer_id, messages.edit_users_forms, keyboard=keyboard)
+    await m.answer(messages.edit_users_forms, keyboard=keyboard)
 
 
 @bot.on.private_message(StateRule(Admin.EDIT_FORMS, True), AdminRule(), UserSpecified(Admin.EDIT_FORMS))
@@ -31,20 +31,20 @@ async def search_form_for_edit(m: Message, form: tuple):
     form_id, user_id = form
     states.set(m.from_id, f"{Admin.SELECT_FIELDS}*{form_id}")
     form, photo = await loads_form(user_id, form_id=form_id)
-    await bot.write_msg(m.peer_id, form, photo)
+    await m.answer(form, photo)
     reply = messages.select_field
     for i, field in enumerate(fields):
         reply = f"{reply}{i + 1}. {field.name}\n"
-    await bot.write_msg(m.peer_id, reply)
+    await m.answer(reply)
 
 
 @bot.on.private_message(StateRule(Admin.SELECT_FIELDS, True), NumericRule(), AdminRule())
 async def send_select_fields(m: Message, value: int = None):
     if value and not 0 < value <= len(fields):
-        await bot.write_msg(m.peer_id, "Указано неверное поле")
+        await m.answer("Указано неверное поле")
         return
     _, form_id = states.get(m.from_id).split("*")
-    states.set(m.from_id, f"{Admin.ENTER_FIELD_VALUE}*{form_id}*{fields[value - 1].table}")
+    states.set(m.from_id, f"{Admin.ENTER_FIELD_VALUE}*{form_id}*{fields[value - 1].state}")
     reply = messages.new_value_field.format(fields[value-1].name)
     keyboard = None
     if value == 2:
@@ -67,7 +67,7 @@ async def send_select_fields(m: Message, value: int = None):
         statuses = await db.select([db.Status.name]).gino.all()
         for i, status in enumerate(statuses):
             reply = f"{reply}{i+1}. {status.name}\n"
-    await bot.write_msg(m.peer_id, reply, keyboard=keyboard)
+    await m.answer(reply, keyboard=keyboard)
 
 
 @bot.on.private_message(StateRule(Admin.ENTER_FIELD_VALUE, True), AdminRule())
@@ -76,19 +76,19 @@ async def enter_field_value(m: Message):
     form_id = int(form_id)
     if field == "photo":
         if not m.attachments:
-            await bot.write_msg(m.peer_id, messages.need_photo)
+            await m.answer(messages.need_photo)
             return
         user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
         photo = await reload_image(m.attachments[0], f"data/photo{user_id}{form_id}.jpg")
         await db.Form.update.values(photo=photo).where(db.Form.id == form_id).gino.status()
     elif field == "orientation":
-        if not m.payload or "orientation" not in json.loads(m.payload):
-            await bot.write_msg(m.peer_id, messages.nedd_orientation)
+        if not m.payload or "orientation" not in m.payload:
+            await m.answer(messages.nedd_orientation)
             return
-        await db.Form.update.values(orientation=json.loads(m.payload)['orientation']).where(db.Form.id == form_id).gino.status()
+        await db.Form.update.values(orientation=m.payload['orientation']).where(db.Form.id == form_id).gino.status()
     elif field == "cabin_lux":
         if not m.text.isdigit():
-            await bot.write_msg(m.peer_id, messages.need_cabin_class)
+            await m.answer(messages.need_cabin_class)
             return
         value = int(m.text)
         cabin_id, price = await db.select([db.Cabins.id, db.Cabins.cost]).offset(value - 1).limit(1).gino.first()
@@ -97,21 +97,21 @@ async def enter_field_value(m: Message):
                                     last_payment=datetime.datetime.now()).where(db.Form.id == form_id).gino.status()
         asyncio.get_event_loop().create_task(take_off_payments(form_id))
     elif field == "freeze":
-        if not m.payload or "freeze" not in json.loads(m.payload):
-            await bot.write_msg(m.peer_id, messages.need_status_freeze)
+        if not m.payload or "freeze" not in m.payload:
+            await m.answer(messages.need_status_freeze)
             return
-        freeze = json.loads(m.payload)['freeze']
+        freeze = m.payload['freeze']
         await db.Form.update.values(freeze=freeze).where(db.Form.id == form_id).gino.status()
     elif field == "profession":
         if not m.text.isdigit():
-            await bot.write_msg(m.peer_id, "Необходимо указать число")
+            await m.answer("Необходимо указать число")
             return
         value = int(m.text)
         profession_id = await db.select([db.Profession.id]).offset(value-1).gino.scalar()
         await db.Form.update.values(profession=profession_id).where(db.Form.id == form_id).gino.status()
     elif field == "status":
         if not m.text.isdigit():
-            await bot.write_msg(m.peer_id, "Необходимо указать число")
+            await m.answer("Необходимо указать число")
             return
         value = int(m.text)
         status_id = await db.select([db.Status.id]).offset(value-1).gino.scalar()
@@ -126,4 +126,4 @@ async def enter_field_value(m: Message):
         Text("Назад", {"admin_forms_edit": "back"}), KeyboardButtonColor.NEGATIVE
     )
     states.set(m.from_id, f"{Admin.SELECT_FIELDS}*{form_id}")
-    await bot.write_msg(m.peer_id, messages.field_edit_from_admin, keyboard=keyboard)
+    await m.answer(messages.field_edit_from_admin, keyboard=keyboard)

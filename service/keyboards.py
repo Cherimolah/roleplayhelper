@@ -1,7 +1,6 @@
 from vkbottle import Keyboard, Text, KeyboardButtonColor, Callback
 
 from service.db_engine import db
-from service.utils import get_current_form_id
 
 another_profession = Keyboard().add(Text("Другая", {"profession": "another_profession"}), KeyboardButtonColor.NEGATIVE)
 orientations = Keyboard().add(Text("Гетеро", {"orientation": 0}), KeyboardButtonColor.PRIMARY).row().add(
@@ -10,29 +9,11 @@ orientations = Keyboard().add(Text("Гетеро", {"orientation": 0}), Keyboard
 )
 
 
-def create_accept_form(user_id: int):
+def create_accept_form(form_id: int):
     form_accept = Keyboard(one_time=False, inline=True).add(
-        Callback("Подтвердить", {"form_accept": user_id}), KeyboardButtonColor.POSITIVE
+        Callback("Подтвердить", {"form_accept": form_id}), KeyboardButtonColor.POSITIVE
     ).add(
-        Callback("Отклонить", {"form_decline": user_id}), KeyboardButtonColor.NEGATIVE
-    )
-    return form_accept
-
-
-def create_accept_form_edit(user_id: int):
-    form_accept = Keyboard(one_time=False, inline=True).add(
-        Callback("Подтвердить", {"form_accept_edit": user_id}), KeyboardButtonColor.POSITIVE
-    ).add(
-        Callback("Отклонить", {"form_decline_edit": user_id}), KeyboardButtonColor.NEGATIVE
-    )
-    return form_accept
-
-
-def create_accept_form_edit_all(user_id: int, number: int):
-    form_accept = Keyboard(one_time=False, inline=True).add(
-        Callback("Подтвердить", {"form_accept_edit_all": user_id, "number": number}), KeyboardButtonColor.POSITIVE
-    ).add(
-        Callback("Отклонить", {"form_decline_edit_all": user_id, "number": number}), KeyboardButtonColor.NEGATIVE
+        Callback("Отклонить", {"form_decline": form_id}), KeyboardButtonColor.NEGATIVE
     )
     return form_accept
 
@@ -43,17 +24,19 @@ def get_skip_button(field: str):
 
 async def main_menu(user_id: int):
     is_admin = (await db.select([db.User.admin]).where(db.User.user_id == user_id).gino.scalar()) > 0
-    keyboard = Keyboard().add(
+    keyboard = (Keyboard().add(
         Text("Анкета", {"menu": "form"}), KeyboardButtonColor.PRIMARY
     ).add(
         Text("Банк", {"menu": "bank"}), KeyboardButtonColor.PRIMARY
     ).add(
         Text("Магазин", {"menu": "shop"}), KeyboardButtonColor.PRIMARY
+    ).add(
+        Text("Настройки", {"menu": "settings"}), KeyboardButtonColor.PRIMARY
     ).row().add(
         Text("Квесты и ежедневные задания", {"menu": "quests and daylics"}), KeyboardButtonColor.PRIMARY
     ).row().add(
         Text("Администрация проекта", {"menu": "staff"}), KeyboardButtonColor.NEGATIVE
-    )
+    ))
     if is_admin:
         keyboard.row().add(
             Text("Админ-панель", {"menu": "admin_panel"}), KeyboardButtonColor.NEGATIVE
@@ -66,7 +49,7 @@ reason_decline_form = Keyboard().add(
 )
 
 fill_quiz = Keyboard().add(
-    Text("Заполнить заново", {"fill_quiz": "new"}), KeyboardButtonColor.PRIMARY
+    Text("Заполнить заново", {"command": "start"}), KeyboardButtonColor.PRIMARY
 )
 
 admin_menu = Keyboard().add(
@@ -126,8 +109,6 @@ form_activity = Keyboard().add(
     Text("Поиск анкеты пользователя", {"form": "search"}), KeyboardButtonColor.SECONDARY
 ).row().add(
     Text("Редактировать анкету", {"form": "edit"}), KeyboardButtonColor.PRIMARY
-).add(
-    Text("Новая анкета", {"fill_quiz": "new"}), KeyboardButtonColor.PRIMARY
 ).row().add(
     Text("Назад", {"menu": "home"}), KeyboardButtonColor.NEGATIVE
 )
@@ -147,19 +128,13 @@ previous_form = Keyboard(inline=True).add(
 how_edit_form = Keyboard().add(
     Text("Поменять некоторые поля", {"form_edit": "edit_fields"}), KeyboardButtonColor.PRIMARY
 ).row().add(
-    Text("Перезаполнить анкету", {"form_edit": "edit_all"}), KeyboardButtonColor.PRIMARY
-).row().add(
     Text("Назад", {"form_edit": "back"}), KeyboardButtonColor.NEGATIVE
-)
-
-choice_number_form = Keyboard().add(
-    Text("1", {"form_edit": 1}), KeyboardButtonColor.PRIMARY
-).add(
-    Text("2", {"form_edit": 2}), KeyboardButtonColor.PRIMARY
 )
 
 confirm_edit_form = Keyboard().add(
     Text("Подтвердить изменения", {"form_edit": "confirm"}), KeyboardButtonColor.POSITIVE
+).add(
+    Text("Отменить изменения", {"form_edit": "decline"}), KeyboardButtonColor.NEGATIVE
 )
 
 bank = Keyboard().add(
@@ -191,6 +166,23 @@ donate_menu = Keyboard().add(
 ).row().add(
     Text("Назад", {"menu": "bank"}), KeyboardButtonColor.NEGATIVE
 )
+
+
+async def get_settings_menu(user_id: int) -> Keyboard:
+    notifications_enabled, freeze = (await db.select([db.User.notification_enabled, db.Form.freeze])
+                             .select_from(db.User.join(db.Form, db.User.user_id == db.Form.user_id))
+                             .where(db.User.user_id == user_id).gino.first())
+    settings_menu = Keyboard().add(
+        Text(f"Уведомления: {'✅' if notifications_enabled else '❌'}", {"settings": "notifications"}),
+        KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text(f"{'Разморозить' if freeze else 'Заморозить'} анкету", {"settings": "freeze_request"}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text("Удалить анкету", {"settings": "delete_request"}), KeyboardButtonColor.NEGATIVE
+    ).row().add(
+        Text("Назад", {"menu": "home"}), KeyboardButtonColor.NEGATIVE
+    )
+    return settings_menu
 
 
 def another_profession_to_user(user_id: int):
