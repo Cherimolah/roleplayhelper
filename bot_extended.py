@@ -17,6 +17,8 @@ from vkbottle_types.events import BaseGroupEvent
 from vkbottle.tools.dev.mini_types.bot.message_event import MessageEventMin
 from vkbottle.tools.dev.mini_types.bot import MessageMin
 from vkbottle.tools.dev.mini_types.bot import message_min
+from vkbottle.dispatch.base import Router
+from vkbottle.modules import logger
 
 from sqlalchemy import and_
 
@@ -227,3 +229,16 @@ class ABCBotMessageViewExtended(ABCBotMessageView, ABC):
 class BotMessageViewExtended(ABCBotMessageViewExtended, BotMessageView):
     """Микс дополненных классов и обычных из vkbottle"""
     pass
+
+
+class RouterExtended(Router):
+    async def route(self, event: dict, ctx_api: "ABCAPI") -> None:
+        logger.debug("Routing update {}", event)
+
+        for view in self.views.values():
+            try:
+                if not await view.process_event(event):
+                    continue
+                await view.handle_event(event, ctx_api, self.state_dispenser)
+            except Exception as e:
+                await self.error_handler.handle(e, peer_id=event.get('peer_id'), message=event.get('text'))

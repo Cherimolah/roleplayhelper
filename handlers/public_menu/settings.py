@@ -43,14 +43,14 @@ async def send_freeze_request(m: Message):
     ).row().add(
         Text("Назад", {"freeze": "back"}), KeyboardButtonColor.NEGATIVE
     )
-    await m.answer('Вы действительно готовы "разморозить" свою анкету, чтобы вернуться к активной деятельности на станции?' if freeze else 'Вы действительно хотите оформить запрос для отправки вашей анкеты "на мороз"?\nЕсли ваш ответ "Да", то кратко опишите причину и примерное время вашего отсутствия после подтверждения по кнопке ниже.',
+    await m.answer('Вы действительно готовы "разморозить" свою анкету, чтобы вернуться к активной деятельности на станции?' if freeze else 'Вы действительно хотите оформить запрос для отправки вашей анкеты "на мороз"?',
                    keyboard=kb)
 
 
 @bot.on.private_message(PayloadRule({"freeze": "send_request"}), StateRule(Menu.FREEZE_REQUEST))
 async def ask_reason_freeze(m: Message):
     states.set(m.from_id, Menu.FREEZE_REASON)
-    await m.answer("Кратко опишите причину и примерное время вашего отсутствия после подтверждения.", keyboard=Keyboard())
+    await m.answer("Кратко опишите причину \"Заморозки\" и примерное время вашего отсутствия", keyboard=Keyboard())
 
 
 @bot.on.private_message(PayloadRule({"unfreeze": "send_request"}), StateRule(Menu.FREEZE_REQUEST))
@@ -73,7 +73,7 @@ async def freeze_request_send_accepted(m: Message):
                                 keyboard=kb)
     await m.answer(f"Запрос на {'разморозку' if freeze else 'заморозку'} страницы отправлен")
     states.set(m.from_id, Menu.MAIN)
-    await m.answer("главное меню", keyboard=await main_menu(m.from_id))
+    await m.answer("Главное меню", keyboard=await main_menu(m.from_id))
 
 
 @bot.on.private_message(PayloadRule({"settings": "delete_request"}), StateRule(Menu.SETTING))

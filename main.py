@@ -55,12 +55,13 @@ err_num = number_error()
 
 
 @bot.error_handler.register_error_handler(Exception)
-async def exception(e: Exception):
+async def exception(e: Exception, user_id=None, message=None):
     """
     Информирует о произошедших ошибках
     :param e:
     :return:
     """
+    print(user_id, message)
     print((datetime.now(timezone(timedelta(hours=5)))).strftime("%d.%m.%Y %H:%M:%S"))
     num = next(err_num)
     print(f"[ERROR] №{num}: {e}")
