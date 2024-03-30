@@ -19,6 +19,7 @@ from vkbottle.tools.dev.mini_types.bot import MessageMin
 from vkbottle.tools.dev.mini_types.bot import message_min
 from vkbottle.dispatch.base import Router
 from vkbottle.modules import logger
+from vkbottle.exception_factory.error_handler.error_handler import ErrorHandler
 
 from sqlalchemy import and_
 
@@ -231,6 +232,18 @@ class BotMessageViewExtended(ABCBotMessageViewExtended, BotMessageView):
     pass
 
 
+class ErrorHandlerExtended(ErrorHandler):
+    async def handle(self, error: Exception, *args, **kwargs):
+        handler = self.lookup_handler(type(error)) or self.undefined_error_handler
+
+        if not handler:
+            if self.raise_exceptions:
+                raise error
+            logger.exception(error)
+            return
+        return await handler(error, *args, **kwargs)
+
+
 class RouterExtended(Router):
     async def route(self, event: dict, ctx_api: "ABCAPI") -> None:
         logger.debug("Routing update {}", event)
@@ -241,4 +254,5 @@ class RouterExtended(Router):
                     continue
                 await view.handle_event(event, ctx_api, self.state_dispenser)
             except Exception as e:
-                await self.error_handler.handle(e, peer_id=event.get('peer_id'), message=event.get('text'))
+                await self.error_handler.handle(e, peer_id=event.get('object', {}).get('message', {}).get('peer_id'),
+                                                message=event.get('object', {}).get('message', {}).get('text'))

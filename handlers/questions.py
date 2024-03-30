@@ -17,9 +17,9 @@ from config import OWNER, ADMINS
 from service.middleware import states
 from handlers.public_menu.form import show_fields_edit
 
-# @bot.on.private_message()
-# async def test(m: Message):
-#     1/0
+@bot.on.private_message()
+async def test(m: Message):
+    1/0
 
 @bot.on.private_message(StateRule(Registration.WAIT))
 async def wait_accept(m: Message):
