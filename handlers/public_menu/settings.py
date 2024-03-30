@@ -3,7 +3,7 @@ from vkbottle.dispatch.rules.base import PayloadRule
 from vkbottle import Keyboard, Text, KeyboardButtonColor, Callback
 
 from loader import bot
-from service.keyboards import get_settings_menu
+from service.keyboards import get_settings_menu, main_menu
 from service.db_engine import db
 from service.custom_rules import StateRule
 from service.states import Menu
@@ -35,11 +35,11 @@ async def send_freeze_request(m: Message):
     states.set(m.from_id, Menu.FREEZE_REQUEST)
     freeze = await db.select([db.Form.name, db.Form.freeze]).where(db.Form.user_id == m.from_id).gino.scalar()
     kb = Keyboard().add(
-        Text(f"{'Разморозить' if freeze else 'Заморозить'} анкету", {"freeze": "send_request"}), KeyboardButtonColor.POSITIVE
+        Text(f"Подтвердить", {"freeze": "send_request"}), KeyboardButtonColor.POSITIVE
     ).row().add(
-        Text("Отмена", {"freeze": "back"}), KeyboardButtonColor.NEGATIVE
+        Text("Назад", {"freeze": "back"}), KeyboardButtonColor.NEGATIVE
     )
-    await m.answer("Вы действительно хотите отправить запрос на замораживание вашей анкеты?",
+    await m.answer(f"Вы действительно хотите отправить запрос на {'разморозку' if freeze else 'заморозку'} вашей анкеты?",
                    keyboard=kb)
 
 
@@ -47,7 +47,7 @@ async def send_freeze_request(m: Message):
 async def freeze_request_send_accepted(m: Message):
     has_req = await db.select([db.Form.freeze_request]).where(db.Form.user_id == m.from_id).gino.scalar()
     if has_req:
-        await m.answer("У вас уже есть отправленный запрос на заморозку анкеты")
+        await m.answer("У вас уже есть отправленный запрос на заморозку/разморозку анкеты")
         return
     admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
     name, freeze = await db.select([db.Form.name, db.Form.freeze]).where(db.Form.user_id == m.from_id).gino.first()
@@ -61,16 +61,17 @@ async def freeze_request_send_accepted(m: Message):
                                 f"Игрок [id{m.from_id}|{name}] хочет {'разморозить' if freeze else 'заморозить'} свою анкету",
                                 keyboard=kb)
     await m.answer(f"Запрос на {'разморозку' if freeze else 'заморозку'} страницы отправлен")
-    await settings(m)
+    states.set(m.from_id, Menu.MAIN)
+    await m.answer("главное меню", keyboard=await main_menu(m.from_id))
 
 
 @bot.on.private_message(PayloadRule({"settings": "delete_request"}), StateRule(Menu.SETTING))
 async def ask_delete(m: Message):
     states.set(m.from_id, Menu.DELETE_FORM_REQUEST)
     kb = Keyboard().add(
-        Text("Удалить анкету", {"delete": "send_request"}), KeyboardButtonColor.POSITIVE
+        Text("Подтвердить", {"delete": "send_request"}), KeyboardButtonColor.POSITIVE
     ).row().add(
-        Text("Отмена", {"delete": "back"}), KeyboardButtonColor.NEGATIVE
+        Text("Назад", {"delete": "back"}), KeyboardButtonColor.NEGATIVE
     )
     await m.answer("Вы действительно хотите отправить запрос на удаление вашей анкеты?",
                    keyboard=kb)
