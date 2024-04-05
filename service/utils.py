@@ -159,7 +159,7 @@ async def take_off_payments(form_id: int):
                 await asyncio.sleep(604800)
         else:
             next_payment = last_payment + dateteme.timedelta(days=7)
-            await asyncio.sleep(int((next_payment - today).total_seconds()) + )
+            await asyncio.sleep(int((next_payment - today).total_seconds()) + 1)
 
 
 async def send_page_users(m: Union[Message, MessageEvent], page: int = 1):
