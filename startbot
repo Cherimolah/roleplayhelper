@@ -1,0 +1,8 @@
+#/bin/bash
+cd /root/roleplayhelper
+git pull
+source venv/bin/activate
+pip install -r requirements.txt
+alembic revision --autogenerate --head head
+alembic upgrade head
+python3 main.py
