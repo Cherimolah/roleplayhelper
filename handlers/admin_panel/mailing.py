@@ -48,6 +48,7 @@ async def send_now_mailing(m: Message):
                                     is_notification=True)
     await db.Mailings.delete.where(db.Mailings.id == mailing_id).gino.status()
     await m.answer(messages.sent_mailing)
+    await m.answer("Главное меню", keyboard=await keyboards.main_menu(m.from_id))
 
 
 @bot.on.private_message(StateRule(Admin.TIME_MAILING, True), AdminRule())

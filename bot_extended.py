@@ -97,6 +97,9 @@ class MessagesCategoryExtended(MessagesCategory):
             else:
                 params = {k: v for k, v in locals().items() if k not in ('self', 'message')}
                 msgs.append(await super().send(message=message[i:i + 4096], **params))
+        if not message:
+            params = {k: v for k, v in locals().items() if k not in ('self',)}
+            msgs.append(await super().send(**params))
         msgs = [y for x in msgs for y in x]
         return msgs
 
