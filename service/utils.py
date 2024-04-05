@@ -139,7 +139,8 @@ async def take_off_payments(form_id: int):
             break
         balance, freeze = info
         if not balance or balance < 0 or freeze:
-            return
+            await asyncio.sleep(86400)
+            continue
         last_payment = await db.select([db.Form.last_payment]).where(db.Form.id == form_id).gino.scalar()
         today = datetime.datetime.now()
         delta = today - last_payment
