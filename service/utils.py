@@ -158,7 +158,8 @@ async def take_off_payments(form_id: int):
                                                  f"Доступно на балансе: {balance-price}", is_notification=True)
                 await asyncio.sleep(604800)
         else:
-            await asyncio.sleep(delta.seconds+10)
+            next_payment = last_payment + dateteme.timedelta(days=7)
+            await asyncio.sleep(int((next_payment - today).total_seconds()))
 
 
 async def send_page_users(m: Union[Message, MessageEvent], page: int = 1):

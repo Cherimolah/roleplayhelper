@@ -27,8 +27,7 @@ async def on_startup():
         asyncio.get_event_loop().create_task(send_mailing(delta.seconds, mail.text, mail.id))
     form_ids = [x[0] for x in await db.select([db.Form.id]).gino.all()]
     for form_id in form_ids:
-        # asyncio.get_event_loop().create_task(take_off_payments(form_id))
-        pass
+        asyncio.get_event_loop().create_task(take_off_payments(form_id))
     quests = await db.select([db.Form.id, db.Form.active_quest]).where(db.Form.active_quest.isnot(None)).gino.all()
     for form_id, quest_id in quests:
         quest = await db.select([*db.Quest]).where(db.Quest.id == quest_id).gino.first()
@@ -42,7 +41,7 @@ async def on_startup():
             else:
                 nearest = min(quest.closed_at.timestamp(), datetime.now().timestamp())
                 cooldown = nearest - datetime.now().timestamp()
-        # asyncio.get_event_loop().create_task(quest_over(cooldown, form_id, quest_id))
+        asyncio.get_event_loop().create_task(quest_over(cooldown, form_id, quest_id))
 
 
 def number_error():
