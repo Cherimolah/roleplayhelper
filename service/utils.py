@@ -4,22 +4,21 @@ import os
 from typing import List, Tuple, Optional, Union
 import re
 
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func
 from vkbottle_types.objects import PhotosPhotoSizes
 from vkbottle.bot import Message, MessageEvent
-from aiohttp import ClientSession
+from aiohttp import ClientSession, TCPConnector
 import aiofiles
 from vkbottle import Keyboard, Callback, KeyboardButtonColor
 
 from service.db_engine import db
 from loader import bot, photo_message_uploader
-from service.states import Admin
-from service.middleware import states
 import messages
 
 mention_regex = re.compile(r"\[(?P<type>id|club|public)(?P<id>\d*)\|(?P<text>.+)\]")
 link_regex = re.compile(r"https:/(?P<type>/|/m.)vk.com/(?P<screen_name>\w*)")
 
+connector = TCPConnector(ssl=False)
 
 def get_max_size_url(sizes: List[PhotosPhotoSizes]) -> str:
     square = 0
@@ -114,8 +113,10 @@ async def get_mention_from_message(m: Message, many_users=False) -> Optional[Uni
 
 async def reload_image(attachment, name: str, delete: bool = False):
     photo_url = get_max_size_url(attachment.photo.sizes)
-    async with ClientSession() as session:
+    async with ClientSession(connector=connector) as session:
         response = await session.get(photo_url)
+        if not os.path.exists("data"):
+            os.mkdir("data")
         async with aiofiles.open(name, mode="wb") as file:
             await file.write(await response.read())
     photo = await photo_message_uploader.upload(name)
@@ -159,7 +160,7 @@ async def take_off_payments(form_id: int):
                                                  f"Доступно на балансе: {balance-price}", is_notification=True)
                 await asyncio.sleep(604800)
         else:
-            next_payment = last_payment + dateteme.timedelta(days=7)
+            next_payment = last_payment + datetime.timedelta(days=7)
             await asyncio.sleep(int((next_payment - today).total_seconds()) + 1)
 
 
