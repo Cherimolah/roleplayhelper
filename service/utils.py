@@ -159,6 +159,9 @@ async def take_off_payments(form_id: int):
                     await bot.api.messages.send(user_id, f"Снята арендная плата в размере {price}\n"
                                                  f"Доступно на балансе: {balance-price}", is_notification=True)
                 await asyncio.sleep(604800)
+            else:
+                await asyncio.sleep(86400)
+                continue
         else:
             next_payment = last_payment + datetime.timedelta(days=7)
             await asyncio.sleep(int((next_payment - today).total_seconds()) + 1)
