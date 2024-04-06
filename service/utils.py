@@ -7,18 +7,19 @@ import re
 from sqlalchemy import and_, func
 from vkbottle_types.objects import PhotosPhotoSizes
 from vkbottle.bot import Message, MessageEvent
-from aiohttp import ClientSession, TCPConnector
 import aiofiles
 from vkbottle import Keyboard, Callback, KeyboardButtonColor
 
 from service.db_engine import db
 from loader import bot, photo_message_uploader
 import messages
+from bot_extended import AioHTTPClientExtended
 
 mention_regex = re.compile(r"\[(?P<type>id|club|public)(?P<id>\d*)\|(?P<text>.+)\]")
 link_regex = re.compile(r"https:/(?P<type>/|/m.)vk.com/(?P<screen_name>\w*)")
 
-connector = TCPConnector(ssl=False)
+client = AioHTTPClientExtended()
+
 
 def get_max_size_url(sizes: List[PhotosPhotoSizes]) -> str:
     square = 0
@@ -113,12 +114,11 @@ async def get_mention_from_message(m: Message, many_users=False) -> Optional[Uni
 
 async def reload_image(attachment, name: str, delete: bool = False):
     photo_url = get_max_size_url(attachment.photo.sizes)
-    async with ClientSession(connector=connector) as session:
-        response = await session.get(photo_url)
-        if not os.path.exists("data"):
-            os.mkdir("data")
-        async with aiofiles.open(name, mode="wb") as file:
-            await file.write(await response.read())
+    response = await client.request_content(photo_url)
+    if not os.path.exists("data"):
+        os.mkdir("data")
+    async with aiofiles.open(name, mode="wb") as file:
+        await file.write(response)
     photo = await photo_message_uploader.upload(name)
     if delete:
         os.remove(name)
@@ -136,11 +136,11 @@ async def send_mailing(sleep, message_id, mailing_id):
 async def take_off_payments(form_id: int):
     while True:
         info = await db.select([db.Form.balance, db.Form.freeze]).where(db.Form.id == form_id).gino.first()
-        if not info:
-            break
+        if not info:  # Анкета удалена
+            return
         balance, freeze = info
         if not balance or balance < 0 or freeze:
-            await asyncio.sleep(86400)
+            await asyncio.sleep(86400)  # Ждём сутки, вдруг появятся деньги или анкета разморозиться
             continue
         last_payment = await db.select([db.Form.last_payment]).where(db.Form.id == form_id).gino.scalar()
         today = datetime.datetime.now()
@@ -158,11 +158,12 @@ async def take_off_payments(form_id: int):
                 if (await bot.api.messages.is_messages_from_group_allowed(group_id, user_id=user_id)).is_allowed:
                     await bot.api.messages.send(user_id, f"Снята арендная плата в размере {price}\n"
                                                  f"Доступно на балансе: {balance-price}", is_notification=True)
-                await asyncio.sleep(604800)
+                await asyncio.sleep(604800)  # Следующее списание через неделю
             else:
-                await asyncio.sleep(86400)
+                await asyncio.sleep(86400)  # Каюта может быть не присвоена подождём сутки, вдруг появится
                 continue
         else:
+            # Ждём пока не пройдёт неделя до следующего списания
             next_payment = last_payment + datetime.timedelta(days=7)
             await asyncio.sleep(int((next_payment - today).total_seconds()) + 1)
 

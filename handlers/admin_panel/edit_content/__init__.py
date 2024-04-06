@@ -6,3 +6,4 @@ from . import statuses
 from . import quests
 from . import daylics
 from . import events
+from . import products
