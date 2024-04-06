@@ -12,7 +12,8 @@ from vkbottle import PhotoMessageUploader, DocMessagesUploader, VideoUploader
 from config import BOT_TOKEN, USER_TOKENS
 from service.middleware import Middleware
 from service.states import Registration, Admin
-from bot_extended import APIExtended, RawBotEventViewExtended, BotMessageViewExtended, ErrorHandlerExtended, RouterExtended
+from bot_extended import (APIExtended, RawBotEventViewExtended, BotMessageViewExtended, ErrorHandlerExtended,
+                          RouterExtended, AioHTTPClientExtended)
 
 
 class Field:
@@ -42,7 +43,7 @@ fields_admin = (Field("Имя", Registration.PERSONAL_NAME), Field("Должно
                 Field("Класс каюты", Admin.EDIT_CLASS_CABIN), Field("Заморозка", Admin.EDIT_FREEZE),
                 Field("Статус", Admin.EDIT_STATUS))
 
-bot = Bot(api=APIExtended(BOT_TOKEN),
+bot = Bot(api=APIExtended(BOT_TOKEN, http_client=AioHTTPClientExtended()),
           labeler=BotLabeler(raw_event_view=RawBotEventViewExtended(),
                              message_view=BotMessageViewExtended()), error_handler=ErrorHandlerExtended(),
           router=RouterExtended())

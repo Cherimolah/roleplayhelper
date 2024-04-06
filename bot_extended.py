@@ -20,10 +20,15 @@ from vkbottle.tools.dev.mini_types.bot import message_min
 from vkbottle.dispatch.base import Router
 from vkbottle.modules import logger
 from vkbottle.exception_factory.error_handler.error_handler import ErrorHandler
+from vkbottle.http.aiohttp import AiohttpClient
 
 from sqlalchemy import and_
+from aiohttp import ClientSession, ClientResponse, TCPConnector
 
 from service.db_engine import db
+
+
+connector = TCPConnector(ssl=False)
 
 
 class MessagesCategoryExtended(MessagesCategory):
@@ -174,6 +179,26 @@ class APICategoriesExtended(APICategories, ABC):
     @property
     def users(self) -> UsersCategory:
         return UsersCategoryExtended(self.api_instance)
+
+
+class AioHTTPClientExtended(AiohttpClient, ABC):
+
+    async def request_raw(
+        self,
+        url: str,
+        method: str = "GET",
+        data: Optional[dict] = None,
+        **kwargs,
+    ) -> "ClientResponse":
+        if not self.session:
+            self.session = ClientSession(
+                json_serialize=self.json_processing_module.dumps,
+                connector=connector,
+                **self._session_params,
+            )
+        async with self.session.request(url=url, method=method, data=data, **kwargs) as response:
+            await response.read()
+            return response
 
 
 class APIExtended(APICategoriesExtended, API):
