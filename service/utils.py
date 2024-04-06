@@ -115,8 +115,8 @@ async def get_mention_from_message(m: Message, many_users=False) -> Optional[Uni
 async def reload_image(attachment, name: str, delete: bool = False):
     photo_url = get_max_size_url(attachment.photo.sizes)
     response = await client.request_content(photo_url)
-    if not os.path.exists("data"):
-        os.mkdir("data")
+    if not os.path.exists("/".join(name.split("/")[:-1])):
+        os.mkdir("/".join(name.split("/")[:-1]))
     async with aiofiles.open(name, mode="wb") as file:
         await file.write(response)
     photo = await photo_message_uploader.upload(name)

@@ -66,7 +66,7 @@ async def set_art_product(m: Message):
         return
     product_id = int(states.get(m.from_id).split("*")[1])
     name = await db.select([db.Shop.name]).where(db.Shop.id == product_id).gino.scalar()
-    photo = await reload_image(message.attachments[0], f"{name}.jpg")
+    photo = await reload_image(message.attachments[0], f"data/shop/{name}.jpg")
     await db.Shop.update.values(photo=photo).where(db.Shop.id == product_id).gino.status()
     states.set(m.from_id, Admin.SELECT_ACTION)
     await m.answer(messages.product_added, keyboard=keyboards.gen_type_change_content("products"))
