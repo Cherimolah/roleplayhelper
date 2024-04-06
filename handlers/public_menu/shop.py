@@ -120,7 +120,7 @@ async def send_services_page(m: MessageEvent):
         keyboard.add(
             Callback("->", {"products_page": new_page + 1}), KeyboardButtonColor.PRIMARY
         )
-    await m.edit_message(messages.products.format(service.name, service.description, service.price),
+    await m.edit_message(messages.product.format(service.name, service.description, service.price),
                          keyboard=keyboard.get_json(), attachment=service.photo)
 
 
