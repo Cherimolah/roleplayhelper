@@ -161,5 +161,4 @@ cython_debug/
 data/
 data
 exports
-alembic/versions
-alembic.ini
+alembic/
