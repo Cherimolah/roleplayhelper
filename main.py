@@ -44,7 +44,7 @@ async def on_startup():
                 cooldown = nearest - datetime.now().timestamp()
         asyncio.get_event_loop().create_task(quest_over(cooldown, form_id, quest_id))
     admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
-    await bot.api.messages.send(peer_ids=admins, message="🎉 Бот запущен!")
+    await bot.api.messages.send(peer_ids=admins, message="🎉 Бот запущен!", is_notification=True)
 
 
 def number_error():
