@@ -22,7 +22,9 @@ async def load_forms_page(page) -> Tuple[str, Keyboard]:
     user_ids = [x[0] for x in data]
     names = [x[1] for x in data]
     user_names = [f"{x.first_name} {x.last_name}" for x in await bot.api.users.get(user_ids=user_ids)]
+    print(len(data), len(user_ids), len(names), len(user_names))
     data = zip(range(len(user_names)), user_ids, names, user_names)
+    print(len(data))
     for i, user_id, name, user_name in data:
         reply += f"{(page - 1) * 15 + i + 1}. [id{user_id}|{user_name} / {name}]\n"
     reply += "\nДля просмотра анкеты отправьте номер из списка"
@@ -118,7 +120,7 @@ async def search_user_form(m: Message):
         return
     if not user_id:
         # Try get by form index (not id)
-        user_id = await db.select([db.Form.user_id]).offset(int(m.text) - 1).limit(1).gino.scalar()
+        user_id = await db.select([db.Form.user_id]).where(db.Form.is_request.is_(False)).order_by(db.Form.created_at.asc()).order_by(db.Form.id.asc()).offset(int(m.text) - 1).limit(1).gino.scalar()
     if not user_id:
         await m.answer(messages.user_not_found)
         return
