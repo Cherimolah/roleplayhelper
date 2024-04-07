@@ -40,7 +40,7 @@ class FormMiddleware(BaseMiddleware[Message], ABC):
             return
         user = await db.select([db.User.user_id]).where(db.User.user_id == self.event.from_id).gino.scalar()
         form = await db.select([db.Form.id]).where(db.Form.user_id == self.event.from_id).gino.scalar()
-        if user and not form:
-            await self.event.answer("Я вас знаю, но у вас нет анкеты! Напишите начать, чтобы заполнить её и "
+        if user and not form and self.event.text.lower() != "начать":
+            await self.event.answer("Я вас знаю, но у вас нет анкеты! Напишите «Начать», чтобы заполнить её и "
                                     "продолжить пользоваться")
             self.stop()
