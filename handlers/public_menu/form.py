@@ -23,7 +23,7 @@ async def load_forms_page(page) -> Tuple[str, Keyboard]:
     names = [x[1] for x in data]
     user_names = [f"{x.first_name} {x.last_name}" for x in await bot.api.users.get(user_ids=user_ids)]
     print(len(data), len(user_ids), len(names), len(user_names))
-    data = zip(range(len(user_names)), user_ids, names, user_names)
+    data = list(zip(range(len(user_names)), user_ids, names, user_names))
     print(len(data))
     for i, user_id, name, user_name in data:
         reply += f"{(page - 1) * 15 + i + 1}. [id{user_id}|{user_name} / {name}]\n"
