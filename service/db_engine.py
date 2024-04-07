@@ -2,7 +2,7 @@ import asyncio
 import datetime
 
 from gino import Gino
-from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, Boolean, TIMESTAMP, ARRAY
+from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, Boolean, TIMESTAMP, func
 
 from config import USER, PASSWORD, HOST, DATABASE
 
@@ -181,9 +181,32 @@ class Database(Gino):
 
         self.CompletedDaylic = CompletedDaylic
 
+        class Metadata(self.Model):
+            __tablename__ = "metadata"
+
+            maintainence_break = Column(Boolean, default=False)
+
+        self.Metadata = Metadata
+
     async def connect(self):
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")
         await self.gino.create_all()
+        await self.first_load()
+
+    async def first_load(self):
+        """Загрузка первичных данных"""
+        professions = await self.select([func.count(db.Profession.id)]).gino.scalar()
+        if professions == 0:
+            await self.Profession.create(name="Тестовая профессия", special=False)
+        statuses = await self.select([func.count(db.Status.id)]).gino.scalar()
+        if statuses == 0:
+            await self.Status.create(name="Резидент")
+        cabins = await self.select([func.count(db.Cabins.id)]).gino.scalar()
+        if cabins == 0:
+            await self.Cabins.create(name="Тестовая каюта", cost=250)
+        metadata = await self.select([func.count(*db.Metadata)]).gino.scalar()
+        if metadata == 0:
+            await self.Metadata.create()
 
 
 db = Database()

@@ -8,7 +8,18 @@ from service.db_engine import db
 states = CtxStorage()
 
 
-class Middleware(BaseMiddleware[Message], ABC):
+class MaintainenceMiddleware(BaseMiddleware[Message], ABC):
+
+    async def pre(self) -> None:
+        is_break = await db.select([db.Metadata.maintainence_break]).gino.scalar()
+        if is_break:
+            admin = await db.select([db.User.admin]).where(db.User.user_id == self.event.from_id).gino.scalar()
+            if admin <= 0:
+                await self.event.answer("⚠ Бот находится на техническом обслуживании. Повторите поытку позже")
+                self.stop()
+
+
+class StateMiddleware(BaseMiddleware[Message], ABC):
 
     async def pre(self) -> None:
         state = await db.select([db.User.state]).where(db.User.user_id == self.event.from_id).gino.scalar()
@@ -18,5 +29,3 @@ class Middleware(BaseMiddleware[Message], ABC):
         state = states.get(self.event.from_id)
         await db.User.update.values(state=state).where(db.User.user_id == self.event.from_id).gino.status()
         states.delete(self.event.from_id)
-
-

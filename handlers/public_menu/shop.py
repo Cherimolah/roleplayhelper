@@ -1,8 +1,6 @@
 from vkbottle.bot import Message, MessageEvent
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
 from vkbottle import GroupEventType, Keyboard, Text, KeyboardButtonColor, Callback
-from sqlalchemy import and_
-
 
 import messages
 from loader import bot

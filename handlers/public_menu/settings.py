@@ -5,7 +5,7 @@ from vkbottle import Keyboard, Text, KeyboardButtonColor, Callback
 from loader import bot
 from service.keyboards import get_settings_menu, main_menu
 from service.db_engine import db
-from service.custom_rules import StateRule
+from service.custom_rules import StateRule, AdminRule
 from service.states import Menu
 from service.middleware import states
 
@@ -107,3 +107,15 @@ async def send_delete_request(m: Message):
                                 keyboard=kb)
     await m.answer("Запрос на удаление страницы отправлен")
     await settings(m)
+
+
+@bot.on.private_message(PayloadRule({"settings": "maintainence"}), AdminRule())
+async def change_maintainence(m: Message):
+    m_break = await db.select([db.Metadata.maintainence_break]).gino.scalar()
+    await db.Metadata.update.values(maintainence_break=not m_break).gino.status()
+    if not m_break:
+        await m.answer("⚠ Режим технического обслуживания включён. Бот доступен только для администраторов",
+                       keyboard=await get_settings_menu(m.from_id))
+    else:
+        await m.answer("Режим технического обслуживания выключен. Бот доступен для всех",
+                       keyboard=await get_settings_menu(m.from_id))

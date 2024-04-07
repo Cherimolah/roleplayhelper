@@ -169,17 +169,27 @@ donate_menu = Keyboard().add(
 
 
 async def get_settings_menu(user_id: int) -> Keyboard:
-    notifications_enabled, freeze = (await db.select([db.User.notification_enabled, db.Form.freeze])
-                             .select_from(db.User.join(db.Form, db.User.user_id == db.Form.user_id))
-                             .where(db.User.user_id == user_id).gino.first())
-    settings_menu = Keyboard().add(
+    notifications_enabled, freeze, admin = (
+        await db.select([db.User.notification_enabled, db.Form.freeze, db.User.admin])
+        .select_from(db.User.join(db.Form, db.User.user_id == db.Form.user_id))
+        .where(db.User.user_id == user_id).gino.first())
+    settings_menu = (Keyboard().add(
         Text(f"Уведомления: {'✅' if notifications_enabled else '❌'}", {"settings": "notifications"}),
         KeyboardButtonColor.SECONDARY
     ).row().add(
-        Text(f"{'Разморозить' if freeze else 'Заморозить'} анкету", {"settings": "freeze_request"}), KeyboardButtonColor.PRIMARY
+        Text(f"{'Разморозить' if freeze else 'Заморозить'} анкету", {"settings": "freeze_request"}),
+        KeyboardButtonColor.PRIMARY
     ).row().add(
         Text("Удалить анкету", {"settings": "delete_request"}), KeyboardButtonColor.NEGATIVE
-    ).row().add(
+    ))
+    if admin > 0:
+        m_break = await db.select([db.Metadata.maintainence_break]).gino.scalar()
+        settings_menu.row().add(
+            Text(f"{'Вкл.' if not m_break else 'Выкл.'} техническое обслуживание",
+                 {"settings": "maintainence"}),
+            KeyboardButtonColor.NEGATIVE
+        )
+    settings_menu.row().add(
         Text("Назад", {"menu": "home"}), KeyboardButtonColor.NEGATIVE
     )
     return settings_menu
