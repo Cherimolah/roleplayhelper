@@ -32,7 +32,7 @@ async def load_forms_page(page) -> Tuple[str, Keyboard]:
         keyboard = None
     else:
         keyboard = Keyboard(inline=True)
-    if page > 0:
+    if page > 1:
         keyboard.add(
             Callback("<-", {"forms_page": page - 1}), KeyboardButtonColor.PRIMARY
         )
