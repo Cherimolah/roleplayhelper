@@ -213,4 +213,3 @@ class Database(Gino):
 
 
 db = Database()
-asyncio.get_event_loop().run_until_complete(db.connect())

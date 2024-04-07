@@ -19,6 +19,7 @@ async def on_startup():
     окончания квеста
     :return: None
     """
+    await db.connect()
     mailings = await db.Mailings.query.gino.all()
     for mail in mailings:
         if not mail.send_at:
