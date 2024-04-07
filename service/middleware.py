@@ -11,6 +11,8 @@ states = CtxStorage()
 class MaintainenceMiddleware(BaseMiddleware[Message], ABC):
 
     async def pre(self) -> None:
+        if self.event.peer_id > 2_000_000_000:
+            return
         is_break = await db.select([db.Metadata.maintainence_break]).gino.scalar()
         if is_break:
             admin = await db.select([db.User.admin]).where(db.User.user_id == self.event.from_id).gino.scalar()
