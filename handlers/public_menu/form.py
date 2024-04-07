@@ -28,7 +28,7 @@ async def load_forms_page(page) -> Tuple[str, Keyboard]:
     reply += "\nДля просмотра анкеты отправьте номер из списка"
     reply += ("\n⚠ Вы можете отправить ссылку/айди/имя в игре/пересланное сообщение/упоминание участника, "
               "анкету которого вы хотите найти")
-    if page == 0 and page == pages:
+    if page == 1 and page == pages:
         keyboard = None
     else:
         keyboard = Keyboard(inline=True)
