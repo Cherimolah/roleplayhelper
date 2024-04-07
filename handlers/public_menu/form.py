@@ -17,7 +17,7 @@ from service.db_engine import db
 
 async def load_forms_page(page) -> Tuple[str, Keyboard]:
     data = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.is_request.is_(False)).limit(15).offset((page - 1) * 15).order_by(db.Form.created_at.asc()).order_by(db.Form.id.asc()).gino.all()
-    pages = (await db.select([func.count(db.Form.id)]).gino.scalar()) // 15 + 1
+    pages = (await db.select([func.count(db.Form.id)]).where(db.Form.is_request.is_(False)).gino.scalar()) // 15 + 1
     reply = f"Список анкет пользователей:\n\nСтраница {page}/{pages}\n\n"
     user_ids = [x[0] for x in data]
     names = [x[1] for x in data]
