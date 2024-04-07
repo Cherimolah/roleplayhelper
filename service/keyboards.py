@@ -133,7 +133,7 @@ how_edit_form = Keyboard().add(
 
 confirm_edit_form = Keyboard().add(
     Text("Подтвердить изменения", {"form_edit": "confirm"}), KeyboardButtonColor.POSITIVE
-).add(
+).row().add(
     Text("Отменить изменения", {"form_edit": "decline"}), KeyboardButtonColor.NEGATIVE
 )
 

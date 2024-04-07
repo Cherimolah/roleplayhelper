@@ -11,9 +11,12 @@ import aiofiles
 from vkbottle import Keyboard, Callback, KeyboardButtonColor
 
 from service.db_engine import db
-from loader import bot, photo_message_uploader
+from loader import bot, photo_message_uploader, fields
 import messages
 from bot_extended import AioHTTPClientExtended
+from service.middleware import states
+import service.states
+import service.keyboards as keyboards
 
 mention_regex = re.compile(r"\[(?P<type>id|club|public)(?P<id>\d*)\|(?P<text>.+)\]")
 link_regex = re.compile(r"https:/(?P<type>/|/m.)vk.com/(?P<screen_name>\w*)")
@@ -75,8 +78,6 @@ async def loads_form(user_id: int = None, is_request: bool = None, form_id: int 
 async def parse_ids(m: Message) -> List[int]:
     if m.reply_message:
         return [m.reply_message.from_id]
-    elif m.text.isdigit():
-        return [int(m.text)]
     if m.fwd_messages:
         return [x.from_id for x in m.fwd_messages]
     user_ids = []
@@ -288,3 +289,18 @@ async def send_daylics():
                 await db.Form.update.values(activated_daylic=daylic).where(db.Form.id == form_id).gino.status()
                 await bot.api.messages.send(user_id, "Вам доступно новое ежедневное задание!", is_notification=True)
         await asyncio.sleep(5)
+
+
+async def show_fields_edit(m: Message, new=True):
+    if new:
+        form = dict(await db.select([*db.Form]).where(db.Form.user_id == m.from_id).gino.first())
+        params = {k: v for k, v in form.items() if k not in ("id", "is_request")}
+        params['is_request'] = True
+        await db.Form.create(**params)
+        await db.User.update.values(editing_form=True).where(db.User.user_id == m.from_id).gino.status()
+    states.set(m.from_id, service.states.Menu.SELECT_FIELD_EDIT_NUMBER)
+    reply = ("Выберите поле для редактирования."
+             "Когда закончите нажмите кнопку «Подтвердить изменения»\n\n")
+    for i, field in enumerate(fields):
+        reply += f"{i+1}. {field.name}\n"
+    await m.answer(reply, keyboard=keyboards.confirm_edit_form)

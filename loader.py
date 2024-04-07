@@ -10,7 +10,7 @@ from loguru import logger
 from vkbottle import PhotoMessageUploader, DocMessagesUploader, VideoUploader
 
 from config import BOT_TOKEN, USER_TOKENS
-from service.middleware import MaintainenceMiddleware, StateMiddleware
+from service.middleware import MaintainenceMiddleware, StateMiddleware, FormMiddleware
 from service.states import Registration, Admin
 from bot_extended import (APIExtended, RawBotEventViewExtended, BotMessageViewExtended, ErrorHandlerExtended,
                           RouterExtended, AioHTTPClientExtended)
@@ -49,6 +49,7 @@ bot = Bot(api=APIExtended(BOT_TOKEN, http_client=AioHTTPClientExtended()),
           router=RouterExtended())
 bot.labeler.vbml_ignore_case = True
 bot.labeler.message_view.register_middleware(MaintainenceMiddleware)
+bot.labeler.message_view.register_middleware(FormMiddleware)
 bot.labeler.message_view.register_middleware(StateMiddleware)
 photo_message_uploader = PhotoMessageUploader(bot.api)
 doc_messages_uploader = DocMessagesUploader(bot.api)

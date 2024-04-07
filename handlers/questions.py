@@ -12,10 +12,9 @@ from service.states import Registration, Menu
 import messages
 from service.custom_rules import StateRule, NumericRule, LimitSymbols, CommandWithAnyArgs
 import service.keyboards as keyboards
-from service.utils import loads_form, reload_image
+from service.utils import loads_form, reload_image, show_fields_edit
 from config import OWNER, ADMINS
 from service.middleware import states
-from handlers.public_menu.form import show_fields_edit
 
 
 @bot.on.private_message(StateRule(Registration.WAIT))
@@ -48,27 +47,12 @@ async def api_request(m: Message):
     return f"Результат: {response}"
 
 
-@bot.on.private_message(PayloadRule({"menu": "home"}))
-@bot.on.private_message(text="меню")
-@bot.on.private_message(StateRule(Menu.SHOP_MENU), PayloadRule({"shop": "back"}))
-async def send_main_menu(m: Message):
-    creating_form = await db.select([db.User.creating_form]).where(db.User.user_id == m.from_id).gino.scalar()
-    if creating_form:
-        await m.answer("Вы сейчас находитесь в режиме создания анкеты, пожалуйста, "
-                                       "заполните её до конца")
-        return
-    forms_status = await db.select([db.Form.is_request]).where(
-        and_(db.Form.is_request.is_(False), db.Form.user_id == m.from_id)).gino.first()
-    if not forms_status:
-        await m.answer("У вас нет ещё ни одной принятой анкеты")
-        return
-    states.set(m.from_id, Menu.MAIN)
-    await m.answer(messages.main_menu, keyboard=await keyboards.main_menu(m.from_id))
-
-
 @bot.on.private_message(PayloadRule({"command": "start"}))
 @bot.on.private_message(text=["начать", "регистрация", "заполнить заново"])
 @bot.on.private_message(command="start")
+@bot.on.private_message(PayloadRule({"menu": "home"}))
+@bot.on.private_message(text="меню")
+@bot.on.private_message(StateRule(Menu.SHOP_MENU), PayloadRule({"shop": "back"}))
 async def start(m: Message):
     user = await db.User.get(m.from_id)
     if not user:
@@ -81,10 +65,14 @@ async def start(m: Message):
         await db.User.update.values(creating_form=True).where(db.User.user_id == m.from_id).gino.status()
         await m.answer(messages.hello, keyboard=Keyboard())
     else:
-        creating_form = await db.select([db.User.creating_form]).where(db.User.user_id == m.from_id).gino.scalar()
+        creating_form, editing_form = await db.select([db.User.creating_form, db.User.editing_form]).where(db.User.user_id == m.from_id).gino.first()
         if creating_form:
             await m.answer("Вы сейчас находитесь в режиме создания анкеты, пожалуйста, "
                                            "заполните её до конца")
+            return
+        if editing_form:
+            await m.answer("Вы сейчас находитесь в режиме редактирования анкеты, пожалуйста, "
+                           "заполните её до конца или отклоните изменения")
             return
         states.set(m.from_id, Menu.MAIN)
         await m.answer("Главное меню", keyboard=await keyboards.main_menu(m.from_id))

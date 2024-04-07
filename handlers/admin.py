@@ -323,3 +323,12 @@ async def accept_delete(m: MessageEvent):
         await db.Form.update.values(delete_request=False).where(db.Form.user_id == m.payload['user_id']).gino.status()
         await bot.api.messages.send(m.payload['user_id'], "Ваша запрос на удаление анкеты был отклонён", is_notification=True)
         await m.edit_message(f"Запрос на удаление анкеты [id{m.payload['user_id']}|{name}] отклонён")
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_delete": int}), AdminRule())
+async def delete_form(m: MessageEvent):
+    user_id, name = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.id == m.payload['form_delete']).gino.first()
+    user = (await bot.api.users.get(user_ids=user_id))[0]
+    user_name = f"{user.first_name} {user.last_name}"
+    await db.Form.delete.where(db.Form.id == m.payload['form_delete']).gino.status()
+    await m.edit_message(f"Анкета [id{user_id}|{name} / {user_name}] была удалена")

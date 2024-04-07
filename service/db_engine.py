@@ -26,6 +26,7 @@ class Database(Gino):
             admin = Column(Integer, default=0)
             state = Column(Text)
             creating_form = Column(Boolean, default=True)
+            editing_form = Column(Boolean, default=False)
             notification_enabled = Column(Boolean, default=True)
 
         self.User = User
@@ -78,6 +79,7 @@ class Database(Gino):
             deactivated_daylic = Column(TIMESTAMP, default=datetime.datetime.now)
             freeze_request = Column(Boolean, default=False)
             delete_request = Column(Boolean, default=False)
+            created_at = Column(TIMESTAMP, default=datetime.datetime.now)
 
         self.Form = Form
 
@@ -207,6 +209,7 @@ class Database(Gino):
         metadata = await self.select([func.count(*db.Metadata)]).gino.scalar()
         if metadata == 0:
             await self.Metadata.create()
+        await db.Form.update.values(created_at=datetime.datetime.now()).where(db.Form.created_at.is_(None)).gino.all()
 
 
 db = Database()
