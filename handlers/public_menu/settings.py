@@ -1,3 +1,6 @@
+import sys
+import subprocess
+
 from vkbottle.bot import Message
 from vkbottle.dispatch.rules.base import PayloadRule
 from vkbottle import Keyboard, Text, KeyboardButtonColor, Callback
@@ -8,6 +11,7 @@ from service.db_engine import db
 from service.custom_rules import StateRule, AdminRule
 from service.states import Menu
 from service.middleware import states
+from config import SYSTEMD_NAME
 
 
 @bot.on.private_message(PayloadRule({"menu": "settings"}), StateRule(Menu.MAIN))
@@ -119,3 +123,11 @@ async def change_maintainence(m: Message):
     else:
         await m.answer("Режим технического обслуживания выключен. Бот доступен для всех",
                        keyboard=await get_settings_menu(m.from_id))
+
+
+@bot.on.private_message(PayloadRule({"settings": "restart"}), AdminRule())
+async def restart(m: Message):
+    if not sys.platform.startswith("linux"):
+        return "Перезапуск возможен только в среде Linux"
+    await m.answer("Бот будет обновлён и перезапущен")
+    subprocess.run(["systemctl", "restart", SYSTEMD_NAME])

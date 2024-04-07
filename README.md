@@ -18,3 +18,5 @@ Set in the same file:
 Run:
 `alembic revision -m "first migration" --autogenerate --head head`
 `alembic upgrade head`
+
+Configure a systemd file for restart!

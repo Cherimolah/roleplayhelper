@@ -189,6 +189,9 @@ async def get_settings_menu(user_id: int) -> Keyboard:
                  {"settings": "maintainence"}),
             KeyboardButtonColor.NEGATIVE
         )
+        settings_menu.add(
+            Text("Перезапуск бота", {"settings": "restart"}), KeyboardButtonColor.NEGATIVE
+        )
     settings_menu.row().add(
         Text("Назад", {"menu": "home"}), KeyboardButtonColor.NEGATIVE
     )

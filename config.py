@@ -20,3 +20,5 @@ OWNER = int(os.environ.get("OWNER"))
 ADMINS = list(map(int, os.environ.get("ADMINS").split(";")))
 
 DATETIME_FORMAT = os.environ.get("DATETIME_FORMAT")
+
+SYSTEMD_NAME = os.environ.get("SYSTEMD_NAME")
