@@ -129,5 +129,5 @@ async def change_maintainence(m: Message):
 async def restart(m: Message):
     if not sys.platform.startswith("linux"):
         return "Перезапуск возможен только в среде Linux"
-    await m.answer("Бот будет обновлён до последней и перезапущен")
+    await m.answer("Бот будет обновлён до последней версии и перезапущен")
     subprocess.run(["systemctl", "restart", SYSTEMD_NAME])
