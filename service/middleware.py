@@ -34,6 +34,8 @@ class StateMiddleware(BaseMiddleware[Message], ABC):
 class FormMiddleware(BaseMiddleware[Message], ABC):
 
     async def pre(self):
+        if self.event.peer_id > 2_000_000_000:
+            return
         user = await db.select([db.User.user_id]).where(db.User.user_id == self.event.from_id).gino.scalar()
         form = await db.select([db.Form.id]).where(db.Form.user_id == self.event.from_id).gino.scalar()
         if user and not form:
