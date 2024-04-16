@@ -24,9 +24,9 @@ async def back_from_admin_menu(m: Message):
 
 # Назад в админку
 @bot.on.private_message(StateRule(Admin.EDIT_FORMS), PayloadRule({"admin_forms_edit": "back"}), AdminRule())
-@bot.on.private_message(StateRule(Admin.SELECT_NUMBER_FORM, True), PayloadRule({"admin_forms_edit": "back"}), AdminRule())
-@bot.on.private_message(StateRule(Admin.SELECT_FIELDS, True), PayloadRule({"admin_forms_edit": "back"}), AdminRule())
-@bot.on.private_message(StateRule(Admin.ENTER_FIELD_VALUE, True), PayloadRule({"admin_forms_edit": "back"}), AdminRule())
+@bot.on.private_message(StateRule(Admin.SELECT_NUMBER_FORM), PayloadRule({"admin_forms_edit": "back"}), AdminRule())
+@bot.on.private_message(StateRule(Admin.SELECT_FIELDS), PayloadRule({"admin_forms_edit": "back"}), AdminRule())
+@bot.on.private_message(StateRule(Admin.ENTER_FIELD_VALUE), PayloadRule({"admin_forms_edit": "back"}), AdminRule())
 @bot.on.private_message(StateRule(Admin.SELECT_MANAGE_ADMINS), PayloadRule({"manage_admins": "back"}), AdminRule())
 @bot.on.private_message(StateRule(Admin.ENTER_NEW_ADMIN_ID), PayloadRule({"manage_admins": "back"}), AdminRule())
 @bot.on.private_message(StateRule(Admin.ENTER_OLD_ADMIN_ID), PayloadRule({"manage_admins": "back"}), AdminRule())

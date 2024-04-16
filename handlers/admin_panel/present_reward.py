@@ -33,7 +33,7 @@ async def user_reward(m: Message, forms: List[Tuple[int, int]] = None, form: Tup
     await m.answer(messages.enter_amount_reward)
 
 
-@bot.on.private_message(StateRule(Admin.ENTER_AMOUNT_REWARD, True), AdminRule(), ManyUsersSpecified())
+@bot.on.private_message(StateRule(Admin.ENTER_AMOUNT_REWARD), AdminRule(), ManyUsersSpecified())
 async def set_amount_reward(m: Message, forms: List[Tuple[int, int]]):
     try:
         amount = int(m.text)
@@ -54,7 +54,7 @@ async def set_amount_reward(m: Message, forms: List[Tuple[int, int]]):
     await m.answer(messages.confirm_reward.format(amount, mentions), keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.CONFIRM_REWARD, True), PayloadMapRule({"reward": int}), ManyUsersSpecified(), AdminRule())
+@bot.on.private_message(StateRule(Admin.CONFIRM_REWARD), PayloadMapRule({"reward": int}), ManyUsersSpecified(), AdminRule())
 async def accept_reward(m: Message, forms: List[Tuple[int, int]]):
     form_ids = [x[0] for x in forms]
     user_ids = [x[1] for x in forms]
@@ -69,7 +69,7 @@ async def accept_reward(m: Message, forms: List[Tuple[int, int]]):
     await bot.api.messages.send(user_ids, reply, is_notification=True)
 
 
-@bot.on.private_message(StateRule(Admin.CONFIRM_REWARD, True), PayloadRule({"reward": "decline"}), AdminRule())
+@bot.on.private_message(StateRule(Admin.CONFIRM_REWARD), PayloadRule({"reward": "decline"}), AdminRule())
 async def decline_reward(m: Message):
     states.set(m.from_id, Admin.MENU)
     await m.answer(messages.admin_menu, keyboard=keyboards.admin_menu)

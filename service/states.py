@@ -107,3 +107,4 @@ class Admin:
     EVENT_DESCRIPTION = "event_description"
     EVENT_MASK = "event_mask"
     EVENT_SELECT_ID = "event_select_id"
+    EDIT_CONTENT = "edit_content"

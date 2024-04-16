@@ -43,11 +43,11 @@ async def accept_form(m: MessageEvent):
         professions = await db.select([db.Profession.name]).gino.all()
         for i, prof in enumerate(professions):
             reply = f"{reply}{i+1}. {prof.name}\n"
-        await db.User.update.values(state=f"{Admin.SELECT_PROFESSION}@{user_id}").where(db.User.user_id == m.user_id).gino.status()
+        await db.User.update.values(state=f"{Admin.SELECT_PROFESSION}*{user_id}").where(db.User.user_id == m.user_id).gino.status()
         await m.send_message(reply, keyboard=keyboards.another_profession_to_user(user_id))
         return
     if not cabin:
-        await db.User.update.values(state=f"{Admin.SELECT_CABIN}@{user_id}").where(
+        await db.User.update.values(state=f"{Admin.SELECT_CABIN}*{user_id}").where(
             db.User.user_id == m.user_id).gino.status()
         free = []
         i = 1
@@ -61,17 +61,17 @@ async def accept_form(m: MessageEvent):
         await m.send_message(reply, keyboard=Keyboard().get_json())
 
 
-@bot.on.private_message(StateRule(Admin.SELECT_PROFESSION, True), NumericRule(), AdminRule())
+@bot.on.private_message(StateRule(Admin.SELECT_PROFESSION), NumericRule(), AdminRule())
 async def set_profession_to_user(m: Message, value: int = None):
     profession_id = await db.select([db.Profession.id]).offset(value - 1).limit(1).gino.scalar()
-    user_id = int(states.get(m.from_id).split("@")[1])
+    user_id = int(states.get(m.from_id).split("*")[1])
     name = await db.select([db.Form.name]).where(
         and_(db.Form.user_id == user_id, db.Form.is_request.is_(True))
     ).gino.scalar()
     await db.Form.update.values(profession=profession_id).where(
         and_(db.Form.user_id == user_id, db.Form.is_request.is_(True))
     ).gino.status()
-    states.set(m.from_id, f"{Admin.SELECT_CABIN}@{user_id}")
+    states.set(m.from_id, f"{Admin.SELECT_CABIN}*{user_id}")
     free = []
     i = 1
     employed = {x[0] for x in await db.select([db.Form.cabin]).gino.all()}
@@ -84,15 +84,15 @@ async def set_profession_to_user(m: Message, value: int = None):
     await m.answer(reply, keyboard=Keyboard())
 
 
-@bot.on.private_message(StateRule(Admin.SELECT_CABIN, True), NumericRule())
+@bot.on.private_message(StateRule(Admin.SELECT_CABIN), NumericRule())
 async def set_user_cabin(m: Message, value: int = None):
     employed = await db.select([db.Form.cabin]).where(db.Form.cabin == value).gino.scalar()
     if employed:
         await m.answer("Данная комната уже занята")
         return
-    user_id = int(states.get(m.from_id).split("@")[1])
+    user_id = int(states.get(m.from_id).split("*")[1])
     await db.Form.update.values(cabin=value).where(db.Form.user_id == user_id).gino.status()
-    states.set(m.from_id, f"{Admin.SELECT_CLASS_CABIN}@{user_id}")
+    states.set(m.from_id, f"{Admin.SELECT_CLASS_CABIN}*{user_id}")
     cabins = await db.select([db.Cabins.name]).gino.all()
     reply = messages.cabin_class
     for i, cabin in enumerate(cabins):
@@ -100,10 +100,10 @@ async def set_user_cabin(m: Message, value: int = None):
     await m.answer(reply)
 
 
-@bot.on.private_message(StateRule(Admin.SELECT_CLASS_CABIN, True),
+@bot.on.private_message(StateRule(Admin.SELECT_CLASS_CABIN),
                         NumericRule(), AdminRule())
 async def set_cabin_class(m: Message, value: int):
-    user_id = int(states.get(m.from_id).split("@")[1])
+    user_id = int(states.get(m.from_id).split("*")[1])
     cabin_id, price = await db.select([db.Cabins.id, db.Cabins.cost]).offset(value - 1).limit(1).gino.first()
     await db.Form.update.values(cabin_type=cabin_id,
                                 balance=db.Form.balance-price,
@@ -128,16 +128,16 @@ async def decline_form(m: MessageEvent):
         await m.edit_message("Анкета уже была принята или отклонена другим администратором")
         return
     user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
-    await db.User.update.values(state=f"{Admin.REASON_DECLINE}@{user_id}").where(db.User.user_id == m.user_id).gino.status()
+    await db.User.update.values(state=f"{Admin.REASON_DECLINE}*{user_id}").where(db.User.user_id == m.user_id).gino.status()
     user = (await bot.api.users.get(user_id))[0]
     await m.edit_message(f"Укажите причину отказа от анкеты пользователя [id{user_id}|{user.first_name} {user.last_name}]",
                         keyboard=keyboards.reason_decline_form)
 
 
-@bot.on.private_message(StateRule(Admin.REASON_DECLINE, True), AdminRule())
+@bot.on.private_message(StateRule(Admin.REASON_DECLINE), AdminRule())
 async def reason_decline_form(m: Message):
     state = states.get(m.from_id)
-    user_id = int(state.split("@")[1])
+    user_id = int(state.split("*")[1])
     await db.Form.delete.where(and_(db.Form.user_id == user_id, db.Form.is_request.is_(True))).gino.status()
     main_form = await db.select([db.Form.id]).where(
         and_(db.Form.user_id == user_id, db.Form.is_request.is_(False))).gino.first()

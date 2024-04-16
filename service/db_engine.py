@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 
 from gino import Gino
@@ -28,6 +27,7 @@ class Database(Gino):
             creating_form = Column(Boolean, default=True)
             editing_form = Column(Boolean, default=False)
             notification_enabled = Column(Boolean, default=True)
+            editing_content = Column(Boolean, default=False)
 
         self.User = User
 

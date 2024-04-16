@@ -1,22 +1,24 @@
 import asyncio
 import datetime
 import os
-from typing import List, Tuple, Optional, Union
+from typing import List, Tuple, Optional, Union, Dict
 import re
 
 from sqlalchemy import and_, func
 from vkbottle_types.objects import PhotosPhotoSizes
 from vkbottle.bot import Message, MessageEvent
 import aiofiles
-from vkbottle import Keyboard, Callback, KeyboardButtonColor
+from vkbottle import Keyboard, Callback, KeyboardButtonColor, Text
 
 from service.db_engine import db
-from loader import bot, photo_message_uploader, fields
+from loader import bot, photo_message_uploader, fields, Field
 import messages
 from bot_extended import AioHTTPClientExtended
 from service.middleware import states
 import service.states
+from service.states import Admin
 import service.keyboards as keyboards
+from config import DATETIME_FORMAT
 
 mention_regex = re.compile(r"\[(?P<type>id|club|public)(?P<id>\d*)\|(?P<text>.+)\]")
 link_regex = re.compile(r"https:/(?P<type>/|/m.)vk.com/(?P<screen_name>\w*)")
@@ -170,7 +172,7 @@ async def take_off_payments(form_id: int):
 
 
 async def send_page_users(m: Union[Message, MessageEvent], page: int = 1):
-    users = await db.select([db.User.user_id, db.User.admin]).order_by(db.User.admin.desc()).offset((page-1)*15).limit(15).gino.all()
+    users = await db.select([db.User.user_id, db.User.admin]).order_by(db.User.admin.desc()).order_by(db.User.user_id.asc()).offset((page-1)*15).limit(15).gino.all()
     user_ids = [x[0] for x in users]
     users_info = await bot.api.users.get(user_ids)
     reply = messages.list_users
@@ -216,12 +218,11 @@ hours = [
     "час", "часа", "часов"
 ]
 minutes = [
-    "минуты", "мин", "минут", "мин"
+    "минуты", "мин", "минут", "мин", "минута"
 ]
 seconds = [
     "сек", "секунды", "сек", "секунда", "секунд", "секунду"
 ]
-
 
 
 def parse_period(m: Message) -> Optional[int]:
@@ -299,8 +300,209 @@ async def show_fields_edit(m: Message, new=True):
         await db.Form.create(**params)
         await db.User.update.values(editing_form=True).where(db.User.user_id == m.from_id).gino.status()
     states.set(m.from_id, service.states.Menu.SELECT_FIELD_EDIT_NUMBER)
-    reply = ("Выберите поле для редактирования."
+    reply = ("Выберите поле для редактирования. "
              "Когда закончите нажмите кнопку «Подтвердить изменения»\n\n")
     for i, field in enumerate(fields):
         reply += f"{i+1}. {field.name}\n"
     await m.answer(reply, keyboard=keyboards.confirm_edit_form)
+
+
+async def page_content(table_name, page: int) -> Tuple[str, Optional[Keyboard]]:
+    table = getattr(db, table_name)
+    names = [x[0] for x in await db.select([table.name]).order_by(table.id.asc()).offset((page - 1) * 15).limit(15).gino.all()]
+    count = await db.select([func.count(table.id)]).gino.scalar()
+    if count % 15 == 0:
+        pages = count // 15
+    else:
+        pages = count // 15 + 1
+    keyboard = Keyboard(inline=True)
+    if not names:
+        return "На данный момент ничего не создано", keyboard
+    reply = f"Отправьте число, для редактирования:\n\n"
+    for i, name in enumerate(names):
+        reply += f"{(page - 1) * 15 + i + 1}. {name}\n"
+    if page > 1:
+        keyboard.add(Callback("<-", {"content_page": page - 1, "content": table_name}), KeyboardButtonColor.SECONDARY)
+    if page * 15 < count:
+        keyboard.add(Callback("->", {"content_page": page + 1, "content": table_name}), KeyboardButtonColor.SECONDARY)
+    if pages > 1:
+        reply += f"\nСтраница {page}/{pages}\n\n"
+    return reply, keyboard
+
+
+async def send_content_page(m: Union[Message, MessageEvent], table_name: str, page: int):
+    reply, keyboard = await page_content(table_name, page)
+    if isinstance(m, Message):
+        await m.answer(messages.select_action, keyboard=keyboards.gen_type_change_content(table_name))
+        await m.answer(reply, keyboard=keyboard)
+    else:
+        await m.send_message(messages.select_action, keyboard=keyboards.gen_type_change_content(table_name))
+        await m.send_message(reply, keyboard=keyboard)
+
+
+def allow_edit_content(content_type: str, end: bool = False, text: str = None, state: str = None, keyboard = None):
+    def decorator(function):
+        async def wrapper(m: Message, value=None, *args, **kwargs):
+            if value:
+                data = await function(m, value, *args, **kwargs)
+            else:
+                data = await function(m, *args, **kwargs)
+            item_id = int(states.get(m.from_id).split("*")[1])
+            editing_content = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
+            if editing_content:
+                await m.answer("Новое значение успешно установлено")
+                await send_edit_item(m.from_id, item_id, content_type)
+            else:
+                states.set(m.from_id, f"{state}*{item_id}")
+                if text:
+                    await m.answer(text, keyboard=keyboard)
+                if end:
+                    await send_content_page(m, content_type, 1)
+                    states.set(m.from_id, service.states.Admin.SELECT_ACTION + "_" + content_type)
+            return data
+        return wrapper
+    return decorator
+
+
+async def send_edit_item(user_id: int, item_id: int, item_type: str):
+    await db.User.update.values(editing_content=True).where(db.User.user_id == user_id).gino.status()
+    item = await db.select([*getattr(db, item_type)]).where(getattr(db, item_type).id == item_id).gino.first()
+    reply = "Выберите поле для редактирования\n\n"
+    attachment = None
+    for i, data in enumerate(fields_content[item_type]['fields']):
+        if data.name == "Фото":
+            attachment = item[i+1]
+        if not data.serialize_func:
+            reply += f"{i+1}. {data.name}: {item[i + 1]}\n"
+        else:
+            reply += f"{i+1}. {data.name}: {await data.serialize_func(item[i + 1])}\n"
+    keyboard = keyboards.get_edit_content(item_type)
+    await db.User.update.values(state=f"{service.states.Admin.EDIT_CONTENT}_{item_type}*{item.id}").where(db.User.user_id == user_id).gino.status()
+    states.set(user_id, f"{service.states.Admin.EDIT_CONTENT}_{item_type}*{item.id}")
+    await bot.api.messages.send(message=reply, keyboard=keyboard.get_json(), peer_id=user_id, attachment=attachment)
+
+
+async def profession_serialize(profession_id: int) -> str:
+    return await db.select([db.Profession.name]).where(db.Profession.id == profession_id).gino.scalar()
+
+
+async def professions():
+    names = [x[0] for x in await db.select([db.Profession.name]).gino.all()]
+    reply = "Список профессий:\n\n"
+    for i, name in enumerate(names):
+        reply += f"{i + 1}. {name}\n"
+    return reply, None
+
+
+async def type_professions():
+    reply = "Варианты видимости профессии"
+    keyboard = keyboards.select_type_profession
+    return reply, keyboard
+
+
+async def serialize_type_profession(special: bool) -> str:
+    return "Специальная" if special else "Обычная"
+
+
+async def parse_cooldown_async(cooldown):
+    if not cooldown:
+        return "Не указано"
+    return parse_cooldown(cooldown)
+
+
+async def info_cooldown():
+    return "Укажите Кулдаун в формате \"1 час 2 минуты 3 секунды\"", None
+
+
+async def info_cooldown_quest():
+    return "Укажите Кулдаун в формате \"1 час 2 минуты 3 секунды\"", Keyboard().add(
+        Text("Бессрочно", {"quest_forever": True})
+    )
+
+
+async def info_date():
+    return "Укажите дату и время в формате ДД.ММ.ГГГГ чч:мм:сс", None
+
+
+async def info_end_quest():
+    return "Укажите дату и время в формате ДД.ММ.ГГГГ чч:мм:сс", Keyboard().add(
+        Text("Бессрочно", {"quest_always": True})
+    )
+
+
+async def serialize_shop(service: bool):
+    return "Услуга" if service else "Товар"
+
+
+async def parse_datetime_async(datetime_: datetime.datetime) -> str:
+    if not datetime_:
+        return "Не указано"
+    return datetime_.strftime(DATETIME_FORMAT)
+
+
+async def info_photo():
+    return "Пришлите фото", None
+
+
+async def info_service_type():
+    return "Выберите вариант размещения в магазине", Keyboard().add(
+        Text("Услуга", {"service": True}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text("Товар", {"service": False}), KeyboardButtonColor.PRIMARY
+    )
+
+
+fields_content: Dict[str, Dict[str, List[Field]]] = {
+    "Cabins": {
+        "fields": [
+            Field("Название", Admin.NAME_CABIN),
+            Field("Стоимость", Admin.PRICE_CABIN),
+        ],
+        "name": "Тип каюты"
+    },
+    "Daylic": {
+        "fields": [
+            Field("Название", Admin.DAYLIC_NAME),
+            Field("Описание", Admin.DAYLIC_DESCRIPTION),
+            Field("Награда", Admin.DAYLIC_REWARD),
+            Field("Кулдаун", Admin.DAYLIC_COOLDOWN, info_cooldown, parse_cooldown_async),
+            Field("Профессия", Admin.DAYLIC_PROFESSION, professions, profession_serialize)
+        ],
+        "name": "Дейлик"
+    },
+    "Profession": {
+        "fields": [
+            Field("Название", Admin.NAME_PROFESSION),
+            Field("Тип профессии", Admin.HIDDEN_PROFESSION, type_professions, serialize_type_profession),
+            Field("Зарплата", Admin.SALARY_PROFESSION),
+        ],
+        "name": "Профессия"
+    },
+    "Quest": {
+        "fields": [
+            Field("Название", Admin.QUEST_NAME),
+            Field("Описание", Admin.QUEST_DESCRIPTION),
+            Field("Награда", Admin.QUEST_REWARD),
+            Field("Начало", Admin.QUEST_START_DATE, info_date, parse_datetime_async),
+            Field("Конец", Admin.QUEST_END_DATE, info_end_quest, parse_datetime_async),
+            Field("Даётся на выполнение", Admin.QUEST_EXECUTION_TIME, info_cooldown_quest, parse_cooldown_async)
+        ],
+        "name": "Квест"
+    },
+    "Shop": {
+        "fields": [
+            Field("Название", Admin.NAME_PRODUCT),
+            Field("Фото", Admin.ART_PRODUCT, info_photo),
+            Field("Описание", Admin.DESCRIPTION_PRODUCT),
+            Field("Цена", Admin.PRICE_PRODUCT),
+            Field("Тип", Admin.SERVICE_PRODUCT, info_service_type, serialize_shop)
+        ],
+        "name": "Товар/Услуга"
+    },
+    "Status": {
+        "fields": [
+            Field("Название", Admin.ENTER_NAME_STATUS)
+        ],
+        "name": "Статус"
+    }
+}

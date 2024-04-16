@@ -112,7 +112,7 @@ async def select_user_to_transfer(m: Message):
     await m.answer(messages.amount_transfer)
 
 
-@bot.on.private_message(StateRule(Menu.SELECT_AMOUNT_TO_TRANSFER, True), NumericRule(), ValidateAccount())
+@bot.on.private_message(StateRule(Menu.SELECT_AMOUNT_TO_TRANSFER), NumericRule(), ValidateAccount())
 async def set_amount_transfer(m: Message, value: int = None):
     if value < 1:
         await m.answer(messages.error_small_amount)
@@ -128,9 +128,9 @@ async def set_amount_transfer(m: Message, value: int = None):
         await m.answer(messages.error_not_enogh_tokens.format(balance, value + tax),
                             keyboard=keyboards.bank)
         return
-    form_id = int(states.get(m.from_id).split("@")[1])
+    form_id = int(states.get(m.from_id).split("*")[1])
     name, user_id = await db.select([db.Form.name, db.Form.user_id]).where(db.Form.id == form_id).gino.first()
-    states.set(m.from_id, f"{Menu.CONFIRM_TRANSFER}@{form_id}@{user_id}@{value}@{value + tax}")
+    states.set(m.from_id, f"{Menu.CONFIRM_TRANSFER}*{form_id}*{user_id}*{value}*{value + tax}")
     keyboard = Keyboard().add(
         Text("Подтвердить", {"transfer": "accept"}), KeyboardButtonColor.POSITIVE
     ).row().add(
@@ -140,10 +140,10 @@ async def set_amount_transfer(m: Message, value: int = None):
                         keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Menu.CONFIRM_TRANSFER, True), PayloadRule({"transfer": "accept"}), ValidateAccount())
+@bot.on.private_message(StateRule(Menu.CONFIRM_TRANSFER), PayloadRule({"transfer": "accept"}), ValidateAccount())
 async def confirm_transaction(m: Message):
     state = states.get(m.from_id)
-    form_id, user_id, amount, amount_with_tax = list(map(int, state.split("@")[1:]))
+    form_id, user_id, amount, amount_with_tax = list(map(int, state.split("*")[1:]))
     current_form_id = await db.select([db.Form.id]).where(db.Form.user_id == m.from_id).gino.scalar()
     await db.Transactions.create(to_user=form_id, from_user=current_form_id, amount=amount)
     await db.Form.update.values(balance=db.Form.balance - amount_with_tax).where(
@@ -159,7 +159,7 @@ async def confirm_transaction(m: Message):
     await m.answer(messages.transfer_success, keyboard=keyboards.bank)
 
 
-@bot.on.private_message(StateRule(Menu.CONFIRM_TRANSFER, True), PayloadRule({"transfer": "decline"}))
+@bot.on.private_message(StateRule(Menu.CONFIRM_TRANSFER), PayloadRule({"transfer": "decline"}))
 async def decline_transfer(m: Message):
     states.set(m.from_id, Menu.BANK_MENU)
     await m.answer(messages.bank_menu, keyboard=keyboards.bank)
@@ -197,8 +197,8 @@ async def send_permanent_costs(m: Message):
 
 @bot.on.private_message(StateRule(Menu.BANK_MENU), PayloadRule({"bank_menu": "donate"}))
 @bot.on.private_message(StateRule(Menu.ENTER_AMOUNT_DONATE), PayloadRule({"bank_menu": "donate"}))
-@bot.on.private_message(StateRule(Menu.CONFIRM_DONATE, True), PayloadRule({"bank_menu": "donate"}))
-@bot.on.private_message(StateRule(Menu.CONFIRM_DONATE, True), PayloadRule({"donate": "decline"}))
+@bot.on.private_message(StateRule(Menu.CONFIRM_DONATE), PayloadRule({"bank_menu": "donate"}))
+@bot.on.private_message(StateRule(Menu.CONFIRM_DONATE), PayloadRule({"donate": "decline"}))
 async def show_piggy_bank(m: Message):
     summary = await db.select([func.sum(db.Donate.amount)]).gino.scalar()
     if summary is None:
@@ -276,7 +276,7 @@ async def enter_amount_donate(m: Message, value: int):
     await m.answer(f"Подтверждаете пожертвование в храм в сумме {value}?", keyboard=kb)
 
 
-@bot.on.private_message(StateRule(Menu.CONFIRM_DONATE, True), PayloadRule({"donate": "confirm"}))
+@bot.on.private_message(StateRule(Menu.CONFIRM_DONATE), PayloadRule({"donate": "confirm"}))
 async def confirm_donate(m: Message):
     amount = int(states.get(m.from_id).split("*")[1])
     form_id = await (db.select([db.Form.id]).where(db.Form.user_id == m.from_id).gino.scalar())

@@ -2,7 +2,7 @@
 Загружает ботов, загрузчиков медиа контента и полей для анкет
 """
 import sys
-from typing import List
+from typing import List, Callable
 
 from vkbottle.bot import Bot, BotLabeler
 from vkbottle import API
@@ -18,9 +18,11 @@ from bot_extended import (APIExtended, RawBotEventViewExtended, BotMessageViewEx
 
 class Field:
 
-    def __init__(self, name: str, state: str):
+    def __init__(self, name: str, state: str, info_func: Callable = None, serialize_func: Callable = None):
         self.name = name
         self.state = state
+        self.info_func = info_func
+        self.serialize_func = serialize_func
 
 
 fields = (Field("Имя", Registration.PERSONAL_NAME), Field("Должность", Registration.PROFESSION),

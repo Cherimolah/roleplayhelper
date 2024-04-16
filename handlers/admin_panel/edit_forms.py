@@ -1,6 +1,5 @@
 import asyncio
 import datetime
-import json
 
 from vkbottle.bot import Message
 from vkbottle.dispatch.rules.base import PayloadRule
@@ -26,7 +25,7 @@ async def edit_users_forms(m: Message):
     await m.answer(messages.edit_users_forms, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.EDIT_FORMS, True), AdminRule(), UserSpecified(Admin.EDIT_FORMS))
+@bot.on.private_message(StateRule(Admin.EDIT_FORMS), AdminRule(), UserSpecified(Admin.EDIT_FORMS))
 async def search_form_for_edit(m: Message, form: tuple):
     form_id, user_id = form
     states.set(m.from_id, f"{Admin.SELECT_FIELDS}*{form_id}")
@@ -38,7 +37,7 @@ async def search_form_for_edit(m: Message, form: tuple):
     await m.answer(reply)
 
 
-@bot.on.private_message(StateRule(Admin.SELECT_FIELDS, True), NumericRule(), AdminRule())
+@bot.on.private_message(StateRule(Admin.SELECT_FIELDS), NumericRule(), AdminRule())
 async def send_select_fields(m: Message, value: int = None):
     if value and not 0 < value <= len(fields):
         await m.answer("Указано неверное поле")
@@ -70,7 +69,7 @@ async def send_select_fields(m: Message, value: int = None):
     await m.answer(reply, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.ENTER_FIELD_VALUE, True), AdminRule())
+@bot.on.private_message(StateRule(Admin.ENTER_FIELD_VALUE), AdminRule())
 async def enter_field_value(m: Message):
     _, form_id, field = states.get(m.from_id).split("*")
     form_id = int(form_id)

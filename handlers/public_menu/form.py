@@ -17,8 +17,12 @@ from service.db_engine import db
 
 async def load_forms_page(page) -> Tuple[str, Keyboard]:
     data = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.is_request.is_(False)).limit(15).offset((page - 1) * 15).order_by(db.Form.created_at.asc()).order_by(db.Form.id.asc()).gino.all()
-    pages = (await db.select([func.count(db.Form.id)]).where(db.Form.is_request.is_(False)).gino.scalar()) // 15 + 1
-    reply = f"Список анкет пользователей:\n\nСтраница {page}/{pages}\n\n"
+    count = (await db.select([func.count(db.Form.id)]).where(db.Form.is_request.is_(False)).gino.scalar())
+    if count % 15 == 0:
+        pages = count // 15
+    else:
+        pages = count // 15 + 1
+    reply = f"Список анкет пользователей:\n\n"
     user_ids = [x[0] for x in data]
     names = [x[1] for x in data]
     user_names = [f"{x.first_name} {x.last_name}" for x in await bot.api.users.get(user_ids=user_ids)]
@@ -32,6 +36,7 @@ async def load_forms_page(page) -> Tuple[str, Keyboard]:
         keyboard = None
     else:
         keyboard = Keyboard(inline=True)
+        reply += f"Страница {page}/{pages}\n\n"
     if page > 1:
         keyboard.add(
             Callback("<-", {"forms_page": page - 1}), KeyboardButtonColor.PRIMARY
@@ -64,7 +69,7 @@ async def map_form(m: MessageEvent):
 
 
 @bot.on.private_message(StateRule(Menu.SHOW_FORM), PayloadRule({"form": "edit"}))
-@bot.on.private_message(StateRule(Menu.EDIT_FIELDS, True), PayloadRule({"form": "edit"}))
+@bot.on.private_message(StateRule(Menu.EDIT_FIELDS), PayloadRule({"form": "edit"}))
 async def send_form_edit(m: Message, new=True):
     await show_fields_edit(m, new)
 

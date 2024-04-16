@@ -8,24 +8,25 @@ from service.custom_rules import AdminRule, StateRule, NumericRule
 from service.middleware import states
 from service.states import Admin
 from service.db_engine import db
+from service.utils import send_content_page, allow_edit_content
 
 
-@bot.on.private_message(StateRule(Admin.SELECT_ACTION), PayloadRule({"statuses": "add"}), AdminRule())
+@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Status"), PayloadRule({"Status": "add"}), AdminRule())
 async def start_create_new_atatus(m: Message):
     status = await db.Status.create()
     states.set(m.from_id, f"{Admin.ENTER_NAME_STATUS}*{status.id}")
     await m.answer("Введите название статуса", keyboard=Keyboard())
 
 
-@bot.on.private_message(StateRule(Admin.ENTER_NAME_STATUS, True), AdminRule())
+@bot.on.private_message(StateRule(Admin.ENTER_NAME_STATUS), AdminRule())
+@allow_edit_content("Status", state=f"{Admin.SELECT_ACTION}_Status", text="Статус успешно создан",
+                    keyboard=keyboards.gen_type_change_content("Status"), end=True)
 async def new_status(m: Message):
     status_id = int(states.get(m.from_id).split("*")[1])
     await db.Status.update.values(name=m.text).where(db.Status.id == status_id).gino.status()
-    states.set(m.from_id, Admin.SELECT_ACTION)
-    await m.answer("Статус успешно создан", keyboard=keyboards.gen_type_change_content("statuses"))
 
 
-@bot.on.private_message(StateRule(Admin.SELECT_ACTION), PayloadRule({"statuses": "delete"}), AdminRule())
+@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Status"), PayloadRule({"Status": "delete"}), AdminRule())
 async def select_status_to_delete(m: Message):
     statuses = await db.select([db.Status.name]).gino.all()
     reply = "Выберите статус для удаления: \n\n"
@@ -38,5 +39,6 @@ async def select_status_to_delete(m: Message):
 @bot.on.private_message(StateRule(Admin.ID_STATUS), NumericRule(), AdminRule())
 async def delete_status(m: Message, value: int = None):
     await db.Status.delete.where(db.Status.id == value).gino.status()
-    states.set(m.from_id, Admin.SELECT_ACTION)
-    await m.answer("Статус успешно удалён", keyboard=keyboards.gen_type_change_content("statuses"))
+    states.set(m.from_id, f"{Admin.SELECT_ACTION}_Status")
+    await m.answer("Статус успешно удалён", keyboard=keyboards.gen_type_change_content("Status"))
+    await send_content_page(m, "Status", 1)

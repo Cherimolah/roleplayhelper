@@ -7,30 +7,34 @@ from vkbottle.bot import Message, MessageEvent
 from service.middleware import states
 from service.db_engine import db
 import messages
-from service.states import Menu
+from service.states import Menu, Admin
 import service.keyboards as keyboards
-from service.utils import get_mention_from_message, get_current_form_id
+from service.utils import get_mention_from_message, get_current_form_id, fields_content
 from config import ADMINS
 
 
 class StateRule(ABCRule[Message], ABC):
 
-    def __init__(self, state: str, starts: bool = False):
+    def __init__(self, state: str):
         self.state = state
-        self.starts = starts
 
     async def check(self, event: Union[Message, MessageEvent]):
         if isinstance(event, Message):
             user_state = states.get(event.from_id)
+            if not user_state:
+                user_state = await db.select([db.User.state]).where(db.User.user_id == event.from_id).gino.scalar()
         elif isinstance(event, MessageEvent):
             user_state = states.get(event.user_id)
+            if not user_state:
+                user_state = await db.select([db.User.state]).where(db.User.user_id == event.user_id).gino.scalar()
         else:
             return False
         if not user_state and not self.state:
             return True
-        if not self.starts:
-            return user_state == self.state
-        return user_state.startswith(self.state)
+        if not user_state:
+            return False
+        state = user_state.split("*")[0]
+        return self.state == state
 
 
 class NumericRule(ABCRule[Message], ABC):
@@ -140,3 +144,36 @@ class ManyUsersSpecified(ABCRule[Message], ABC):
             form_id = await get_current_form_id(user_id)
             forms.append(tuple([form_id, user_id]))
         return {"forms": forms}
+
+
+content_types = list(fields_content.keys())
+
+
+class EditContent(ABCRule[Message], ABC):
+
+    async def check(self, m: Message):
+        if isinstance(m, Message):
+            state = (await db.select([db.User.state]).where(db.User.user_id == m.from_id).gino.scalar()).split("*")[0]
+        elif isinstance(m, MessageEvent):
+            state = (await db.select([db.User.state]).where(db.User.user_id == m.user_id).gino.scalar()).split("*")[0]
+        else:
+            return False
+        for content in content_types:
+            if state == f"{Admin.EDIT_CONTENT}_{content}":
+                return {"content_type": content, "table": getattr(db, content)}
+        return False
+
+
+class SelectContent(ABCRule[Message], ABC):
+
+    async def check(self, m: Message):
+        if isinstance(m, Message):
+            state = (await db.select([db.User.state]).where(db.User.user_id == m.from_id).gino.scalar()).split("*")[0]
+        elif isinstance(m, MessageEvent):
+            state = (await db.select([db.User.state]).where(db.User.user_id == m.user_id).gino.scalar()).split("*")[0]
+        else:
+            return False
+        for content in content_types:
+            if state == f"{Admin.SELECT_ACTION}_{content}":
+                return {"content_type": content, "table": getattr(db, content)}
+        return False

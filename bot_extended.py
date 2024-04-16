@@ -140,6 +140,8 @@ class MessagesCategoryExtended(MessagesCategory):
     ) -> BaseBoolInt:
         """Кастомная настройка обходит ошибку устаревшего сообщения"""
         try:
+            if isinstance(keyboard, Keyboard):
+                keyboard = keyboard.get_json()
             response = await super().edit(peer_id, message, lat, long, attachment, keep_forward_messages,
                                           keep_snippets, group_id, dont_parse_links, disable_mentions,
                                           message_id, conversation_message_id, template, keyboard, **kwargs)

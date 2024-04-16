@@ -37,7 +37,7 @@ async def create_mailing(m: Message):
     await m.answer(messages.mailing_created, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.TIME_MAILING, True), PayloadRule({"mailing": "send_now"}), AdminRule())
+@bot.on.private_message(StateRule(Admin.TIME_MAILING), PayloadRule({"mailing": "send_now"}), AdminRule())
 async def send_now_mailing(m: Message):
     mailing_id = int(states.get(m.from_id).split("*")[1])
     message_id = await db.select([db.Mailings.message_id]).where(db.Mailings.id == mailing_id).gino.first()
@@ -51,7 +51,7 @@ async def send_now_mailing(m: Message):
     await m.answer("Главное меню", keyboard=await keyboards.main_menu(m.from_id))
 
 
-@bot.on.private_message(StateRule(Admin.TIME_MAILING, True), AdminRule())
+@bot.on.private_message(StateRule(Admin.TIME_MAILING), AdminRule())
 async def send_deferred_mailing(m: Message):
     try:
         day = datetime.datetime.strptime(m.text, DATETIME_FORMAT)

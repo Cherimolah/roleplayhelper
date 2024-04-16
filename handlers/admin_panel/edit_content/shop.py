@@ -11,54 +11,52 @@ from service.custom_rules import AdminRule, StateRule, NumericRule
 from service.middleware import states
 from service.states import Admin
 from service.db_engine import db
-from service.utils import reload_image
+from service.utils import reload_image, send_content_page, allow_edit_content
 
 
-@bot.on.private_message(StateRule(Admin.SELECT_ACTION), PayloadRule({"products": "add"}), AdminRule())
+@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Shop"), PayloadRule({"Shop": "add"}), AdminRule())
 async def send_name_product(m: Message):
     product = await db.Shop.create()
     states.set(m.from_id, f"{Admin.NAME_PRODUCT}*{product.id}")
     await m.answer(messages.name_product, keyboard=Keyboard())
 
 
-@bot.on.private_message(StateRule(Admin.NAME_PRODUCT, True), AdminRule())
+@bot.on.private_message(StateRule(Admin.NAME_PRODUCT), AdminRule())
+@allow_edit_content("Shop", state=Admin.PRICE_PRODUCT, text=messages.price_product)
 async def set_name_product(m: Message):
     product_id = int(states.get(m.from_id).split("*")[1])
     await db.Shop.update.values(name=m.text).where(db.Shop.id == product_id).gino.status()
-    states.set(m.from_id, f"{Admin.PRICE_PRODUCT}*{product_id}")
-    await m.answer(messages.price_product)
 
 
-@bot.on.private_message(StateRule(Admin.PRICE_PRODUCT, True), NumericRule(), AdminRule())
-async def set_price_product(m: Message):
+@bot.on.private_message(StateRule(Admin.PRICE_PRODUCT), NumericRule(), AdminRule())
+@allow_edit_content("Shop", state=Admin.DESCRIPTION_PRODUCT, text=messages.description_product)
+async def set_price_product(m: Message, value: int = None):
     product_id = int(states.get(m.from_id).split("*")[1])
-    await db.Shop.update.values(price=int(m.text)).where(db.Shop.id == product_id).gino.status()
-    states.set(m.from_id, f"{Admin.DESCRIPTION_PRODUCT}*{product_id}")
-    await m.answer(messages.description_product)
+    await db.Shop.update.values(price=value).where(db.Shop.id == product_id).gino.status()
 
 
-@bot.on.private_message(StateRule(Admin.DESCRIPTION_PRODUCT, True), AdminRule())
-async def set_description(m: Message):
-    product_id = int(states.get(m.from_id).split("*")[1])
-    await db.Shop.update.values(description=m.text).where(db.Shop.id == product_id).gino.status()
-    states.set(m.from_id, f"{Admin.SERVICE_PRODUCT}*{product_id}")
-    keyboard = Keyboard().add(
+@bot.on.private_message(StateRule(Admin.DESCRIPTION_PRODUCT), AdminRule())
+@allow_edit_content("Shop", state=Admin.SERVICE_PRODUCT, text=messages.service_product, keyboard=Keyboard().add(
         Text("Услуга", {"service": True}), KeyboardButtonColor.PRIMARY
     ).row().add(
         Text("Товар", {"service": False}), KeyboardButtonColor.PRIMARY
-    )
-    await m.answer(messages.service_product, keyboard=keyboard)
+    ))
+async def set_description(m: Message):
+    product_id = int(states.get(m.from_id).split("*")[1])
+    await db.Shop.update.values(description=m.text).where(db.Shop.id == product_id).gino.status()
 
 
-@bot.on.private_message(StateRule(Admin.SERVICE_PRODUCT, True), PayloadMapRule({"service": bool}), AdminRule())
+@bot.on.private_message(StateRule(Admin.SERVICE_PRODUCT), PayloadMapRule({"service": bool}), AdminRule())
+@allow_edit_content("Shop", state=Admin.ART_PRODUCT, text="Теперь пришли арт для товара/услуги",
+                    keyboard=Keyboard())
 async def set_service(m: Message):
     product_id = int(states.get(m.from_id).split("*")[1])
     await db.Shop.update.values(service=m.payload['service']).where(db.Shop.id == product_id).gino.status()
-    states.set(m.from_id, f"{Admin.ART_PRODUCT}*{product_id}")
-    await m.answer("Теперь пришли арт для товара/услуги", keyboard=Keyboard())
 
 
-@bot.on.private_message(StateRule(Admin.ART_PRODUCT, True), AdminRule())
+@bot.on.private_message(StateRule(Admin.ART_PRODUCT), AdminRule())
+@allow_edit_content("Shop", state=f"{Admin.SELECT_ACTION}_Shop", text=messages.product_added,
+                    keyboard=keyboards.gen_type_change_content("Shop"), end=True)
 async def set_art_product(m: Message):
     message = await m.get_full_message()
     if not message.attachments or message.attachments[0].type != attach_type.PHOTO:
@@ -68,11 +66,9 @@ async def set_art_product(m: Message):
     name = await db.select([db.Shop.name]).where(db.Shop.id == product_id).gino.scalar()
     photo = await reload_image(message.attachments[0], f"data/shop/{name}.jpg")
     await db.Shop.update.values(photo=photo).where(db.Shop.id == product_id).gino.status()
-    states.set(m.from_id, Admin.SELECT_ACTION)
-    await m.answer(messages.product_added, keyboard=keyboards.gen_type_change_content("products"))
 
 
-@bot.on.private_message(StateRule(Admin.SELECT_ACTION), PayloadRule({"products": "delete"}), AdminRule())
+@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Shop"), PayloadRule({"Shop": "delete"}), AdminRule())
 async def select_number_product_to_delete(m: Message):
     reply = messages.products_list
     products = await db.select([db.Shop.name]).gino.all()
@@ -89,5 +85,6 @@ async def delete_poduct(m: Message, value: int):
         await m.answer("Указан неверный номер товара")
         return
     await db.Shop.delete.where(db.Shop.id == product_id).gino.status()
-    states.set(m.from_id, Admin.SELECT_ACTION)
-    await m.answer(messages.product_deleted, keyboard=keyboards.gen_type_change_content("products"))
+    states.set(m.from_id, f"{Admin.SELECT_ACTION}_Shop")
+    await m.answer(messages.product_deleted, keyboard=keyboards.gen_type_change_content("Shop"))
+    await send_content_page(m, "Shop", 1)

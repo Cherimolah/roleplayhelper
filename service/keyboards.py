@@ -61,7 +61,7 @@ admin_menu = Keyboard().add(
 ).add(
     Text("Выдача награды/штрафа", {"admin_menu": "present_reward"}), KeyboardButtonColor.SECONDARY
 ).row().add(
-    Text("Изменение состава", {"admin_menu": "edit_content"}), KeyboardButtonColor.SECONDARY
+    Text("Изменение контента", {"admin_menu": "edit_content"}), KeyboardButtonColor.SECONDARY
 ).row().add(
     Text("Рассылки и опросы", {"admin_menu": "mailing"}), KeyboardButtonColor.PRIMARY
 ).row().add(
@@ -79,17 +79,17 @@ manage_admins = Keyboard().add(
 )
 
 manage_content = Keyboard().add(
-    Text("Товары", {"edit_content": "products"}), KeyboardButtonColor.PRIMARY
+    Text("Товары", {"edit_content": "Shop"}), KeyboardButtonColor.PRIMARY
 ).add(
-    Text("Профессии", {"edit_content": "professions"}), KeyboardButtonColor.PRIMARY
+    Text("Профессии", {"edit_content": "Profession"}), KeyboardButtonColor.PRIMARY
 ).row().add(
-    Text("Типы кают", {"edit_content": "cabins"}), KeyboardButtonColor.PRIMARY
+    Text("Типы кают", {"edit_content": "Cabins"}), KeyboardButtonColor.PRIMARY
 ).add(
-    Text("Статусы", {"edit_content": "statuses"}), KeyboardButtonColor.PRIMARY
+    Text("Статусы", {"edit_content": "Status"}), KeyboardButtonColor.PRIMARY
 ).row().add(
-    Text("Квесты", {"edit_content": "quests"}), KeyboardButtonColor.PRIMARY
+    Text("Квесты", {"edit_content": "Quest"}), KeyboardButtonColor.PRIMARY
 ).add(
-    Text("Дейлики", {"edit_content": "daylics"}), KeyboardButtonColor.PRIMARY
+    Text("Дейлики", {"edit_content": "Daylic"}), KeyboardButtonColor.PRIMARY
 ).row().add(
     Text("Назад", {"edit_content": "back"}), KeyboardButtonColor.NEGATIVE
 )
@@ -200,3 +200,25 @@ async def get_settings_menu(user_id: int) -> Keyboard:
 
 def another_profession_to_user(user_id: int):
     return Keyboard().add(Text("Другая", {"skip_profession": user_id}), KeyboardButtonColor.NEGATIVE)
+
+
+def manage_item(item_type: str, item_id: int) -> Keyboard:
+    return Keyboard(inline=True).add(
+        Callback("Редактировать", {"item_type": item_type, "item_id": item_id, "action": "edit"}), KeyboardButtonColor.POSITIVE
+    ).add(
+        Callback("Удалить", {"item_type": item_type, "item_id": item_id, "action": "delete"}), KeyboardButtonColor.NEGATIVE
+    ).row().add(
+        Callback("Назад", {"content_page": 1, "content": item_type}), KeyboardButtonColor.NEGATIVE
+    )
+
+
+def get_edit_content(item_type: str) -> Keyboard:
+    return Keyboard().add(
+        Text("Назад", {"edit_content": item_type}), KeyboardButtonColor.NEGATIVE)
+
+
+select_type_profession = Keyboard().add(
+        Text("Обычная", {"service_profession": False}), KeyboardButtonColor.POSITIVE
+    ).row().add(
+        Text("Специальная", {"service_profession": True}), KeyboardButtonColor.NEGATIVE
+    )
