@@ -46,6 +46,8 @@ class Menu:
     FREEZE_REQUEST = "freeze_request"
     FREEZE_REASON = "freeze_reason"
     DELETE_FORM_REQUEST = "delete_form_request"
+    SHOP_CABINS = "shop_cabins"
+    CABINS_MENU = "cabins_menu"
 
 
 class Admin:
@@ -108,3 +110,9 @@ class Admin:
     EVENT_MASK = "event_mask"
     EVENT_SELECT_ID = "event_select_id"
     EDIT_CONTENT = "edit_content"
+    NAME_DECOR = "name_decor"
+    PRICE_DECOR = "price_decor"
+    DESCRIPTION_DECOR = "description_decor"
+    IS_FUNC_DECOR = "is_func_decor"
+    PHOTO_DECOR = "photo_decor"
+    ID_DECOR = "id_decor"

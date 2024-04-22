@@ -3,7 +3,6 @@ from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
 from vkbottle import Keyboard, Text, KeyboardButtonColor
 from vkbottle_types.objects import MessagesMessageAttachmentType as attach_type
 
-
 import messages
 import service.keyboards as keyboards
 from loader import bot

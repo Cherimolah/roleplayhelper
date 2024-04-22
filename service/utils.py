@@ -153,6 +153,10 @@ async def take_off_payments(form_id: int):
             cabin_type = await db.select([db.Form.cabin_type]).where(db.Form.id == form_id).gino.scalar()
             if cabin_type:
                 price = await db.select([db.Cabins.cost]).where(db.Cabins.id == cabin_type).gino.scalar()
+                func_price = sum([soft_divide(x[0], 10) for x in await db.select([db.Decor.price]).select_from(
+                    db.UserDecor.join(db.Decor, db.UserDecor.decor_id == db.Decor.id)
+                ).where(and_(db.UserDecor.user_id == user_id, db.Decor.is_func.is_(True))).gino.all()])
+                price += func_price
                 await db.Form.update.values(balance=db.Form.balance-price,
                                             last_payment=today-datetime.timedelta(seconds=20)).where(
                     db.Form.id == form_id
@@ -452,6 +456,20 @@ async def info_service_type():
     )
 
 
+def soft_divide(num: int, den: int) -> int:
+    if num % den == 0:
+        return int(num // den)
+    return int(num // den) + 1
+
+
+async def info_is_func_decor():
+    return "Выберите тип товара", keyboards.decor_vars
+
+
+async def serialize_is_func_decor(is_func: bool):
+    return "да" if is_func else "нет (декор)"
+
+
 fields_content: Dict[str, Dict[str, List[Field]]] = {
     "Cabins": {
         "fields": [
@@ -504,5 +522,15 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field("Название", Admin.ENTER_NAME_STATUS)
         ],
         "name": "Статус"
+    },
+    "Decor": {
+        "fields": [
+            Field("Название", Admin.NAME_DECOR),
+            Field("Цена", Admin.PRICE_DECOR),
+            Field("Функциональный", Admin.IS_FUNC_DECOR, info_is_func_decor, serialize_is_func_decor),
+            Field("Фото", Admin.PHOTO_DECOR),
+            Field("Описание", Admin.DESCRIPTION_DECOR)
+        ],
+        "name": "Декор"
     }
 }

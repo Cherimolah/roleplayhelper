@@ -119,6 +119,8 @@ class Database(Gino):
             id = Column(Integer, primary_key=True)
             name = Column(Text)
             cost = Column(Integer)
+            decor_slots = Column(Integer)
+            functional_slots = Column(Integer)
 
         self.Cabins = Cabins
 
@@ -189,6 +191,27 @@ class Database(Gino):
             maintainence_break = Column(Boolean, default=False)
 
         self.Metadata = Metadata
+
+        class Decor(self.Model):
+            __tablename__ = "decors"
+
+            id = Column(Integer, primary_key=True)
+            name = Column(Text)
+            price = Column(Integer)
+            is_func = Column(Boolean)
+            photo = Column(Text)
+            description = Column(Text)
+
+        self.Decor = Decor
+
+        class UserDecor(self.Model):
+            __tablename__ = "user_decors"
+
+            id = Column(Integer, primary_key=True)
+            user_id = Column(Integer, ForeignKey("users.user_id", ondelete='CASCADE'))
+            decor_id = Column(Integer, ForeignKey("decors.id", ondelete='CASCADE'))
+
+        self.UserDecor = UserDecor
 
     async def connect(self):
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")

@@ -91,6 +91,8 @@ manage_content = Keyboard().add(
 ).add(
     Text("Дейлики", {"edit_content": "Daylic"}), KeyboardButtonColor.PRIMARY
 ).row().add(
+    Text("Декор / Функциональные товары", {"edit_content": "Decor"}), KeyboardButtonColor.PRIMARY
+).row().add(
     Text("Назад", {"edit_content": "back"}), KeyboardButtonColor.NEGATIVE
 )
 
@@ -109,6 +111,8 @@ form_activity = Keyboard().add(
     Text("Поиск анкеты пользователя", {"form": "search"}), KeyboardButtonColor.SECONDARY
 ).row().add(
     Text("Редактировать анкету", {"form": "edit"}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text("Каюта", {"form": "cabins"}), KeyboardButtonColor.PRIMARY
 ).row().add(
     Text("Назад", {"menu": "home"}), KeyboardButtonColor.NEGATIVE
 )
@@ -158,7 +162,17 @@ shop_menu = Keyboard().add(
 ).add(
     Text("Товары", {"shop": "products"}), KeyboardButtonColor.PRIMARY
 ).row().add(
+    Text("Прокачка номеров", {"shop": "cabins"}), KeyboardButtonColor.PRIMARY
+).row().add(
     Text("Назад", {"shop": "back"}), KeyboardButtonColor.NEGATIVE
+)
+
+shop_cabins_menu = Keyboard().add(
+    Text("Декор", {"shop_cabins": "decor"}), KeyboardButtonColor.PRIMARY
+).add(
+    Text("Функциональный товар", {"shop_cabins": "functional"}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text("Назад", {"shop_cabins": "back"}), KeyboardButtonColor.NEGATIVE
 )
 
 donate_menu = Keyboard().add(
@@ -222,3 +236,17 @@ select_type_profession = Keyboard().add(
     ).row().add(
         Text("Специальная", {"service_profession": True}), KeyboardButtonColor.NEGATIVE
     )
+
+cabins_menu = Keyboard().add(
+    Text("Декор", {"cabins": "decor"}), KeyboardButtonColor.PRIMARY
+).add(
+    Text("Функциональные тоары", {"cabins": "func_products"}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text("Назад", {"cabins_menu": "back"}), KeyboardButtonColor.NEGATIVE
+)
+
+decor_vars = Keyboard().add(
+    Text("Декор", {"is_functional_product": False}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text("Функциональный товар", {"is_functional_product": True}), KeyboardButtonColor.PRIMARY
+)

@@ -19,6 +19,7 @@ from service.db_engine import db
 @bot.on.private_message(PayloadRule({"Status": "back"}), AdminRule())
 @bot.on.private_message(PayloadRule({"Quest": "back"}), AdminRule())
 @bot.on.private_message(PayloadRule({"Daylic": "back"}), AdminRule())
+@bot.on.private_message(PayloadRule({"Decor": "back"}), AdminRule())
 async def select_edit_content(m: Message):
     states.set(m.from_id, Admin.SELECT_EDIT_CONTENT)
     await m.answer(messages.content, keyboard=keyboards.manage_content)

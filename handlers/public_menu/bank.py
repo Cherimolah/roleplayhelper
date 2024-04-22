@@ -12,7 +12,7 @@ from service.states import Menu
 import service.keyboards as keyboards
 from service.middleware import states
 from service.db_engine import db
-from service.utils import get_current_form_id
+from service.utils import get_current_form_id, soft_divide
 from config import ADMINS
 
 
@@ -192,7 +192,10 @@ async def ask_salary(m: Message):
 async def send_permanent_costs(m: Message):
     cabin_lux = await db.select([db.Form.cabin_type]).where(db.Form.user_id == m.from_id).gino.scalar()
     price = await db.select([db.Cabins.cost]).where(db.Cabins.id == cabin_lux).gino.scalar()
-    await m.answer(messages.permament_costs.format(price))
+    func_price = sum([soft_divide(x[0], 10) for x in await db.select([db.Decor.price]).select_from(
+        db.UserDecor.join(db.Decor, db.UserDecor.decor_id == db.Decor.id)
+    ).where(and_(db.UserDecor.user_id == m.from_id, db.Decor.is_func.is_(True))).gino.all()])
+    await m.answer(messages.permament_costs.format(price, func_price))
 
 
 @bot.on.private_message(StateRule(Menu.BANK_MENU), PayloadRule({"bank_menu": "donate"}))
