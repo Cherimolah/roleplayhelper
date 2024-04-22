@@ -475,6 +475,8 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
         "fields": [
             Field("Название", Admin.NAME_CABIN),
             Field("Стоимость", Admin.PRICE_CABIN),
+            Field("Слотов под декор", Admin.DECOR_SLOTS_CABINS),
+            Field("Слотов под функциональный товар", Admin.FUNC_PRODUCTS_CABINS)
         ],
         "name": "Тип каюты"
     },

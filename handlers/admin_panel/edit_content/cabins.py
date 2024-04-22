@@ -27,10 +27,28 @@ async def set_name_cabin(m: Message):
 
 
 @bot.on.private_message(StateRule(Admin.PRICE_CABIN), NumericRule(), AdminRule())
-@allow_edit_content("Cabins", end=True, text=messages.cabin_added, keyboard=Keyboard(), state=f"{Admin.SELECT_ACTION}_Cabins")
+@allow_edit_content("Cabins",
+                    text="Цена каюты установлена. Теперь укажите сколько будет слотов под обычный декор",
+                    state=Admin.DECOR_SLOTS_CABINS)
 async def set_price_cabin(m: Message, value: int):
     cabin_id = int(states.get(m.from_id).split("*")[1])
     await db.Cabins.update.values(cost=value).where(db.Cabins.id == cabin_id).gino.status()
+
+
+@bot.on.private_message(StateRule(Admin.DECOR_SLOTS_CABINS), AdminRule(), NumericRule())
+@allow_edit_content("Cabins", state=Admin.FUNC_PRODUCTS_CABINS,
+                    text="Количество слотов под обычный декор успешно записано. "
+                         "Теперь укажите количество слотов для функциональных товаров")
+async def set_decor_cabins(m: Message, value: int):
+    cabin_id = int(states.get(m.from_id).split("*")[1])
+    await db.Cabins.update.values(decor_slots=value).where(db.Cabins.id == cabin_id).gino.status()
+
+
+@bot.on.private_message(StateRule(Admin.FUNC_PRODUCTS_CABINS), AdminRule(), NumericRule())
+@allow_edit_content("Cabins", state=f"{Admin.SELECT_ACTION}_Cabins", text=messages.cabin_added, end=True)
+async def set_func_slots(m: Message, value: int):
+    cabin_id = int(states.get(m.from_id).split("*")[1])
+    await db.Cabins.update.values(functional_slots=value).where(db.Cabins.id == cabin_id).gino.status()
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Cabins"), PayloadRule({"Cabins": "delete"}), AdminRule())

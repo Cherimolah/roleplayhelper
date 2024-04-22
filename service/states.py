@@ -116,3 +116,5 @@ class Admin:
     IS_FUNC_DECOR = "is_func_decor"
     PHOTO_DECOR = "photo_decor"
     ID_DECOR = "id_decor"
+    DECOR_SLOTS_CABINS = "decor_slots_cabins"
+    FUNC_PRODUCTS_CABINS = "func_products_cabins"
