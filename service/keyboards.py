@@ -92,6 +92,8 @@ manage_content = Keyboard().add(
     Text("Дейлики", {"edit_content": "Daylic"}), KeyboardButtonColor.PRIMARY
 ).row().add(
     Text("Декор / Функциональные товары", {"edit_content": "Decor"}), KeyboardButtonColor.PRIMARY
+).add(
+    Text("Фракции", {"edit_content": "Fraction"}), KeyboardButtonColor.PRIMARY
 ).row().add(
     Text("Назад", {"edit_content": "back"}), KeyboardButtonColor.NEGATIVE
 )

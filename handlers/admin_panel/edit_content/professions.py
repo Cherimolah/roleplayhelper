@@ -48,7 +48,9 @@ async def set_special_profession(m: Message):
                         AdminRule())
 async def select_id_to_delete_profession(m: Message):
     reply = messages.professions_list
-    professions = await db.select([db.Profession.name]).gino.all()
+    professions = await db.select([db.Profession.name]).order_by(db.Profession.id.asc()).gino.all()
+    if not professions:
+        return "Профессии ещё не созданы"
     for i, profession in enumerate(professions):
         reply = f"{reply}{i + 1}. {profession.name}\n"
     states.set(m.from_id, Admin.ID_PROFESSION)
@@ -57,7 +59,7 @@ async def select_id_to_delete_profession(m: Message):
 
 @bot.on.private_message(StateRule(Admin.ID_PROFESSION), NumericRule(), AdminRule())
 async def delete_profession(m: Message, value: int):
-    profession_id = await db.select([db.Profession.id]).offset(value - 1).limit(1).gino.scalar()
+    profession_id = await db.select([db.Profession.id]).order_by(db.Profession.id.asc()).offset(value - 1).limit(1).gino.scalar()
     await db.Profession.delete.where(db.Profession.id == profession_id).gino.status()
     states.set(m.from_id, f"{Admin.SELECT_ACTION}_Profession")
     await m.answer(messages.profession_deleted,

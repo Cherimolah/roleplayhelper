@@ -67,7 +67,9 @@ async def set_daylic_profession(m: Message, value: int):
 async def select_delete_daylic(m: Message):
     daylics = (await db.select([db.Daylic.name, db.Daylic.reward, db.Profession.name])
                .select_from(db.Daylic.join(db.Profession, db.Daylic.profession_id == db.Profession.id))
-               .order_by(db.Daylic.id).gino.all())
+               .order_by(db.Daylic.id.asc()).gino.all())
+    if not daylics:
+        return "Дейлики ещё не созданы"
     reply = "Выберите дейлик для удаления\n\n"
     for i, daylic in enumerate(daylics):
         reply = f"{reply}{i + 1}. {daylic[0]} ({daylic[2]}, {daylic[1]})\n"
@@ -77,7 +79,7 @@ async def select_delete_daylic(m: Message):
 
 @bot.on.private_message(StateRule(Admin.DAYLIC_SELECT_ID), NumericRule(), AdminRule())
 async def delete_daylic(m: Message, value: int):
-    daylic_id, daylic_name = await db.select([db.Daylic.id, db.Daylic.name]).order_by(db.Daylic.id).offset(
+    daylic_id, daylic_name = await db.select([db.Daylic.id, db.Daylic.name]).order_by(db.Daylic.id.asc()).offset(
         value - 1).limit(1).gino.first()
     await db.Daylic.delete.where(db.Daylic.id == daylic_id).gino.status()
     states.set(m.from_id, f"{Admin.SELECT_ACTION}_Daylic")

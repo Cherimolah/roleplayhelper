@@ -80,6 +80,7 @@ class Database(Gino):
             freeze_request = Column(Boolean, default=False)
             delete_request = Column(Boolean, default=False)
             created_at = Column(TIMESTAMP, default=datetime.datetime.now)
+            fraction_id = Column(Integer, ForeignKey("fractions.id", ondelete='SET NULL'))
 
         self.Form = Form
 
@@ -213,6 +214,17 @@ class Database(Gino):
 
         self.UserDecor = UserDecor
 
+        class Fraction(self.Model):
+            __tablename__ = "fractions"
+
+            id = Column(Integer, primary_key=True)
+            name = Column(Text)
+            description = Column(Text)
+            leader_id = Column(Integer, ForeignKey("users.user_id", ondelete='SET NULL'))
+            photo = Column(Text)
+
+        self.Fraction = Fraction
+
     async def connect(self):
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")
         await self.gino.create_all()
@@ -233,6 +245,9 @@ class Database(Gino):
         if metadata == 0:
             await self.Metadata.create()
         await db.Form.update.values(created_at=datetime.datetime.now()).where(db.Form.created_at.is_(None)).gino.all()
+        fractions = await self.select([func.count(db.Fraction.id)]).gino.scalar()
+        if fractions == 0:
+            await self.Fraction.create(name="Без фракции", description="Это базовая фракция, чтобы пройти регистрацию")
 
 
 db = Database()

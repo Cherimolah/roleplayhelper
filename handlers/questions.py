@@ -1,9 +1,9 @@
 import json
 from collections import namedtuple
 
-from vkbottle.bot import Message
+from vkbottle.bot import Message, MessageEvent
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule, AttachmentTypeRule, FromPeerRule
-from vkbottle import Keyboard
+from vkbottle import Keyboard, GroupEventType, Callback, KeyboardButtonColor
 from sqlalchemy import and_, func
 
 from service.db_engine import db
@@ -12,7 +12,7 @@ from service.states import Registration, Menu
 import messages
 from service.custom_rules import StateRule, NumericRule, LimitSymbols, CommandWithAnyArgs
 import service.keyboards as keyboards
-from service.utils import loads_form, reload_image, show_fields_edit
+from service.utils import loads_form, reload_image, show_fields_edit, page_fractions
 from config import OWNER, ADMINS
 from service.middleware import states
 
@@ -98,7 +98,7 @@ async def set_name(m: Message):
         await m.answer(reply, keyboard=keyboards.another_profession)
     else:
         await m.answer("Новое значение для поля установлено")
-        await show_fields_edit(m, new=False)
+        await show_fields_edit(m.from_id, new=False)
 
 
 @bot.on.private_message(StateRule(Registration.PROFESSION), PayloadRule({"profession": "another_profession"}))
@@ -109,7 +109,7 @@ async def set_another_profession(m: Message):
         await m.answer(messages.age, keyboard=Keyboard())
     else:
         await m.answer("Новое значение установлено")
-        await show_fields_edit(m, new=False)
+        await show_fields_edit(m.from_id, new=False)
 
 
 @bot.on.private_message(StateRule(Registration.PROFESSION), NumericRule())
@@ -127,7 +127,7 @@ async def set_profession(m: Message, value: int = None):
         await m.answer(messages.age, keyboard=Keyboard())
     else:
         await m.answer("Новое значение установлено")
-        await show_fields_edit(m, new=False)
+        await show_fields_edit(m.from_id, new=False)
 
 
 @bot.on.private_message(StateRule(Registration.AGE), NumericRule(), LimitSymbols(20))
@@ -140,7 +140,7 @@ async def set_age(m: Message, value: int = None):
         await m.answer(messages.height, keyboard=Keyboard())
     else:
         await m.answer("Новое значение установлено")
-        await show_fields_edit(m, new=False)
+        await show_fields_edit(m.from_id, new=False)
 
 
 @bot.on.private_message(StateRule(Registration.HEIGHT), NumericRule(), LimitSymbols(20))
@@ -153,7 +153,7 @@ async def set_height(m: Message, value: int = None):
         await m.answer(messages.weight, keyboard=Keyboard())
     else:
         await m.answer("Новое значение установлено")
-        await show_fields_edit(m, new=False)
+        await show_fields_edit(m.from_id, new=False)
 
 
 @bot.on.private_message(StateRule(Registration.WEIGHT), NumericRule(), LimitSymbols(20))
@@ -166,7 +166,7 @@ async def set_weight(m: Message, value: int = None):
         await m.answer(messages.features, keyboard=Keyboard())
     else:
         await m.answer("Новое значение установлено")
-        await show_fields_edit(m, new=False)
+        await show_fields_edit(m.from_id, new=False)
 
 
 @bot.on.private_message(StateRule(Registration.FEATURES), LimitSymbols(1000))
@@ -179,7 +179,7 @@ async def set_features(m: Message):
         await m.answer(messages.bio, keyboard=keyboards.get_skip_button("bio"))
     else:
         await m.answer("Новое значение установлено")
-        await show_fields_edit(m, new=False)
+        await show_fields_edit(m.from_id, new=False)
 
 
 @bot.on.private_message(StateRule(Registration.BIO), LimitSymbols(2000))
@@ -193,7 +193,7 @@ async def set_bio(m: Message):
         await m.answer(messages.character, keyboard=keyboards.get_skip_button("character"))
     else:
         await m.answer("Новое значение установлено")
-        await show_fields_edit(m, new=False)
+        await show_fields_edit(m.from_id, new=False)
 
 
 @bot.on.private_message(StateRule(Registration.CHARACTER), LimitSymbols(2000))
@@ -207,7 +207,7 @@ async def set_character(m: Message):
         await m.answer(messages.motives, keyboard=keyboards.get_skip_button("motives"))
     else:
         await m.answer("Новое значение установлено")
-        await show_fields_edit(m, new=False)
+        await show_fields_edit(m.from_id, new=False)
 
 
 @bot.on.private_message(StateRule(Registration.MOTIVES))
@@ -221,7 +221,7 @@ async def set_character(m: Message):
         await m.answer(messages.orientation, keyboard=keyboards.orientations)
     else:
         await m.answer("Новое значение установлено")
-        await show_fields_edit(m, new=False)
+        await show_fields_edit(m.from_id, new=False)
 
 
 @bot.on.private_message(StateRule(Registration.ORIENTATION), PayloadMapRule({"orientation": int}))
@@ -235,7 +235,7 @@ async def set_orientation(m: Message):
         await m.answer(messages.fetishes, keyboard=keyboards.get_skip_button('fetishes'))
     else:
         await m.answer("Новое значение установлено")
-        await show_fields_edit(m, new=False)
+        await show_fields_edit(m.from_id, new=False)
 
 
 @bot.on.private_message(StateRule(Registration.FETISHES), LimitSymbols(1000))
@@ -250,7 +250,7 @@ async def set_character(m: Message):
         await m.answer(messages.taboo, keyboard=keyboards.get_skip_button("taboo"))
     else:
         await m.answer("Новое значение установлено")
-        await show_fields_edit(m, new=False)
+        await show_fields_edit(m.from_id, new=False)
 
 
 @bot.on.private_message(StateRule(Registration.TABOO), LimitSymbols(1000))
@@ -261,11 +261,48 @@ async def set_character(m: Message):
         ).gino.status()
     creating_form = await db.select([db.User.creating_form]).where(db.User.user_id == m.from_id).gino.scalar()
     if creating_form:
-        states.set(m.from_id, Registration.PHOTO)
-        await m.answer(messages.art, keyboard=Keyboard())
+        states.set(m.from_id, Registration.FRACTION)
+        await m.answer("Выбери в какую фракцию вступить", keyboard=Keyboard())
+        reply, kb, photo = await page_fractions(1)
+        await m.answer(reply, keyboard=kb, attachment=photo)
     else:
         await m.answer("Новое значение установлено")
-        await show_fields_edit(m, new=False)
+        await show_fields_edit(m.from_id, new=False)
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"fraction_page": int}), StateRule(Registration.FRACTION))
+async def show_fraction_page(m: MessageEvent):
+    reply, kb, photo = await page_fractions(m.payload['fraction_page'])
+    await m.edit_message(reply, keyboard=kb.get_json(), attachment=photo)
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"fraction_select": int}), StateRule(Registration.FRACTION))
+async def select_fraction(m: MessageEvent):
+    fraction_id = m.payload['fraction_select']
+    name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+    kb = Keyboard(inline=True).add(
+        Callback("Да", {"fraction_accept": fraction_id}), KeyboardButtonColor.POSITIVE
+    ).add(
+        Callback("Нет", {"fraction_page": 1}), KeyboardButtonColor.NEGATIVE
+    )
+    await m.edit_message(f"Вы уверены, что хотите вступить в фракцию «{name}»?", keyboard=kb.get_json())
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"fraction_accept": int}), StateRule(Registration.FRACTION))
+async def fraction_accept(m: MessageEvent):
+    fraction_id = m.payload['fraction_accept']
+    name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+    await db.Form.update.values(fraction_id=fraction_id).where(
+        and_(db.Form.user_id == m.user_id, db.Form.is_request.is_(True))
+    ).gino.status()
+    creating_form = await db.select([db.User.creating_form]).where(db.User.user_id == m.user_id).gino.scalar()
+    if creating_form:
+        await db.User.update.values(state=Registration.PHOTO).where(db.User.user_id == m.user_id).gino.status()
+        await m.edit_message(f"Вы успешно вступили в фракцию «{name}»")
+        await m.send_message("Отправьте фотографию своего персонажа", keyboard=Keyboard().get_json())
+    else:
+        await m.edit_message("Новая фракция установлена")
+        await show_fields_edit(m.user_id, new=False)
 
 
 @bot.on.private_message(StateRule(Registration.PHOTO), AttachmentTypeRule("photo"))
@@ -289,4 +326,4 @@ async def set_character(m: Message):
         await db.User.update.values(creating_form=False).where(db.User.user_id == m.from_id).gino.scalar()
     else:
         await m.answer("Новое значение установлено")
-        await show_fields_edit(m, new=False)
+        await show_fields_edit(m.from_id, new=False)

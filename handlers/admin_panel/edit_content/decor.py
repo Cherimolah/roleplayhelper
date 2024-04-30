@@ -67,7 +67,9 @@ async def photo_decor(m: Message):
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Decor"), PayloadRule({"Decor": "delete"}), AdminRule())
 async def select_number_product_to_delete(m: Message):
     reply = "Выберите товар:\n\n"
-    decors = await db.select([db.Decor.name]).gino.all()
+    decors = await db.select([db.Decor.name]).order_by(db.Decor.id.asc()).gino.all()
+    if not decors:
+        return "Товары ещё не созданы"
     for i, product in enumerate(decors):
         reply = f"{reply}{i+1}. {product.name}\n"
     states.set(m.from_id, Admin.ID_DECOR)
@@ -76,7 +78,7 @@ async def select_number_product_to_delete(m: Message):
 
 @bot.on.private_message(StateRule(Admin.ID_DECOR), NumericRule(), AdminRule())
 async def delete_poduct(m: Message, value: int):
-    decor_id = await db.select([db.Decor.id]).offset(value-1).limit(1).gino.scalar()
+    decor_id = await db.select([db.Decor.id]).order_by(db.Decor.id.asc()).offset(value-1).limit(1).gino.scalar()
     if not decor_id:
         await m.answer("Указан неверный номер товара")
         return

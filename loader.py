@@ -32,7 +32,7 @@ fields = (Field("Имя", Registration.PERSONAL_NAME), Field("Должность
           Field("Мотиы нахождения на Space-station", Registration.MOTIVES),
           Field("Сексуальная ориентация", Registration.ORIENTATION),
           Field("Фетиши", Registration.FETISHES), Field("Табу", Registration.TABOO),
-          Field("Визуальный портрет", Registration.PHOTO))
+          Field("Визуальный портрет", Registration.PHOTO), Field("Фракция", Registration.FRACTION))
 
 fields_admin = (Field("Имя", Registration.PERSONAL_NAME), Field("Должность", Registration.PROFESSION),
                 Field("Биологический возраст", Registration.AGE), Field("Рост", Registration.HEIGHT),

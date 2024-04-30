@@ -109,7 +109,8 @@ class UserSpecified(ABCRule[Message], ABC):
 
     async def check(self, m: Message):
         state = states.get(m.from_id)
-        if len(state.split("*")) == 2:
+        # Говнокод, я просто уже не помню нахуя юзера из стейта вытаскивать
+        if len(state.split("*")) == 2 and state.split("*")[0] != "leader_fractions":
             form_id = int(state.split("*")[1])
             user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
             return {"form": (form_id, user_id)}

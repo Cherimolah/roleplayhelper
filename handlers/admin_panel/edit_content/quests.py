@@ -113,7 +113,9 @@ async def quest_expiration_time(m: Message):
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Quest"), PayloadRule({"Quest": "delete"}), AdminRule())
 async def select_delete_quest(m: Message):
-    quests = await db.select([db.Quest.name]).gino.all()
+    quests = await db.select([db.Quest.name]).order_by(db.Quest.id.asc()).gino.all()
+    if not quests:
+        return "Квесты ещё не созданы"
     reply = "Выберите квест для удаления:\n\n"
     for i, quest in enumerate(quests):
         reply = f"{reply}{i + 1}. {quest.name}\n"
@@ -123,7 +125,7 @@ async def select_delete_quest(m: Message):
 
 @bot.on.private_message(StateRule(Admin.QUEST_DELETE), NumericRule(), AdminRule())
 async def delete_quest(m: Message, value: int):
-    quest_id = await db.select([db.Quest.id]).offset(value - 1).limit(1).gino.scalar()
+    quest_id = await db.select([db.Quest.id]).order_by(db.Quest.id.asc()).offset(value - 1).limit(1).gino.scalar()
     await db.ReadyQuest.delete.where(db.ReadyQuest.quest_id == quest_id).gino.status()
     await db.Quest.delete.where(db.Quest.id == quest_id).gino.status()
     states.set(m.peer_id, f"{Admin.SELECT_ACTION}_Quest")

@@ -28,7 +28,9 @@ async def new_status(m: Message):
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Status"), PayloadRule({"Status": "delete"}), AdminRule())
 async def select_status_to_delete(m: Message):
-    statuses = await db.select([db.Status.name]).gino.all()
+    statuses = await db.select([db.Status.name]).order_by(db.Status.id.asc()).gino.all()
+    if not statuses:
+        return "Статусы ещё не созданы"
     reply = "Выберите статус для удаления: \n\n"
     for i, status in enumerate(statuses):
         reply = f"{reply}{i+1}. {status.name}\n"
@@ -38,7 +40,8 @@ async def select_status_to_delete(m: Message):
 
 @bot.on.private_message(StateRule(Admin.ID_STATUS), NumericRule(), AdminRule())
 async def delete_status(m: Message, value: int = None):
-    await db.Status.delete.where(db.Status.id == value).gino.status()
+    status_id = await db.select([db.Status.id]).order_by(db.Status.id.asc()).offset(value - 1).limit(1).gino.scalar()
+    await db.Status.delete.where(db.Status.id == status_id).gino.status()
     states.set(m.from_id, f"{Admin.SELECT_ACTION}_Status")
     await m.answer("Статус успешно удалён", keyboard=keyboards.gen_type_change_content("Status"))
     await send_content_page(m, "Status", 1)

@@ -57,9 +57,13 @@ async def loads_form(user_id: int = None, is_request: bool = None, form_id: int 
         profession = await db.select([db.Profession.name]).where(db.Profession.id == form.profession).gino.scalar()
     else:
         profession = None
+    if form.fraction_id:
+        fraction = await db.select([db.Fraction.name]).where(db.Fraction.id == form.fraction_id).gino.scalar()
+    else:
+        fraction = None
     reply = f"Анкета пользователя [id{user_id}|{user.first_name} {user.last_name}]:\n\n" \
             f"Имя персонажа: {form.name}\n" \
-            f"Должность: {profession or 'Не установлена'}\n" \
+            f"Должность: {profession or 'не установлена'}\n" \
             f"Биологический возраст: {form.age} Земных лет\n" \
             f"Рост: {form.height} см\n" \
             f"Вес: {form.weight} кг\n" \
@@ -71,9 +75,10 @@ async def loads_form(user_id: int = None, is_request: bool = None, form_id: int 
             f"Фетиши: {form.fetishes or 'не указаны'}\n" \
             f"Табу: {form.taboo or 'не указаны'}\n" \
             f"Каюта: {form.cabin or 'не присвоена'}\n" \
-            f"Тип каюты: {await db.select([db.Cabins.name]).where(db.Cabins.id == form.cabin_type).gino.scalar() or 'Не указан'}\n" \
+            f"Тип каюты: {await db.select([db.Cabins.name]).where(db.Cabins.id == form.cabin_type).gino.scalar() or 'не указан'}\n" \
             f"Баланс: {form.balance}\n" \
-            f"Статус: {await db.select([db.Status.name]).where(db.Status.id == form.status).gino.scalar()}\n"
+            f"Статус: {await db.select([db.Status.name]).where(db.Status.id == form.status).gino.scalar()}\n" \
+            f"Фракция: {fraction or 'не установлена'}"
     return reply, form.photo
 
 
@@ -296,19 +301,20 @@ async def send_daylics():
         await asyncio.sleep(5)
 
 
-async def show_fields_edit(m: Message, new=True):
+async def show_fields_edit(user_id: int, new=True):
     if new:
-        form = dict(await db.select([*db.Form]).where(db.Form.user_id == m.from_id).gino.first())
+        form = dict(await db.select([*db.Form]).where(db.Form.user_id == user_id).gino.first())
         params = {k: v for k, v in form.items() if k not in ("id", "is_request")}
         params['is_request'] = True
         await db.Form.create(**params)
-        await db.User.update.values(editing_form=True).where(db.User.user_id == m.from_id).gino.status()
-    states.set(m.from_id, service.states.Menu.SELECT_FIELD_EDIT_NUMBER)
+        await db.User.update.values(editing_form=True).where(db.User.user_id == user_id).gino.status()
+    await db.User.update.values(state=service.states.Menu.SELECT_FIELD_EDIT_NUMBER).where(db.User.user_id == user_id).gino.status()
+    states.set(user_id, service.states.Menu.SELECT_FIELD_EDIT_NUMBER)
     reply = ("Выберите поле для редактирования. "
              "Когда закончите нажмите кнопку «Подтвердить изменения»\n\n")
     for i, field in enumerate(fields):
         reply += f"{i+1}. {field.name}\n"
-    await m.answer(reply, keyboard=keyboards.confirm_edit_form)
+    await bot.api.messages.send(message=reply, keyboard=keyboards.confirm_edit_form, peer_id=user_id)
 
 
 async def page_content(table_name, page: int) -> Tuple[str, Optional[Keyboard]]:
@@ -346,11 +352,13 @@ async def send_content_page(m: Union[Message, MessageEvent], table_name: str, pa
 
 def allow_edit_content(content_type: str, end: bool = False, text: str = None, state: str = None, keyboard = None):
     def decorator(function):
-        async def wrapper(m: Message, value=None, *args, **kwargs):
+        async def wrapper(m: Message, value=None, form=None, *args, **kwargs):
+            kwargs["m"] = m
             if value:
-                data = await function(m, value, *args, **kwargs)
-            else:
-                data = await function(m, *args, **kwargs)
+                kwargs["value"] = value
+            if form:
+                kwargs["form"] = form
+            data = await function(**kwargs)
             item_id = int(states.get(m.from_id).split("*")[1])
             editing_content = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
             if editing_content:
@@ -470,6 +478,18 @@ async def serialize_is_func_decor(is_func: bool):
     return "да" if is_func else "нет (декор)"
 
 
+async def info_leader_fraction():
+    return "Пришли ссылку или перешли сообщение нового лидера фракции", None
+
+
+async def serialize_leader_fraction(leader_id: int) -> str:
+    if not leader_id:
+        return "Без лидера"
+    name = await db.select([db.Form.name]).where(db.Form.user_id == leader_id).gino.scalar()
+    user = (await bot.api.users.get(user_ids=leader_id))[0]
+    return f"[id{leader_id}|{name} / {user.first_name} {user.last_name}]"
+
+
 fields_content: Dict[str, Dict[str, List[Field]]] = {
     "Cabins": {
         "fields": [
@@ -534,5 +554,43 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field("Описание", Admin.DESCRIPTION_DECOR)
         ],
         "name": "Декор"
+    },
+    "Fraction": {
+        "fields": [
+            Field("Название", Admin.NAME_FRACTION),
+            Field("Описание", Admin.DESCRIPTION_FRACTION),
+            Field("Лидер", Admin.LEADER_FRACTION, info_leader_fraction, serialize_leader_fraction),
+            Field("Фото", Admin.PHOTO_FRACTION)
+        ],
+        "name": "Фракция"
     }
 }
+
+
+async def page_fractions(page: int) -> Tuple[str, Keyboard, str]:
+    fraction = await db.select([*db.Fraction]).order_by(db.Fraction.id.desc()).offset(page - 1).limit(1).gino.first()
+    if fraction.leader_id:
+        leader_nick = await db.select([db.Form.name]).where(db.Form.user_id == fraction.leader_id).gino.scalar()
+        leader = (await bot.api.users.get(user_id=fraction.leader_id))[0]
+        leader_mention = f"[id{fraction.leader_id}|{leader_nick} / {leader.first_name} {leader.last_name}]"
+    else:
+        leader_mention = "Без лидера"
+    reply = (f"Название: {fraction.name}\n"
+             f"Описание: {fraction.description}\n"
+             f"Текущий лидер: {leader_mention}")
+    count = await db.select([func.count(db.Fraction.id)]).gino.scalar()
+    kb = Keyboard(inline=True)
+    if page > 1:
+        kb.add(
+            Callback("<-", {"fraction_page": page - 1}), KeyboardButtonColor.SECONDARY
+        )
+    if count > page:
+        kb.add(
+            Callback("->", {"fraction_page": page + 1}), KeyboardButtonColor.SECONDARY
+        )
+    if len(kb.buttons) > 0 and len(kb.buttons[0]) > 0:
+        kb.row()
+    kb.add(
+        Callback("Вступить", {"fraction_select": fraction.id}), KeyboardButtonColor.POSITIVE
+    )
+    return reply, kb, fraction.photo

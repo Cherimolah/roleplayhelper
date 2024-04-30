@@ -9,7 +9,7 @@ import messages
 from loader import bot, fields
 from service.custom_rules import StateRule, NumericRule
 from service.states import Menu
-from service.utils import loads_form, get_mention_from_message, show_fields_edit, soft_divide
+from service.utils import loads_form, get_mention_from_message, show_fields_edit, soft_divide, page_fractions
 import service.keyboards as keyboards
 from service.middleware import states
 from service.db_engine import db
@@ -72,7 +72,7 @@ async def map_form(m: MessageEvent):
 @bot.on.private_message(StateRule(Menu.SHOW_FORM), PayloadRule({"form": "edit"}))
 @bot.on.private_message(StateRule(Menu.EDIT_FIELDS), PayloadRule({"form": "edit"}))
 async def send_form_edit(m: Message, new=True):
-    await show_fields_edit(m, new)
+    await show_fields_edit(m.from_id, new)
 
 
 @bot.on.private_message(StateRule(Menu.SELECT_FIELD_EDIT_NUMBER), PayloadRule({"form_edit": "confirm"}))
@@ -103,7 +103,7 @@ async def select_field_edit(m: Message, value: int = None):
     field = fields[value-1].name
     if field == "Должность":
         professions = await db.select([db.Profession.name]).where(db.Profession.special.is_(False)).gino.all()
-        reply = "Выберите профессию"
+        reply = "Выберите профессию\n\n"
         for i, prof in enumerate(professions):
             reply = f"{reply}{i + 1}. {prof.name}\n"
         await m.answer(reply, keyboard=keyboards.another_profession)
@@ -111,6 +111,9 @@ async def select_field_edit(m: Message, value: int = None):
     elif field == "Сексуальная ориентация":
         await m.answer("Выберите сексуальную ориентацию", keyboard=keyboards.orientations)
         return
+    elif field == "Фракция":
+        reply, kb, photo = await page_fractions(1)
+        await m.answer(reply, keyboard=kb, attachment=photo)
     else:
         await m.answer(f"Введите новое значение для поля {fields[value-1].name}:")
 

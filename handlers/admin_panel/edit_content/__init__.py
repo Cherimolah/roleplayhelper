@@ -6,4 +6,5 @@ from . import quests
 from . import daylics
 from . import shop
 from . import decor
+from . import fractions
 from . import common

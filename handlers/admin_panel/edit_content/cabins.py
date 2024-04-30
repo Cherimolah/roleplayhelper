@@ -53,7 +53,9 @@ async def set_func_slots(m: Message, value: int):
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Cabins"), PayloadRule({"Cabins": "delete"}), AdminRule())
 async def select_cabin_to_delete(m: Message):
-    cabins = await db.select([db.Cabins.name, db.Cabins.cost]).gino.all()
+    cabins = await db.select([db.Cabins.name, db.Cabins.cost]).order_by(db.Cabins.id.asc()).gino.all()
+    if not cabins:
+        return "Типы кают ещё не были созданы"
     reply = messages.cabin_type
     for i, cabin in enumerate(cabins):
         reply = f"{reply}{i+1}. {cabin.name} {cabin.cost}\n"
@@ -63,7 +65,7 @@ async def select_cabin_to_delete(m: Message):
 
 @bot.on.private_message(StateRule(Admin.ID_CABIN), NumericRule(), AdminRule())
 async def delete_cabin(m: Message, value: int):
-    cabin_id = await db.select([db.Cabins.id]).offset(value-1).limit(1).gino.scalar()
+    cabin_id = await db.select([db.Cabins.id]).order_by(db.Cabins.id.asc()).offset(value-1).limit(1).gino.scalar()
     await db.Cabins.delete.where(db.Cabins.id == cabin_id).gino.status()
     states.set(m.from_id, f"{Admin.SELECT_ACTION}_Cabins")
     await m.answer(messages.cabin_deleted, keyboard=keyboards.gen_type_change_content("Cabins"))
