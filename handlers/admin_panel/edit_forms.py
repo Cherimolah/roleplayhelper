@@ -47,13 +47,13 @@ async def send_select_fields(m: Message, value: int = None):
     reply = messages.new_value_field.format(fields[value-1].name)
     keyboard = None
     if value == 2:
-        professions = await db.select([db.Profession.name]).gino.all()
+        professions = await db.select([db.Profession.name]).order_by(db.Profession.id.asc()).gino.all()
         for i, prof in enumerate(professions):
             reply = f"{reply}{i + 1}. {prof.name}\n"
     if value == 10:
         keyboard = keyboards.orientations
     elif value == 15:
-        cabins = await db.select([db.Cabins.name]).gino.all()
+        cabins = await db.select([db.Cabins.name]).order_by(db.Cabins.id.asc()).gino.all()
         for i, cabin in enumerate(cabins):
             reply = f"{reply}{i+1}. {cabin.name}\n"
     elif value == 16:
@@ -63,9 +63,13 @@ async def send_select_fields(m: Message, value: int = None):
             Text("Разморозить", {"freeze": False}), KeyboardButtonColor.POSITIVE
         )
     elif value == 17:
-        statuses = await db.select([db.Status.name]).gino.all()
+        statuses = await db.select([db.Status.name]).order_by(db.Status.id.asc()).gino.all()
         for i, status in enumerate(statuses):
             reply = f"{reply}{i+1}. {status.name}\n"
+    elif value == 18:
+        fractions = await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()
+        for i, fraction in enumerate(fractions):
+            reply = f"{reply}{i+1}. {fraction.name}\n"
     await m.answer(reply, keyboard=keyboard)
 
 
@@ -90,7 +94,7 @@ async def enter_field_value(m: Message):
             await m.answer(messages.need_cabin_class)
             return
         value = int(m.text)
-        cabin_id, price = await db.select([db.Cabins.id, db.Cabins.cost]).offset(value - 1).limit(1).gino.first()
+        cabin_id, price = await db.select([db.Cabins.id, db.Cabins.cost]).order_by(db.Cabins.id.asc()).offset(value - 1).limit(1).gino.first()
         await db.Form.update.values(cabin_type=cabin_id,
                                     balance=db.Form.balance - price,
                                     last_payment=datetime.datetime.now()).where(db.Form.id == form_id).gino.status()
@@ -106,15 +110,22 @@ async def enter_field_value(m: Message):
             await m.answer("Необходимо указать число")
             return
         value = int(m.text)
-        profession_id = await db.select([db.Profession.id]).offset(value-1).gino.scalar()
+        profession_id = await db.select([db.Profession.id]).order_by(db.Profession.id.asc()).offset(value-1).gino.scalar()
         await db.Form.update.values(profession=profession_id).where(db.Form.id == form_id).gino.status()
     elif field == "status":
         if not m.text.isdigit():
             await m.answer("Необходимо указать число")
             return
         value = int(m.text)
-        status_id = await db.select([db.Status.id]).offset(value-1).gino.scalar()
+        status_id = await db.select([db.Status.id]).order_by(db.Status.id.asc()).offset(value-1).gino.scalar()
         await db.Form.update.values(status=status_id).where(db.Form.id == form_id).gino.status()
+    elif field == "edit_fraction":
+        if not m.text.isdigit():
+            await m.answer("Необходимо указать число")
+            return
+        value = int(m.text)
+        fraction_id = await db.select([db.Fraction.id]).order_by(db.Fraction.id.asc()).offset(value - 1).gino.scalar()
+        await db.Form.update.values(fraction_id=fraction_id).where(db.Form.id == form_id).gino.status()
     else:
         if m.text.isdigit():
             value = int(m.text)

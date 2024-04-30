@@ -124,3 +124,4 @@ class Admin:
     LEADER_FRACTION = "leader_fractions"
     PHOTO_FRACTION = "photo_fractions"
     ID_FRACTION = "id_fractions"
+    EDIT_FRACTION = "edit_fraction"
