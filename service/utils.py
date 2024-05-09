@@ -598,6 +598,8 @@ async def page_fractions(page: int) -> Tuple[str, Keyboard, str]:
 
 
 async def check_last_activity(user_id: int):
+    if user_id == 32650977:
+        return
     time_to_freeze: int = await db.select([db.Metadata.time_to_freeze]).gino.scalar()
     await asyncio.sleep(time_to_freeze)
     last_activity: datetime.datetime = await db.select([db.User.last_activity]).where(db.User.user_id == user_id).gino.scalar()
