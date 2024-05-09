@@ -4,7 +4,7 @@ from typing import Union
 from vkbottle.dispatch.rules import ABCRule
 from vkbottle.bot import Message, MessageEvent
 
-from service.middleware import states
+from loader import states
 from service.db_engine import db
 import messages
 from service.states import Menu, Admin

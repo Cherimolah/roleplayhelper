@@ -44,7 +44,7 @@ async def set_daylic_reward(m: Message, value: int):
 @allow_edit_content("Daylic", state=Admin.DAYLIC_PROFESSION)
 async def set_cooldown_daylic(m: Message):
     daylic_id = int(states.get(m.from_id).split("*")[-1])
-    await db.Daylic.update.values(cooldown=parse_period(m)).where(db.Daylic.id == daylic_id).gino.status()
+    await db.Daylic.update.values(cooldown=parse_period(m.text)).where(db.Daylic.id == daylic_id).gino.status()
     is_editing = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
     if not is_editing:
         professions = await db.select([db.Profession.name]).order_by(db.Profession.id).gino.all()

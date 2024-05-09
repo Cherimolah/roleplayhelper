@@ -208,10 +208,21 @@ async def get_settings_menu(user_id: int) -> Keyboard:
         settings_menu.add(
             Text("Перезапуск бота", {"settings": "restart"}), KeyboardButtonColor.NEGATIVE
         )
+        settings_menu.row().add(
+            Text("Изменить тайминг активности", {"settings": "timing"}), KeyboardButtonColor.PRIMARY
+        )
     settings_menu.row().add(
         Text("Назад", {"menu": "home"}), KeyboardButtonColor.NEGATIVE
     )
     return settings_menu
+
+timing_keyboard = Keyboard().add(
+    Text("Время до заморозки", {"timing": "freeze"}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text("Время до удаления", {"timing": "delete"}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text("Назад", {"timing": "back"}), KeyboardButtonColor.NEGATIVE
+)
 
 
 def another_profession_to_user(user_id: int):

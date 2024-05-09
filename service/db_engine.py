@@ -28,6 +28,7 @@ class Database(Gino):
             editing_form = Column(Boolean, default=False)
             notification_enabled = Column(Boolean, default=True)
             editing_content = Column(Boolean, default=False)
+            last_activity = Column(TIMESTAMP, default=datetime.datetime.now)
 
         self.User = User
 
@@ -190,6 +191,8 @@ class Database(Gino):
             __tablename__ = "metadata"
 
             maintainence_break = Column(Boolean, default=False)
+            time_to_freeze = Column(Integer, default=604800)  # 1 week
+            time_to_delete = Column(Integer, default=2592000)  # 30 days
 
         self.Metadata = Metadata
 
@@ -241,7 +244,7 @@ class Database(Gino):
         cabins = await self.select([func.count(db.Cabins.id)]).gino.scalar()
         if cabins == 0:
             await self.Cabins.create(name="Тестовая каюта", cost=250)
-        metadata = await self.select([func.count(*db.Metadata)]).gino.scalar()
+        metadata = await self.select([self.func.count()]).select_from(self.Metadata).gino.scalar()
         if metadata == 0:
             await self.Metadata.create()
         await db.Form.update.values(created_at=datetime.datetime.now()).where(db.Form.created_at.is_(None)).gino.all()

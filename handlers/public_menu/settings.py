@@ -1,3 +1,4 @@
+import asyncio
 import sys
 import subprocess
 
@@ -6,17 +7,19 @@ from vkbottle.dispatch.rules.base import PayloadRule
 from vkbottle import Keyboard, Text, KeyboardButtonColor, Callback
 
 from loader import bot
-from service.keyboards import get_settings_menu, main_menu
+from service.keyboards import get_settings_menu, main_menu, timing_keyboard
 from service.db_engine import db
 from service.custom_rules import StateRule, AdminRule
-from service.states import Menu
+from service.states import Menu, Admin
 from service.middleware import states
+from service.utils import parse_cooldown, parse_period, check_last_activity
 from config import SYSTEMD_NAME
 
 
 @bot.on.private_message(PayloadRule({"menu": "settings"}), StateRule(Menu.MAIN))
 @bot.on.private_message(PayloadRule({"freeze": "back"}), StateRule(Menu.FREEZE_REQUEST))
 @bot.on.private_message(PayloadRule({"delete": "back"}), StateRule(Menu.DELETE_FORM_REQUEST))
+@bot.on.private_message(PayloadRule({"timing": "back"}), StateRule(Admin.TIMING_SETTINGS))
 async def settings(m: Message):
     states.set(m.from_id, Menu.SETTING)
     await m.answer("Меню настроек", keyboard=await get_settings_menu(m.from_id))
@@ -113,7 +116,7 @@ async def send_delete_request(m: Message):
     await settings(m)
 
 
-@bot.on.private_message(PayloadRule({"settings": "maintainence"}), AdminRule())
+@bot.on.private_message(PayloadRule({"settings": "maintainence"}), StateRule(Menu.SETTING), AdminRule())
 async def change_maintainence(m: Message):
     m_break = await db.select([db.Metadata.maintainence_break]).gino.scalar()
     await db.Metadata.update.values(maintainence_break=not m_break).gino.status()
@@ -125,9 +128,59 @@ async def change_maintainence(m: Message):
                        keyboard=await get_settings_menu(m.from_id))
 
 
-@bot.on.private_message(PayloadRule({"settings": "restart"}), AdminRule())
+@bot.on.private_message(PayloadRule({"settings": "restart"}), StateRule(Menu.SETTING), AdminRule())
 async def restart(m: Message):
     if not sys.platform.startswith("linux"):
         return "Перезапуск возможен только в среде Linux"
     await m.answer("Бот будет обновлён до последней версии и перезапущен")
     subprocess.run(["systemctl", "restart", SYSTEMD_NAME])
+
+
+@bot.on.private_message(PayloadRule({"settings": "timing"}), StateRule(Menu.SETTING), AdminRule())
+async def timing(m: Message):
+    metadata = await db.select([*db.Metadata]).gino.first()
+    states.set(m.from_id, Admin.TIMING_SETTINGS)
+    await m.answer(f"Текущие настройки таймера:\n\n"
+                   f"Заморозка анкеты после {parse_cooldown(metadata.time_to_freeze)} неактивности игрока\n"
+                   f"Удаление анкеты после {parse_cooldown(metadata.time_to_delete)} неактивности игрока",
+                   keyboard=timing_keyboard)
+
+
+@bot.on.private_message(PayloadRule({"timing": "freeze"}), StateRule(Admin.TIMING_SETTINGS), AdminRule())
+async def freeze_timing(m: Message):
+    states.set(m.from_id, Admin.FREEZE_TIMING)
+    await m.answer("Введите время неактивности после которого анкета будет автоматически заморожена\n"
+                   "В формате 1 год 2 месяца 3 дня 4 часа 5 минут 6 секунд", keyboard=Keyboard())
+
+
+@bot.on.private_message(StateRule(Admin.FREEZE_TIMING), AdminRule())
+async def set_freeze_timing(m: Message):
+    period = parse_period(m.text)
+    if not period:
+        return "Неверный период"
+    user_ids = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
+    for user_id in user_ids:
+        asyncio.get_event_loop().create_task(check_last_activity(user_id))
+    await db.Metadata.update.values(time_to_freeze=period).gino.status()
+    await m.answer(f"Анкеты будут замораживаться после {parse_cooldown(period)} неактивности игроков")
+    return await timing(m)
+
+
+@bot.on.private_message(PayloadRule({"timing": "delete"}), StateRule(Admin.TIMING_SETTINGS), AdminRule())
+async def delete_timing(m: Message):
+    states.set(m.from_id, Admin.DELETE_TIMING)
+    await m.answer("Введите время неактивности после которого анкета будет автоматически УДАЛЕНА\n"
+                   "В формате 1 год 2 месяца 3 дня 4 часа 5 минут 6 секунд", keyboard=Keyboard())
+
+
+@bot.on.private_message(StateRule(Admin.DELETE_TIMING), AdminRule())
+async def set_freeze_timing(m: Message):
+    period = parse_period(m.text)
+    if not period:
+        return "Неверный период"
+    await db.Metadata.update.values(time_to_delete=period).gino.status()
+    user_ids = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
+    for user_id in user_ids:
+        asyncio.get_event_loop().create_task(check_last_activity(user_id))
+    await m.answer(f"Анкеты будут удаляться после {parse_cooldown(period)} неактивности игроков")
+    return await timing(m)

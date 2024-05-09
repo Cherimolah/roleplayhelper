@@ -11,10 +11,9 @@ import aiofiles
 from vkbottle import Keyboard, Callback, KeyboardButtonColor, Text
 
 from service.db_engine import db
-from loader import bot, photo_message_uploader, fields, Field
+from loader import bot, photo_message_uploader, fields, Field, states
 import messages
 from bot_extended import AioHTTPClientExtended
-from service.middleware import states
 import service.states
 from service.states import Admin
 import service.keyboards as keyboards
@@ -150,7 +149,7 @@ async def take_off_payments(form_id: int):
         if not balance or balance < 0 or freeze:
             await asyncio.sleep(86400)  # Ждём сутки, вдруг появятся деньги или анкета разморозиться
             continue
-        last_payment = await db.select([db.Form.last_payment]).where(db.Form.id == form_id).gino.scalar()
+        last_payment: datetime.datetime = await db.select([db.Form.last_payment]).where(db.Form.id == form_id).gino.scalar()
         today = datetime.datetime.now()
         delta = today - last_payment
         user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
@@ -234,8 +233,8 @@ seconds = [
 ]
 
 
-def parse_period(m: Message) -> Optional[int]:
-    params = m.text.lower().split(" ")
+def parse_period(text: str) -> Optional[int]:
+    params = text.lower().split(" ")
     last_number = 0
     total = 0
     for index, param in enumerate(params):
@@ -267,10 +266,12 @@ def parse_period(m: Message) -> Optional[int]:
 def parse_cooldown(cooldown: Optional[Union[int, float]]) -> Optional[str]:
     if not cooldown:
         return
-    hours = int(cooldown // 3600)
-    minutes = int((cooldown - hours * 3600) // 60)
-    seconds = int(cooldown - hours * 3600 - minutes * 60)
-    return f"{hours} час(-a, -ов) {minutes} минут {seconds} секунд"
+    days = int(cooldown // 86400)
+    hours = int((cooldown - days * 86400) // 3600)
+    minutes = int((cooldown - days * 86400 - hours * 3600) // 60)
+    seconds = int(cooldown - days * 86400 - hours * 3600 - minutes * 60)
+    return (f"{f'{days} дней' if days > 0 else ''} {f'{hours} часов' if hours > 0 else ''} "
+            f"{f'{minutes} минут' if minutes > 0 else ''} {f'{seconds} секунд' if seconds > 0 else ''}")
 
 
 async def quest_over(seconds, form_id, quest_id):
@@ -594,3 +595,42 @@ async def page_fractions(page: int) -> Tuple[str, Keyboard, str]:
         Callback("Вступить", {"fraction_select": fraction.id}), KeyboardButtonColor.POSITIVE
     )
     return reply, kb, fraction.photo
+
+
+async def check_last_activity(user_id: int):
+    time_to_freeze: int = await db.select([db.Metadata.time_to_freeze]).gino.scalar()
+    await asyncio.sleep(time_to_freeze)
+    last_activity: datetime.datetime = await db.select([db.User.last_activity]).where(db.User.user_id == user_id).gino.scalar()
+    time_to_freeze: int = await db.select([db.Metadata.time_to_freeze]).gino.scalar()  # Can be updated after sleeping
+    freeze = await db.select([db.Form.freeze]).where(db.Form.user_id == user_id).gino.scalar()
+    if (datetime.datetime.now() - last_activity).total_seconds() >= time_to_freeze and not freeze:
+        await db.Form.update.values(freeze=True).where(db.Form.user_id == user_id).gino.status()
+        await bot.api.messages.send(message="❗ Ваша анкета была заморожена по причине отсутствия активности в "
+                                            f"течении {parse_cooldown(time_to_freeze)}. В дальнейшем анкета будет "
+                                            f"автоматически удалена!", peer_id=user_id,
+                                    is_notification=True)
+        name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
+        user = (await bot.api.users.get(user_id=user_id))[0]
+        admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
+        await bot.api.messages.send(message=f"❗ Анкета [id{user_id}|{name} / {user.first_name} {user.last_name}] "
+                                            f"была автоматически заморожена по причине отсутствия активности",
+                                    peer_ids=admins)
+
+        time_to_delete = await db.select([db.Metadata.time_to_delete]).gino.scalar()
+        await asyncio.sleep(time_to_delete - time_to_freeze)
+        last_activity: datetime.datetime = await db.select([db.User.last_activity]).where(
+            db.User.user_id == user_id).gino.scalar()
+        time_to_delete: int = await db.select([db.Metadata.time_to_delete]).gino.scalar()
+        is_exists = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
+        freeze = await db.select([db.Form.freeze]).where(db.Form.user_id == user_id).gino.scalar()
+        if last_activity and freeze and (datetime.datetime.now() - last_activity).total_seconds() >= time_to_delete and is_exists:
+            await bot.api.messages.send(message="❗ Ваша анкета была удалена по причине отсутствия активности в "
+                                                f"течении {parse_cooldown(time_to_delete)}", peer_id=user_id,
+                                        is_notification=True)
+            name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
+            await db.Form.delete.where(db.Form.user_id == user_id).gino.status()
+            user = (await bot.api.users.get(user_id=user_id))[0]
+            admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
+            await bot.api.messages.send(message=f"❗ Анкета [id{user_id}|{name} / {user.first_name} {user.last_name}] "
+                                                f"была автоматически удалена по причине отсутствия активности",
+                                        peer_ids=admins)

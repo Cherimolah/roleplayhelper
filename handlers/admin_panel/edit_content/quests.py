@@ -107,7 +107,7 @@ async def quest_forever(m: Message):
                     keyboard=keyboards.gen_type_change_content("Quest"), end=True)
 async def quest_expiration_time(m: Message):
     quest_id = int(states.get(m.peer_id).split("*")[1])
-    seconds = parse_period(m)
+    seconds = parse_period(m.text)
     await db.Quest.update.values(execution_time=seconds).where(db.Quest.id == quest_id).gino.scalar()
 
 

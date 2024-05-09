@@ -8,8 +8,14 @@ import traceback
 from loader import bot
 import handlers
 from service.db_engine import db
-from service.utils import send_mailing, take_off_payments, quest_over, send_daylics
+from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity
 from config import ADMINS
+from service.middleware import MaintainenceMiddleware, StateMiddleware, FormMiddleware, ActivityUsersMiddleware
+
+bot.labeler.message_view.register_middleware(MaintainenceMiddleware)
+bot.labeler.message_view.register_middleware(FormMiddleware)
+bot.labeler.message_view.register_middleware(StateMiddleware)
+bot.labeler.message_view.register_middleware(ActivityUsersMiddleware)
 
 
 async def on_startup():
@@ -45,6 +51,10 @@ async def on_startup():
         asyncio.get_event_loop().create_task(quest_over(cooldown, form_id, quest_id))
     admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
     await bot.api.messages.send(peer_ids=admins, message="🎉 Бот запущен!", is_notification=True)
+
+    user_ids = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
+    for user_id in user_ids:
+        asyncio.get_event_loop().create_task(check_last_activity(user_id))
 
 
 def number_error():

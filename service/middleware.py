@@ -1,11 +1,13 @@
+import asyncio
+import datetime
 from abc import ABC
 
-from vkbottle import BaseMiddleware, CtxStorage
+from vkbottle import BaseMiddleware
 from vkbottle.bot import Message
 
 from service.db_engine import db
-
-states = CtxStorage()
+from service.utils import check_last_activity
+from loader import states
 
 
 class MaintainenceMiddleware(BaseMiddleware[Message], ABC):
@@ -44,3 +46,20 @@ class FormMiddleware(BaseMiddleware[Message], ABC):
             await self.event.answer("Я вас знаю, но у вас нет анкеты! Напишите «Начать», чтобы заполнить её и "
                                     "продолжить пользоваться")
             self.stop()
+
+
+class ActivityUsersMiddleware(BaseMiddleware[Message], ABC):
+
+    async def pre(self) -> None:
+        if self.event.peer_id > 2_000_000_000:
+            return
+        freeze = await db.select([db.Form.freeze]).where(db.Form.user_id == self.event.from_id).gino.scalar()
+        if freeze:
+            await db.Form.update.values(freeze=False).where(db.Form.user_id == self.event.from_id).gino.status()
+            await self.event.answer("🎉 С вовзвращением! Ваша анкета разморожена")
+
+    async def post(self):
+        if self.event.peer_id > 2_000_000_000:
+            return
+        await db.User.update.values(last_activity=datetime.datetime.now()).where(db.User.user_id == self.event.from_id).gino.status()
+        asyncio.get_event_loop().create_task(check_last_activity(self.event.from_id))

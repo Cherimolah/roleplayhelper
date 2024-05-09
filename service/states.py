@@ -125,3 +125,6 @@ class Admin:
     PHOTO_FRACTION = "photo_fractions"
     ID_FRACTION = "id_fractions"
     EDIT_FRACTION = "edit_fraction"
+    TIMING_SETTINGS = "timing_settings"
+    FREEZE_TIMING = "freeze_timing"
+    DELETE_TIMING = "delete_timing"

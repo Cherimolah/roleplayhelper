@@ -320,10 +320,10 @@ async def set_character(m: Message):
     creating_form = await db.select([db.User.creating_form]).where(db.User.user_id == m.from_id).gino.scalar()
     if creating_form:
         states.set(m.from_id, Registration.WAIT)
+        await db.User.update.values(creating_form=False).where(db.User.user_id == m.from_id).gino.scalar()
         await m.answer(messages.form_ready, keyboard=Keyboard())
         form_id = await db.select([db.Form.id]).where(db.Form.user_id == m.from_id).gino.scalar()
         await bot.api.messages.send(admins, form, photo, keyboard=keyboards.create_accept_form(form_id))
-        await db.User.update.values(creating_form=False).where(db.User.user_id == m.from_id).gino.scalar()
     else:
         await m.answer("Новое значение установлено")
         await show_fields_edit(m.from_id, new=False)
