@@ -97,7 +97,7 @@ async def send_page(m: MessageEvent):
 async def select_user_to_transfer(m: Message):
     if m.text.isdigit():
         form_id = await db.select([db.Form.id]).where(
-            and_(db.Form.is_request.is_(False), db.Form.user_id == m.from_id)).order_by(db.Form.id).offset(
+            and_(db.Form.is_request.is_(False), db.Form.user_id != m.from_id)).order_by(db.Form.id).offset(
             int(m.text) - 1).limit(1).gino.scalar()
     else:
         user_id = await get_mention_from_message(m)
@@ -106,7 +106,7 @@ async def select_user_to_transfer(m: Message):
         if user_id == m.from_id:
             return "Нельзя совершить сделку с самим собой"
         form_id = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
-    states.set(m.from_id, f"{Menu.SELECT_AMOUNT_TO_TRANSFER}@{form_id}")
+    states.set(m.from_id, f"{Menu.SELECT_AMOUNT_TO_TRANSFER}*{form_id}")
     await m.answer("Введите сумму сделки")
 
 
