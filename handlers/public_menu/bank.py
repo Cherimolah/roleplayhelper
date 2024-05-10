@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, timezone
-from typing import Tuple
 
 from vkbottle.bot import Message, MessageEvent
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
@@ -8,12 +7,12 @@ from sqlalchemy import and_, or_, func
 
 import messages
 from loader import bot
-from service.custom_rules import StateRule, NumericRule, ValidateAccount, UserSpecified
+from service.custom_rules import StateRule, NumericRule, ValidateAccount
 from service.states import Menu
 import service.keyboards as keyboards
 from service.middleware import states
 from service.db_engine import db
-from service.utils import get_current_form_id, soft_divide
+from service.utils import get_current_form_id, soft_divide, get_mention_from_message
 from config import ADMINS
 
 
@@ -57,7 +56,7 @@ async def send_transfer_history(m: Message):
 async def send_create_transactions(m: Message):
     forms = await db.select([db.Form.user_id, db.Form.name]).where(
         and_(db.Form.is_request.is_(False), db.Form.user_id != m.from_id)
-    ).limit(15).gino.all()
+    ).order_by(db.Form.id).limit(15).gino.all()
     if not forms:
         await m.answer("Пока анкет нет")
         return
@@ -86,7 +85,7 @@ async def send_page(m: MessageEvent):
     if count_forms > new_page * 15:
         keyboard.add(Callback("->", {"users_page": new_page + 1}), KeyboardButtonColor.PRIMARY)
     forms = (await db.select([db.Form.user_id, db.Form.name]).where(
-        and_(db.Form.is_request.is_(False), db.Form.user_id != m.user_id))
+        and_(db.Form.is_request.is_(False), db.Form.user_id != m.user_id)).order_by(db.Form.id)
              .offset((new_page - 1) * 15).limit(15).gino.all())
     reply = ""
     for i, form in enumerate(forms):
@@ -94,9 +93,20 @@ async def send_page(m: MessageEvent):
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
-@bot.on.private_message(StateRule(Menu.SELECT_USER_TO_TRANSFER), ValidateAccount(), UserSpecified())
-async def select_user_to_transfer(m: Message, form: Tuple[int, int]):
-    states.set(m.from_id, f"{Menu.SELECT_USER_TO_TRANSFER}@{form[0]}")
+@bot.on.private_message(StateRule(Menu.SELECT_USER_TO_TRANSFER), ValidateAccount())
+async def select_user_to_transfer(m: Message):
+    if m.text.isdigit():
+        form_id = await db.select([db.Form.id]).where(
+            and_(db.Form.is_request.is_(False), db.Form.user_id == m.user_id)).order_by(db.Form.id).offset(
+            int(m.text) - 1).limit(1).gino.scalar()
+    else:
+        user_id = await get_mention_from_message(m)
+        if not user_id:
+            return "Пользователь не указан"
+        if user_id == m.from_id:
+            return "Нельзя совершить сделку с самим собой"
+        form_id = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
+    states.set(m.from_id, f"{Menu.SELECT_USER_TO_TRANSFER}@{form_id}")
     await m.answer("Введите сумму сделки")
 
 
