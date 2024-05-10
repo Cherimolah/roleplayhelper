@@ -106,7 +106,7 @@ async def select_user_to_transfer(m: Message):
         if user_id == m.from_id:
             return "Нельзя совершить сделку с самим собой"
         form_id = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
-    states.set(m.from_id, f"{Menu.SELECT_USER_TO_TRANSFER}@{form_id}")
+    states.set(m.from_id, f"{Menu.SELECT_AMOUNT_TO_TRANSFER}@{form_id}")
     await m.answer("Введите сумму сделки")
 
 
