@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from typing import Tuple
 
 from vkbottle.bot import Message, MessageEvent
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
@@ -87,7 +88,7 @@ async def send_page(m: MessageEvent):
              .offset((new_page - 1) * 15).limit(15).gino.all())
     reply = ""
     for i, form in enumerate(forms):
-        reply = f"{reply}{int(i * new_page) + 1}. [id{form.user_id}|{form.name}]\n"
+        reply = f"{reply}{(new_page - 1) * 15 + i + 1}. [id{form.user_id}|{form.name}]\n"
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
