@@ -230,7 +230,7 @@ async def search_user_form(m: Message):
         return
     if not user_id:
         # Try get by form index (not id)
-        user_id = await db.select([db.Form.user_id]).where(db.Form.is_request.is_(False)).order_by(db.Form.id.asc()).offset(int(m.text) - 1).limit(1).gino.scalar()
+        user_id = await db.select([db.Form.user_id]).where(db.Form.id == int(m.text)).gino.scalar()
     if not user_id:
         await m.answer(messages.user_not_found)
         return
