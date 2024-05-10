@@ -174,10 +174,13 @@ async def delete_timing(m: Message):
 
 
 @bot.on.private_message(StateRule(Admin.DELETE_TIMING), AdminRule())
-async def set_freeze_timing(m: Message):
+async def set_delete_timing(m: Message):
     period = parse_period(m.text)
     if not period:
         return "Неверный период"
+    time_to_freeze = await db.select([db.Metadata.time_to_freeze]).gino.scalar()
+    if time_to_freeze >= period:
+        return "Время для удаления должно быть больше времени на заморозку"
     await db.Metadata.update.values(time_to_delete=period).gino.status()
     user_ids = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
     for user_id in user_ids:

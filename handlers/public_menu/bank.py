@@ -8,7 +8,7 @@ from sqlalchemy import and_, or_, func
 
 import messages
 from loader import bot
-from service.custom_rules import StateRule, NumericRule, ValidateAccount
+from service.custom_rules import StateRule, NumericRule, ValidateAccount, UserSpecified
 from service.states import Menu
 import service.keyboards as keyboards
 from service.middleware import states
@@ -94,25 +94,10 @@ async def send_page(m: MessageEvent):
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
-@bot.on.private_message(StateRule(Menu.SELECT_USER_TO_TRANSFER), ValidateAccount())
-async def select_user_to_transfer(m: Message):
-    if m.text.isdigit():
-        user_form_id = await db.select([db.Form.id]).where(db.Form.user_id == m.from_id).gino.scalar()
-        form_id = await db.select([db.Form.id]).where(
-        and_(db.Form.is_request.is_(False), db.Form.id != user_form_id)
-    ).offset(int(m.text) - 1).limit(1).gino.scalar()
-    else:
-        user_form_id = await db.select([db.Form.id]).select_from(
-            db.Form.join(db.User, db.Form.user_id == db.User.user_id)
-        ).gino.scalar()
-        form_id = await db.select([db.Form.id]).where(
-            and_(db.Form.id != user_form_id, func.lower(db.Form.name) == func.lower(m.text))
-        ).where(db.Form.user_id == m.from_id).gino.scalar()
-    if not form_id:
-        await m.answer(messages.error_user_to_transfer)
-        return
-    states.set(m.from_id, f"{Menu.SELECT_AMOUNT_TO_TRANSFER}@{form_id}")
-    await m.answer(messages.amount_transfer)
+@bot.on.private_message(StateRule(Menu.SELECT_USER_TO_TRANSFER), ValidateAccount(), UserSpecified())
+async def select_user_to_transfer(m: Message, form: Tuple[int, int]):
+    states.set(m.from_id, f"{Menu.SELECT_USER_TO_TRANSFER}@{form[0]}")
+    await m.answer("Введите сумму сделки")
 
 
 @bot.on.private_message(StateRule(Menu.SELECT_AMOUNT_TO_TRANSFER), NumericRule(), ValidateAccount())

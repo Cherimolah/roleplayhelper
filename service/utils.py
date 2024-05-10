@@ -98,8 +98,10 @@ async def parse_ids(m: Message) -> List[int]:
                 obj = await bot.api.utils.resolve_screen_name(screen_name)
                 if obj.type == obj.type.USER:
                     user_ids.append(obj.object_id)
-                else:
-                    user_ids.append(-obj.object_id)
+    names = list(map(lambda x: x.lower(), m.text.split("\n")))
+    user_ids.extend([x[0] for x in await db.select([db.Form.user_id]).where(
+        func.lower(db.Form.name).in_(names)
+    ).gino.all()])
     return user_ids
 
 
@@ -607,15 +609,14 @@ async def check_last_activity(user_id: int):
     freeze = await db.select([db.Form.freeze]).where(db.Form.user_id == user_id).gino.scalar()
     if (datetime.datetime.now() - last_activity).total_seconds() >= time_to_freeze and not freeze:
         await db.Form.update.values(freeze=True).where(db.Form.user_id == user_id).gino.status()
-        await bot.api.messages.send(message="❗ Ваша анкета была заморожена по причине отсутствия активности в "
-                                            f"течении {parse_cooldown(time_to_freeze)}. В дальнейшем анкета будет "
-                                            f"автоматически удалена!", peer_id=user_id,
-                                    is_notification=True)
+        await bot.api.messages.send(message="❗ В связи с отсутствие вашей активности в течении "
+                                            f"{parse_cooldown(time_to_freeze)} ваша анкета автоматически заморожена",
+                                    peer_id=user_id,  is_notification=True)
         name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
         user = (await bot.api.users.get(user_id=user_id))[0]
         admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
         await bot.api.messages.send(message=f"❗ Анкета [id{user_id}|{name} / {user.first_name} {user.last_name}] "
-                                            f"была автоматически заморожена по причине отсутствия активности",
+                                            f"автоматически заморожена",
                                     peer_ids=admins)
 
         time_to_delete = await db.select([db.Metadata.time_to_delete]).gino.scalar()
@@ -626,13 +627,13 @@ async def check_last_activity(user_id: int):
         is_exists = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
         freeze = await db.select([db.Form.freeze]).where(db.Form.user_id == user_id).gino.scalar()
         if last_activity and freeze and (datetime.datetime.now() - last_activity).total_seconds() >= time_to_delete and is_exists:
-            await bot.api.messages.send(message="❗ Ваша анкета была удалена по причине отсутствия активности в "
-                                                f"течении {parse_cooldown(time_to_delete)}", peer_id=user_id,
-                                        is_notification=True)
+            await bot.api.messages.send(message=f"❗ В связми с отсутствием вашей активности в течении "
+                                                f"{parse_cooldown(time_to_delete)} ваша анкета автоматичкески удалена",
+                                        peer_id=user_id, is_notification=True)
             name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
             await db.Form.delete.where(db.Form.user_id == user_id).gino.status()
             user = (await bot.api.users.get(user_id=user_id))[0]
             admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
             await bot.api.messages.send(message=f"❗ Анкета [id{user_id}|{name} / {user.first_name} {user.last_name}] "
-                                                f"была автоматически удалена по причине отсутствия активности",
+                                                f"была автоматически удалена",
                                         peer_ids=admins)
