@@ -16,7 +16,7 @@ from service.db_engine import db
 
 
 async def load_forms_page(page) -> Tuple[str, Keyboard]:
-    data = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.is_request.is_(False)).limit(15).offset((page - 1) * 15).order_by(db.Form.created_at.asc()).order_by(db.Form.id.asc()).gino.all()
+    data = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.is_request.is_(False)).limit(15).offset((page - 1) * 15).order_by(db.Form.id.asc()).gino.all()
     count = (await db.select([func.count(db.Form.id)]).where(db.Form.is_request.is_(False)).gino.scalar())
     if count % 15 == 0:
         pages = count // 15
@@ -36,7 +36,7 @@ async def load_forms_page(page) -> Tuple[str, Keyboard]:
         keyboard = None
     else:
         keyboard = Keyboard(inline=True)
-        reply += f"Страница {page}/{pages}\n\n"
+        reply += f"\n\nСтраница {page}/{pages}"
     if page > 1:
         keyboard.add(
             Callback("<-", {"forms_page": page - 1}), KeyboardButtonColor.PRIMARY
@@ -230,7 +230,7 @@ async def search_user_form(m: Message):
         return
     if not user_id:
         # Try get by form index (not id)
-        user_id = await db.select([db.Form.user_id]).where(db.Form.is_request.is_(False)).order_by(db.Form.created_at.asc()).order_by(db.Form.id.asc()).offset(int(m.text) - 1).limit(1).gino.scalar()
+        user_id = await db.select([db.Form.user_id]).where(db.Form.is_request.is_(False)).order_by(db.Form.id.asc()).offset(int(m.text) - 1).limit(1).gino.scalar()
     if not user_id:
         await m.answer(messages.user_not_found)
         return
