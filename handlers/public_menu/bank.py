@@ -55,9 +55,8 @@ async def send_transfer_history(m: Message):
 
 @bot.on.private_message(StateRule(Menu.BANK_MENU), PayloadRule({"bank_menu": "transfer"}), ValidateAccount())
 async def send_create_transactions(m: Message):
-    form_id = await db.select([db.Form.id]).where(db.Form.user_id == m.from_id).gino.scalar()
     forms = await db.select([db.Form.user_id, db.Form.name]).where(
-        and_(db.Form.is_request.is_(False), db.Form.id != form_id)
+        and_(db.Form.is_request.is_(False), db.Form.user_id != m.from_id)
     ).limit(15).gino.all()
     if not forms:
         await m.answer("Пока анкет нет")
@@ -78,13 +77,16 @@ async def send_create_transactions(m: Message):
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"users_page": int}))
 async def send_page(m: MessageEvent):
     new_page = int(m.payload['users_page'])
-    count_forms = await db.func.count(db.Form.id).gino.scalar()
+    count_forms = await db.select([func.count(db.Form.id)]).where(
+        and_(db.Form.is_request.is_(False), db.Form.user_id != m.user_id)
+    ).gino.scalar()
     keyboard = Keyboard(inline=True)
     if new_page > 1:
         keyboard.add(Callback("<-", {"users_page": new_page - 1}), KeyboardButtonColor.PRIMARY)
-    if count_forms - new_page * 15 > 0:
+    if count_forms > new_page * 15:
         keyboard.add(Callback("->", {"users_page": new_page + 1}), KeyboardButtonColor.PRIMARY)
-    forms = (await db.select([db.Form.user_id, db.Form.name]).where(db.Form.is_request.is_(False))
+    forms = (await db.select([db.Form.user_id, db.Form.name]).where(
+        and_(db.Form.is_request.is_(False), db.Form.user_id != m.user_id))
              .offset((new_page - 1) * 15).limit(15).gino.all())
     reply = ""
     for i, form in enumerate(forms):
