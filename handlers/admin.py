@@ -143,6 +143,7 @@ async def reason_decline_form(m: Message):
         and_(db.Form.user_id == user_id, db.Form.is_request.is_(False))).gino.first()
     if not main_form:
         keyboard = keyboards.fill_quiz
+        await db.User.update.values(state=None).where(db.User.user_id == user_id).gino.status()
         await bot.api.messages.send(user_id, f"{messages.form_decline}\n\n{m.text}", keyboard=keyboard,
                                     is_notification=True)
     else:
