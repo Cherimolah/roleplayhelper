@@ -29,7 +29,7 @@ async def accept_form(m: MessageEvent):
     user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
     await db.Form.delete.where(and_(db.Form.user_id == user_id, db.Form.is_request.is_(False))).gino.status()
     await db.Form.update.values(is_request=False).where(db.Form.id == form_id).gino.status()
-    state = await db.select([db.User.state]).where(db.User.user_id == user_id).gino.status()
+    state = await db.select([db.User.state]).where(db.User.user_id == user_id).gino.scalar()
     if state == "wait":
         await db.User.update.values(state=Menu.MAIN).where(db.User.user_id == user_id).gino.status()
         await bot.api.messages.send(peer_ids=user_id, message=messages.form_accepted, keyboard=await keyboards.main_menu(user_id))
