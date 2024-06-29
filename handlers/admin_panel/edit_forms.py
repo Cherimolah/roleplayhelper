@@ -29,7 +29,7 @@ async def edit_users_forms(m: Message):
 async def search_form_for_edit(m: Message, form: tuple):
     form_id, user_id = form
     states.set(m.from_id, f"{Admin.SELECT_FIELDS}*{form_id}")
-    form, photo = await loads_form(user_id, form_id=form_id)
+    form, photo = await loads_form(user_id, m.from_id, form_id=form_id)
     await m.answer(form, photo)
     reply = messages.select_field
     for i, field in enumerate(fields):

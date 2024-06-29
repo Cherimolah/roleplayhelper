@@ -116,6 +116,8 @@ form_activity = Keyboard().add(
 ).row().add(
     Text("Каюта", {"form": "cabins"}), KeyboardButtonColor.PRIMARY
 ).row().add(
+    Text("Репутация", {"form": "reputation"}), KeyboardButtonColor.PRIMARY
+).row().add(
     Text("Назад", {"menu": "home"}), KeyboardButtonColor.NEGATIVE
 )
 
@@ -262,4 +264,8 @@ decor_vars = Keyboard().add(
     Text("Декор", {"is_functional_product": False}), KeyboardButtonColor.PRIMARY
 ).row().add(
     Text("Функциональный товар", {"is_functional_product": True}), KeyboardButtonColor.PRIMARY
+)
+
+without_fraction_bonus = Keyboard().add(
+    Text("Без бонуса к репутации", {"withot_fraction_bonus": True}), KeyboardButtonColor.NEGATIVE
 )

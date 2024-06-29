@@ -2,14 +2,15 @@ from typing import Tuple
 
 from vkbottle.bot import Message, MessageEvent
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
-from vkbottle import Keyboard, Callback, KeyboardButtonColor, GroupEventType
+from vkbottle import Keyboard, Callback, KeyboardButtonColor, GroupEventType, Text
 from sqlalchemy import and_, func
 
 import messages
 from loader import bot, fields
 from service.custom_rules import StateRule, NumericRule
 from service.states import Menu
-from service.utils import loads_form, get_mention_from_message, show_fields_edit, soft_divide, page_fractions
+from service.utils import (loads_form, get_mention_from_message, show_fields_edit, soft_divide, page_fractions,
+                           parse_reputation)
 import service.keyboards as keyboards
 from service.middleware import states
 from service.db_engine import db
@@ -52,7 +53,7 @@ async def load_forms_page(page) -> Tuple[str, Keyboard]:
 @bot.on.private_message(StateRule(Menu.EDIT_FORM), PayloadRule({"form_edit": "back"}))
 @bot.on.private_message(PayloadRule({"cabins_menu": "back"}), StateRule(Menu.CABINS_MENU))
 async def send_form(m: Message):
-    form, photo = await loads_form(m.from_id)
+    form, photo = await loads_form(m.from_id, m.from_id)
     states.set(m.from_id, Menu.SHOW_FORM)
     await m.answer(f"Ваша анкета:\n\n{form}", attachment=photo, keyboard=keyboards.form_activity)
 
@@ -78,7 +79,7 @@ async def send_form_edit(m: Message, new=True):
 @bot.on.private_message(StateRule(Menu.SELECT_FIELD_EDIT_NUMBER), PayloadRule({"form_edit": "confirm"}))
 async def confirm_edit_fields(m: Message):
     form_id = await db.select([db.Form.id]).where(and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))).gino.scalar()
-    form, photo = await loads_form(m.from_id, True)
+    form, photo = await loads_form(m.from_id, m.from_id, True)
     admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
     await bot.api.messages.send(admins, form, photo, keyboard=keyboards.create_accept_form(form_id))
     states.set(m.from_id, Menu.MAIN)
@@ -221,6 +222,17 @@ async def delete_decor(m: MessageEvent):
     await m.edit_message(f"{'Декор' if not is_func else 'Функциональный товар'} «{decor_name}» был удалён из вашей каюты!")
 
 
+@bot.on.private_message(PayloadRule({"form": "reputation"}), StateRule(Menu.SHOW_FORM))
+async def reputation_form(m: Message):
+    reputations = await db.get_reputations(m.from_id)
+    reply = "Список ваших репутаций:\n\n"
+    for fraction_id, reputation in reputations:
+        fraction_name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+        reputation_level = parse_reputation(reputation)
+        reply += f"{fraction_name}: {reputation_level}"
+    await m.answer(reply)
+
+
 @bot.on.private_message(StateRule(Menu.SHOW_FORM))
 async def search_user_form(m: Message):
     user_id = await get_mention_from_message(m)
@@ -234,12 +246,14 @@ async def search_user_form(m: Message):
     if not user_id:
         await m.answer(messages.user_not_found)
         return
-    form, photo = await loads_form(user_id)
+    form, photo = await loads_form(user_id, m.from_id)
     keyboard = None
     admin = await db.select([db.User.admin]).where(db.User.user_id == m.from_id).gino.scalar()
     if admin:
         form_id = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
         keyboard = Keyboard(inline=True).add(
+            Text("Репутация", {"form_reputation": user_id}), KeyboardButtonColor.PRIMARY
+        ).row().add(
             Callback("Удалить анкету", {"form_delete": form_id}), KeyboardButtonColor.NEGATIVE
         )
     await m.answer(form, attachment=photo, keyboard=keyboard)

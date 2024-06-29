@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 import traceback
 
 from loader import bot
-import handlers
+import handlers  # Important
 from service.db_engine import db
 from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity
 from config import ADMINS

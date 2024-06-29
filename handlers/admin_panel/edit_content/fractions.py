@@ -41,7 +41,6 @@ async def set_description_fraction(m: Message):
 @allow_edit_content("Fraction", state=Admin.PHOTO_FRACTION,
                     text="Лидер фракции установлен. Теперь пришлите фотографию фракции")
 async def set_leader_fraction(m: Message, form: Tuple[int, int]):
-    print(form)
     fraction_id = int(states.get(m.from_id).split("*")[1])
     await db.Fraction.update.values(leader_id=form[1]).where(db.Fraction.id == fraction_id).gino.status()
 

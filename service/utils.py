@@ -44,7 +44,7 @@ def parse_orientation(number: int) -> str:
         return "гомо"
 
 
-async def loads_form(user_id: int = None, is_request: bool = None, form_id: int = None) -> Tuple[str, Optional[str]]:
+async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, form_id: int = None) -> Tuple[str, Optional[str]]:
     if form_id:
         form = await db.select([*db.Form]).where(db.Form.id == form_id).gino.first()
     elif is_request:
@@ -60,6 +60,7 @@ async def loads_form(user_id: int = None, is_request: bool = None, form_id: int 
         fraction = await db.select([db.Fraction.name]).where(db.Fraction.id == form.fraction_id).gino.scalar()
     else:
         fraction = None
+    rep_fraction, reputation = await get_reputation(from_user_id, user_id)
     reply = f"Анкета пользователя [id{user_id}|{user.first_name} {user.last_name}]:\n\n" \
             f"Имя персонажа: {form.name}\n" \
             f"Должность: {profession or 'не установлена'}\n" \
@@ -77,8 +78,15 @@ async def loads_form(user_id: int = None, is_request: bool = None, form_id: int 
             f"Тип каюты: {await db.select([db.Cabins.name]).where(db.Cabins.id == form.cabin_type).gino.scalar() or 'не указан'}\n" \
             f"Баланс: {form.balance}\n" \
             f"Статус: {await db.select([db.Status.name]).where(db.Status.id == form.status).gino.scalar()}\n" \
-            f"Фракция: {fraction or 'не установлена'}"
+            f"Фракция: {fraction or 'не установлена'}\n" \
+            f"Репутация: {reputation} ({rep_fraction})"
     return reply, form.photo
+
+
+async def create_mention(user_id: int):
+    user = (await bot.api.users.get(user_id))[0]
+    nickname = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
+    return f"[id{user.id}|{user.first_name} {user.last_name} / {nickname}]"
 
 
 async def parse_ids(m: Message) -> List[int]:
@@ -353,6 +361,53 @@ async def send_content_page(m: Union[Message, MessageEvent], table_name: str, pa
         await m.send_message(reply, keyboard=keyboard)
 
 
+fraction_levels = {
+    100: "Лидер фракции",
+    90: "Верный(-ая) соратник(-ца)",
+    75: "Единомышленник(-ца)",
+    50: "Надëжный деловой партнëр",
+    25: "Достойный(-ая) уважения",
+    10: "Имеющий(-ая) потенциал",
+    -9: "Простой обыватель",
+    -24: "Неприятный собеседник",
+    -49: "Отвратительная личность",
+    -74: "Идеологический противник",
+    -89: "Политический соперник",
+    -99: "Враг фракции",
+    -100: "Еретик и террорист"
+}
+
+
+def parse_reputation(rep_level: int) -> str:
+    for level, name in fraction_levels.items():
+        if rep_level >= level:
+            return name
+    return 'Не опознаный уровень'
+
+
+async def get_reputation(from_user_id: int, to_user_id: int) -> Tuple[str, str]:
+    fraction_id = await db.select([db.Form.fraction_id]).where(db.Form.user_id == to_user_id).gino.scalar()
+    has_rep = await db.select([db.UserToFraction.id]).where(
+        and_(db.UserToFraction.user_id == from_user_id, db.UserToFraction.fraction_id == fraction_id)
+    ).gino.scalar()
+    if has_rep:
+        reputation = await db.select([db.UserToFraction.reputation]).where(
+            and_(db.UserToFraction.user_id == to_user_id, db.UserToFraction.fraction_id == fraction_id)
+        ).gino.scalar()
+        name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+        return name, parse_reputation(reputation)
+    else:
+        max_rep, fraction_id = await db.select([db.UserToFraction.reputation, db.UserToFraction.fraction_id]).where(
+            and_(db.UserToFraction.user_id == to_user_id, db.UserToFraction.fraction_id == fraction_id)
+        ).order_by(db.UserToFraction.reputation.desc()).gino.first()
+        name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+        return name, parse_reputation(max_rep)
+
+
+class FormatDataException(Exception):
+    pass
+
+
 def allow_edit_content(content_type: str, end: bool = False, text: str = None, state: str = None, keyboard = None):
     def decorator(function):
         async def wrapper(m: Message, value=None, form=None, *args, **kwargs):
@@ -361,7 +416,11 @@ def allow_edit_content(content_type: str, end: bool = False, text: str = None, s
                 kwargs["value"] = value
             if form:
                 kwargs["form"] = form
-            data = await function(**kwargs)
+            try:
+                data = await function(**kwargs)
+            except FormatDataException as e:
+                await m.answer(f"Неправильный формат данных!\n{e}")
+                return
             item_id = int(states.get(m.from_id).split("*")[1])
             editing_content = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
             if editing_content:
@@ -493,6 +552,21 @@ async def serialize_leader_fraction(leader_id: int) -> str:
     return f"[id{leader_id}|{name} / {user.first_name} {user.last_name}]"
 
 
+async def info_fraction_daylic():
+    reply = "Выбери номер фракции:\n\n"
+    fractions = [x[0] for x in await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()]
+    for i, name in enumerate(fractions):
+        reply += f"{i + 1}. {name}"
+    return reply, keyboards.without_fraction_bonus
+
+
+async def serialize_fraction_daylic(fraction_id: int) -> str:
+    name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+    if not name:
+        return "Без бонуса репутации к фракции"
+    return name
+
+
 fields_content: Dict[str, Dict[str, List[Field]]] = {
     "Cabins": {
         "fields": [
@@ -509,7 +583,9 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field("Описание", Admin.DAYLIC_DESCRIPTION),
             Field("Награда", Admin.DAYLIC_REWARD),
             Field("Кулдаун", Admin.DAYLIC_COOLDOWN, info_cooldown, parse_cooldown_async),
-            Field("Профессия", Admin.DAYLIC_PROFESSION, professions, profession_serialize)
+            Field("Профессия", Admin.DAYLIC_PROFESSION, professions, profession_serialize),
+            Field("Фракция", Admin.DAYLIC_FRACTION, info_fraction_daylic, serialize_fraction_daylic),
+            Field("Бонус к репутации", Admin.DAYLIC_REPUTATTION)
         ],
         "name": "Дейлик"
     },
@@ -528,7 +604,9 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field("Награда", Admin.QUEST_REWARD),
             Field("Начало", Admin.QUEST_START_DATE, info_date, parse_datetime_async),
             Field("Конец", Admin.QUEST_END_DATE, info_end_quest, parse_datetime_async),
-            Field("Даётся на выполнение", Admin.QUEST_EXECUTION_TIME, info_cooldown_quest, parse_cooldown_async)
+            Field("Даётся на выполнение", Admin.QUEST_EXECUTION_TIME, info_cooldown_quest, parse_cooldown_async),
+            Field("Фракция", Admin.QUEST_FRACTION, info_fraction_daylic, serialize_fraction_daylic),
+            Field("Бонус к репутации", Admin.QUEST_REPUTATION)
         ],
         "name": "Квест"
     },

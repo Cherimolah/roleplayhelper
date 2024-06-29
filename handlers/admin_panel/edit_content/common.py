@@ -39,6 +39,7 @@ async def select_action_with_cabins(m: Message):
 async def show_page_content(m: MessageEvent):
     page = m.payload['content_page']
     content = m.payload['content']
+    await bot.api.messages.delete(cmids=[m.conversation_message_id], delete_for_all=True, peer_id=m.peer_id)
     await send_content_page(m, content, page)
 
 

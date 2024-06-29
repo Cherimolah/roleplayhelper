@@ -1,13 +1,13 @@
 import datetime
+from typing import List, Tuple
 
 from gino import Gino
-from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, Boolean, TIMESTAMP, func
+from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, Boolean, TIMESTAMP, func, and_
 
 from config import USER, PASSWORD, HOST, DATABASE
 
 
 class Database(Gino):
-
     _instance = None
 
     def __new__(cls, *args, **kwargs):
@@ -154,6 +154,8 @@ class Database(Gino):
             start_at = Column(TIMESTAMP, default=datetime.datetime.now)
             closed_at = Column(TIMESTAMP)
             execution_time = Column(Integer)
+            fraction_id = Column(Integer, ForeignKey("fractions.id", ondelete='SET NULL'))
+            reputation = Column(Integer)
 
         self.Quest = Quest
 
@@ -175,6 +177,8 @@ class Database(Gino):
             reward = Column(Integer)
             cooldown = Column(Integer)
             profession_id = Column(Integer, ForeignKey("professions.id", ondelete='SET NULL'))
+            fraction_id = Column(Integer, ForeignKey("fractions.id", ondelete='SET NULL'))
+            reputation = Column(Integer, default=0)
 
         self.Daylic = Daylic
 
@@ -228,6 +232,16 @@ class Database(Gino):
 
         self.Fraction = Fraction
 
+        class UserToFraction(self.Model):
+            __tablename__ = 'users_to_fractions'
+
+            id = Column(Integer, primary_key=True)
+            user_id = Column(Integer, ForeignKey("users.user_id", ondelete='CASCADE'))
+            fraction_id = Column(Integer, ForeignKey("fractions.id", ondelete='CASCADE'))
+            reputation = Column(Integer, default=0)
+
+        self.UserToFraction = UserToFraction
+
     async def connect(self):
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")
         await self.gino.create_all()
@@ -243,7 +257,7 @@ class Database(Gino):
             await self.Status.create(name="Резидент")
         cabins = await self.select([func.count(db.Cabins.id)]).gino.scalar()
         if cabins == 0:
-            await self.Cabins.create(name="Тестовая каюта", cost=250)
+            await self.Cabins.create(name="Тестовая каюта", cost=250, decor_slots=10, functional_slots=5)
         metadata = await self.select([self.func.count()]).select_from(self.Metadata).gino.scalar()
         if metadata == 0:
             await self.Metadata.create()
@@ -251,6 +265,40 @@ class Database(Gino):
         fractions = await self.select([func.count(db.Fraction.id)]).gino.scalar()
         if fractions == 0:
             await self.Fraction.create(name="Без фракции", description="Это базовая фракция, чтобы пройти регистрацию")
+
+    async def change_reputation(self, user_id: int, fraction_id: int, delta: int):
+        id = await self.select([self.UserToFraction.id]).where(
+            and_(self.UserToFraction.user_id == user_id, self.UserToFraction.fraction_id == fraction_id)).gino.scalar()
+        if id:
+            reputation = await self.select([self.UserToFraction.reputation]).where(
+                and_(self.UserToFraction.user_id == user_id, self.UserToFraction.fraction_id == fraction_id)).gino.scalar()
+        else:
+            reputation = 0
+            id = (await self.UserToFraction.create(user_id=user_id, fraction_id=fraction_id)).id
+        owner = await self.select([self.Fraction.leader_id]).where(self.Fraction.id == fraction_id).gino.scalar()
+        if owner == user_id:
+            max_r = 100
+        else:
+            max_r = 99
+        reputation += delta
+        if reputation < -100:
+            reputation = -100
+        elif reputation > max_r:
+            reputation = max_r
+        await self.UserToFraction.update.values(reputation=reputation).where(self.UserToFraction.id == id).gino.status()
+
+    async def get_reputations(self, user_id: int) -> List[Tuple[int, int]]:
+        fraction_joined = await self.select([self.Form.fraction_id]).where(self.Form.user_id == user_id).gino.scalar()
+        reputation = (await self.select([self.UserToFraction.reputation])
+                      .where(and_(self.UserToFraction.user_id == user_id,
+                                  self.UserToFraction.fraction_id == fraction_joined))
+                      .gino.scalar())
+        rows = [(fraction_joined, reputation)]
+        rows.extend(await self.select([self.UserToFraction.fraction_id, self.UserToFraction.reputation])
+                    .where(
+            and_(self.UserToFraction.user_id == user_id, self.UserToFraction.fraction_id != fraction_joined))
+                    .order_by(self.UserToFraction.reputation.desc()).gino.all())
+        return rows
 
 
 db = Database()

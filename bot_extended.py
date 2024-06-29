@@ -147,6 +147,18 @@ class MessagesCategoryExtended(MessagesCategory):
                                           message_id, conversation_message_id, template, keyboard, **kwargs)
             return response
         except VKAPIError:
+            try:
+                if message_id:
+                    message_ids = [message_id]
+                else:
+                    message_ids = None
+                if conversation_message_id:
+                    cmids = [conversation_message_id]
+                else:
+                    cmids = None
+                await self.delete(message_ids, delete_for_all=True, peer_id=peer_id, cmids=cmids)
+            except:
+                pass
             await self.send(
                 peer_id=peer_id, message=message, lat=lat, attachment=attachment, group_id=group_id,
                 dont_parse_links=dont_parse_links, disable_mentions=disable_mentions, template=template,

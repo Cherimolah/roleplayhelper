@@ -295,6 +295,7 @@ async def fraction_accept(m: MessageEvent):
     await db.Form.update.values(fraction_id=fraction_id).where(
         and_(db.Form.user_id == m.user_id, db.Form.is_request.is_(True))
     ).gino.status()
+    await db.change_reputation(m.user_id, fraction_id, 0)
     creating_form = await db.select([db.User.creating_form]).where(db.User.user_id == m.user_id).gino.scalar()
     if creating_form:
         await db.User.update.values(state=Registration.PHOTO).where(db.User.user_id == m.user_id).gino.status()
@@ -314,7 +315,6 @@ async def set_character(m: Message):
     await db.Form.update.values(photo=photo).where(
         and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))
     ).gino.status()
-    form, photo = await loads_form(m.from_id, True)
     admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
     admins = list(set(admins).union(ADMINS))
     creating_form = await db.select([db.User.creating_form]).where(db.User.user_id == m.from_id).gino.scalar()
@@ -323,7 +323,9 @@ async def set_character(m: Message):
         await db.User.update.values(creating_form=False).where(db.User.user_id == m.from_id).gino.scalar()
         await m.answer(messages.form_ready, keyboard=Keyboard())
         form_id = await db.select([db.Form.id]).where(db.Form.user_id == m.from_id).gino.scalar()
-        await bot.api.messages.send(admins, form, photo, keyboard=keyboards.create_accept_form(form_id))
+        for admin in admins:
+            form, photo = await loads_form(m.from_id, admin, True)
+            await bot.api.messages.send(admin, form, photo, keyboard=keyboards.create_accept_form(form_id))
     else:
         await m.answer("Новое значение установлено")
         await show_fields_edit(m.from_id, new=False)

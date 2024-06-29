@@ -177,7 +177,6 @@ async def select_ready_quest(m: Message):
     name = await db.select([db.Form.name]).where(db.Form.id == form_id).gino.scalar()
     quest = await db.select([*db.Quest]).where(db.Quest.id == quest_id).gino.first()
     request = await db.ReadyQuest.create(quest_id=quest.id, form_id=form_id)
-    await db.Form.update.values(active_quest=None).where(db.Form.id == form_id).gino.status()
     keyboard = Keyboard(inline=True).add(
         Callback("Выдать награду", {"quest_ready": True, "request_id": request.id}),
         KeyboardButtonColor.PRIMARY

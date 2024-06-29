@@ -2,12 +2,11 @@ import asyncio
 import datetime
 import shutil
 
-from vkbottle import GroupEventType, Keyboard
 from vkbottle.bot import MessageEvent, Message
 from vkbottle.dispatch.rules.base import PayloadMapRule, PayloadRule
 from sqlalchemy import and_
 import openpyxl
-from vkbottle import DocMessagesUploader
+from vkbottle import DocMessagesUploader, Callback, KeyboardButtonColor, Keyboard, GroupEventType
 
 from loader import bot
 from service.db_engine import db
@@ -16,7 +15,7 @@ from service import keyboards
 from service.states import Menu, Admin
 from service.middleware import states
 from service.custom_rules import StateRule, NumericRule, AdminRule
-from service.utils import take_off_payments, parse_cooldown
+from service.utils import take_off_payments, parse_cooldown, parse_reputation, create_mention
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_accept": int}), AdminRule())
@@ -200,13 +199,18 @@ async def verify_quest(m: MessageEvent):
     form_id, quest_id = await db.select([db.ReadyQuest.form_id, db.ReadyQuest.quest_id]).where(db.ReadyQuest.id == request_id).gino.first()
     form_name, user_id = await db.select([db.Form.name, db.Form.user_id]).where(db.Form.id == form_id).gino.first()
     if m.payload['quest_ready']:
-        reward, name = await db.select([db.Quest.reward, db.Quest.name]).where(db.Quest.id == quest_id).gino.first()
-        await db.Form.update.values(balance=db.Form.balance + reward).gino.status()
+        reward, name, fraction_id, reputation = await db.select(
+            [db.Quest.reward, db.Quest.name, db.Quest.fraction_id, db.Quest.reputation]).where(
+            db.Quest.id == quest_id).gino.first()
+        await db.Form.update.values(balance=db.Form.balance + reward, active_quest=None).gino.status()
         await bot.api.messages.send(m.user_id, f"Вы получили награду {reward} монет за выполнение квеста «{name}»",
                                     is_notification=True)
+        if fraction_id:
+            await db.change_reputation(user_id, fraction_id, reputation)
         await m.edit_message(f"Квест «{name}» засчитан игроку [id{user_id}|{form_name}]")
     else:
         await db.ReadyQuest.delete.where(db.ReadyQuest.id == request_id).gino.status()
+        await db.Form.update.values(active_quest=None).where(db.Form.user_id == user_id).gino.status()
         name = await db.select([db.Quest.name]).where(db.Quest.id == quest_id).gino.scalar()
         await bot.api.messages.send(m.user_id, f"К сожалению, администрация отменила вам прохождение квеста «{name}»",
                                     is_notification=True)
@@ -333,3 +337,145 @@ async def delete_form(m: MessageEvent):
     user_name = f"{user.first_name} {user.last_name}"
     await db.Form.delete.where(db.Form.id == m.payload['form_delete']).gino.status()
     await m.edit_message(f"Анкета [id{user_id}|{name} / {user_name}] была удалена")
+
+
+@bot.on.private_message(PayloadMapRule({"form_reputation": int}), StateRule(Menu.SHOW_FORM), AdminRule())
+async def form_reputation_all(m: Message):
+    if m.payload:
+        user_id = m.payload['form_reputation']
+    else:
+        user_id = int(states.get(m.from_id).split("*")[1])
+        states.set(user_id, Menu.SHOW_FORM)
+    reputations = await db.get_reputations(user_id)
+    mention = await create_mention(user_id)
+    reply = f"Список репутаций {mention}:\n\n"
+    for fraction_id, reputation in reputations:
+        fraction_name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+        reputation_level = parse_reputation(reputation)
+        reply += f"{fraction_name}: {reputation_level}\n"
+    keyboard = Keyboard(inline=True).add(
+        Callback("Добавить", {"reputation_add": user_id}), KeyboardButtonColor.POSITIVE
+    ).add(
+        Callback("Редактировать", {"reputation_edit": user_id}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Callback("Удалить", {"reputation_delete": user_id}), KeyboardButtonColor.NEGATIVE
+    )
+    await m.answer(reply, keyboard=keyboard)
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"reputation_add": int}), StateRule(Menu.SHOW_FORM), AdminRule())
+async def select_add_reputation(m: MessageEvent):
+    user_id = m.payload['reputation_add']
+    fractions_all = {x[0] for x in await db.select([db.Fraction.id]).gino.all()}
+    fractions_user = {x[0] for x in await db.select([db.UserToFraction.fraction_id]).where(db.UserToFraction.user_id == user_id).gino.all()}
+    fractions_empty = list(fractions_all - fractions_user)
+    if not fractions_empty:
+        await m.show_snackbar("Сейчас нет доступных фракций")
+        return
+    fractions = [x[0] for x in await db.select([db.Fraction.name]).where(db.Fraction.id.in_(fractions_empty)).order_by(db.Fraction.id.asc()).gino.all()]
+    reply = f"Укажите номер какой фракции добавить к репутации {await create_mention(user_id)}:\n\n"
+    for i, name in enumerate(fractions):
+        reply += f"{i + 1}. {name}\n"
+    await db.User.update.values(state=f"{Admin.ADDING_REPUTATION}*{user_id}").where(db.User.user_id == m.user_id).gino.status()
+    await m.edit_message(reply)
+
+
+@bot.on.private_message(StateRule(Admin.ADDING_REPUTATION), NumericRule(), AdminRule())
+async def add_reputation(m: Message):
+    user_id = int(states.get(m.from_id).split("*")[1])
+    fractions_all = {x[0] for x in await db.select([db.Fraction.id]).gino.all()}
+    fractions_user = {x[0] for x in await db.select([db.UserToFraction.fraction_id]).where(
+        db.UserToFraction.user_id == user_id).gino.all()}
+    fractions_empty = list(fractions_all - fractions_user)
+    if int(m.text) > len(fractions_empty):
+        await m.answer("Номер фракции слишком большой")
+        return
+    fractions = [x[0] for x in await db.select([db.Fraction.id]).where(db.Fraction.id.in_(fractions_empty)).order_by(
+        db.Fraction.id.asc()).gino.all()]
+    fraction_id = fractions[int(m.text) - 1]
+    await db.change_reputation(user_id, fraction_id, 0)
+    name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+    await m.answer(f"Фракция {name} успешно добавлена к {await create_mention(user_id)}")
+    await form_reputation_all(m)
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"reputation_edit": int}), StateRule(Menu.SHOW_FORM), AdminRule())
+async def select_fraction_to_edit_rep(m: MessageEvent):
+    user_id = m.payload['reputation_edit']
+    fractions = await db.select([db.UserToFraction.fraction_id, db.UserToFraction.reputation]).where(db.UserToFraction.user_id == user_id).order_by(db.UserToFraction.reputation.desc()).gino.all()
+    reply = "Выберите номер фракции для редактирования:\n\n"
+    for i, data in enumerate(fractions):
+        fraction_id, reputation = data
+        name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+        reply += f"{i + 1}. {name} ({reputation})\n"
+    await db.User.update.values(state=f"{Admin.SELECT_USER_FRACTION}*{user_id}").where(db.User.user_id == m.user_id).gino.status()
+    await m.edit_message(reply)
+
+
+@bot.on.private_message(StateRule(Admin.SELECT_USER_FRACTION), AdminRule())
+async def set_new_reputation(m: Message):
+    user_id = int(states.get(m.from_id).split("*")[1])
+    fractions = await db.select([db.UserToFraction.fraction_id]).where(db.UserToFraction.user_id == user_id).order_by(db.UserToFraction.reputation.desc()).gino.all()
+    if int(m.text) > len(fractions):
+        await m.answer("Номер фракции слишком большой")
+        return
+    fraction_id = fractions[int(m.text) - 1][0]
+    states.set(m.from_id, f"{Admin.SET_NEW_REPUTATION}*{user_id}*{fraction_id}")
+    name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+    await m.answer(f"Пришлите новый уровень репутации во фракции {name} пользователя {await create_mention(user_id)} от -100 до 100")
+
+
+@bot.on.private_message(StateRule(Admin.SET_NEW_REPUTATION), AdminRule())
+async def new_reputation(m: Message):
+    try:
+        int(m.text)
+    except ValueError:
+        await m.answer("Необходимо ввести число от -100 до 100")
+        return
+    if not -100 <= int(m.text) <= 100:
+        await m.answer("Репутация должна находится в интервале от -100 до 100")
+        return
+    user_id = int(states.get(m.from_id).split("*")[1])
+    fraction_id = int(states.get(m.from_id).split("*")[2])
+    name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+    await db.UserToFraction.update.values(reputation=int(m.text)).where(
+        and_(db.UserToFraction.fraction_id == fraction_id, db.UserToFraction.user_id == user_id)
+    ).gino.status()
+    await m.answer(f"Установлена репутация {m.text} во фракции {name} пользователю {await create_mention(user_id)}")
+    await form_reputation_all(m)
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"reputation_delete": int}), StateRule(Menu.SHOW_FORM), AdminRule())
+async def select_reputation_delete(m: MessageEvent):
+    user_id = int(m.payload['reputation_delete'])
+    fractions_user = await db.select([db.UserToFraction.fraction_id, db.UserToFraction.reputation]).where(db.UserToFraction.user_id == user_id).order_by(db.UserToFraction.reputation).gino.all()
+    reply = f"Выберите фракцию для удаления репутации у пользователя {await create_mention(user_id)}\n\n"
+    for i, data in enumerate(fractions_user):
+        fraction_id, reputation = data
+        name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+        reply += f"{i + 1}. {name} ({reputation})\n"
+    await db.User.update.values(state=f"{Admin.DELETE_USER_REPUTATION}*{user_id}").where(db.User.user_id == m.user_id).gino.status()
+    await m.edit_message(reply)
+
+
+@bot.on.private_message(StateRule(Admin.DELETE_USER_REPUTATION), NumericRule(), AdminRule())
+async def delete_reputation(m: Message, value: int):
+    user_id = int(states.get(m.from_id).split("*")[1])
+    fractions_user = [x[0] for x in await db.select([db.UserToFraction.fraction_id]).where(db.UserToFraction.user_id == user_id).order_by(db.UserToFraction.reputation).gino.all()]
+    if value > len(fractions_user):
+        await m.answer("Номер фракции слишком большой")
+        return
+    fraction_id = fractions_user[value - 1]
+
+    fraction_joined = await db.select([db.Form.fraction_id]).where(db.Form.user_id == user_id).gino.scalar()
+    if fraction_joined == fraction_id:
+        await m.answer("Нельзя удалить репутацию во фракции которой человек состоит. "
+                       "Переведите сначала его во фракцию «Без фракции»")
+        return
+
+    await db.UserToFraction.delete.where(
+        and_(db.UserToFraction.fraction_id == fraction_id, db.UserToFraction.user_id == user_id)
+    ).gino.status()
+    name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+    await m.answer(f"Репутация во фракции {name} удалена у пользователя {await create_mention(user_id)}")
+    await form_reputation_all(m)
