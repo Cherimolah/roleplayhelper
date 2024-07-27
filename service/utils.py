@@ -687,7 +687,7 @@ async def check_last_activity(user_id: int):
     freeze = await db.select([db.Form.freeze]).where(db.Form.user_id == user_id).gino.scalar()
     if (datetime.datetime.now() - last_activity).total_seconds() >= time_to_freeze and not freeze:
         await db.Form.update.values(freeze=True).where(db.Form.user_id == user_id).gino.status()
-        await bot.api.messages.send(message="❗ В связи с отсутствие вашей активности в течении "
+        await bot.api.messages.send(message="❗ В связи с отсутствием вашей активности в течении "
                                             f"{parse_cooldown(time_to_freeze)} ваша анкета автоматически заморожена",
                                     peer_id=user_id,  is_notification=True)
         name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
