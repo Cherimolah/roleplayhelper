@@ -58,3 +58,5 @@ logger.remove()
 logger.add(sys.stderr, level="INFO")
 
 users: List[API] = [API(x) for x in USER_TOKENS]
+for user in users:
+    user.API_VERSION = '5.134'

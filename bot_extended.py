@@ -10,13 +10,12 @@ from vkbottle_types.methods import messages
 from vkbottle.api.api import API, ABCAPI
 from vkbottle_types.responses.messages import MessagesSendUserIdsResponseItem
 from vkbottle_types.responses.users import UsersUserFull
-from vkbottle_types.responses.base import BaseBoolInt
 from vkbottle import VKAPIError, Keyboard
 from vkbottle.dispatch.views.bot import RawBotEventView, BotHandlerBasement, ABCBotMessageView, BotMessageView
-from vkbottle_types.events import BaseGroupEvent
-from vkbottle.tools.dev.mini_types.bot.message_event import MessageEventMin
-from vkbottle.tools.dev.mini_types.bot import MessageMin
-from vkbottle.tools.dev.mini_types.bot import message_min
+from vkbottle_types.events.bot_events import BaseGroupEvent
+from vkbottle.tools.mini_types.bot.message_event import MessageEventMin
+from vkbottle.tools.mini_types.bot import MessageMin
+from vkbottle.tools.mini_types.bot import message_min
 from vkbottle.dispatch.base import Router
 from vkbottle.modules import logger
 from vkbottle.exception_factory.error_handler.error_handler import ErrorHandler
@@ -26,9 +25,6 @@ from sqlalchemy import and_
 from aiohttp import ClientSession, ClientResponse, TCPConnector
 
 from service.db_engine import db
-
-
-connector = TCPConnector(ssl=False)
 
 
 class MessagesCategoryExtended(MessagesCategory):
@@ -137,7 +133,7 @@ class MessagesCategoryExtended(MessagesCategory):
             template: typing.Optional[str] = None,
             keyboard: typing.Optional[str] = None,
             **kwargs
-    ) -> BaseBoolInt:
+    ) -> bool:
         """Кастомная настройка обходит ошибку устаревшего сообщения"""
         try:
             if isinstance(keyboard, Keyboard):
@@ -177,12 +173,11 @@ class UsersCategoryExtended(UsersCategory, ABC):
             ] = None,
             **kwargs
     ) -> typing.List[UsersUserFull]:
-        """Кастомная настройка обходит лимит в 1000 пользователей"""
         if isinstance(user_ids, list):
-            responses = [await super(UsersCategoryExtended, self).get(user_ids[i:i + 1000], fields, name_case, **kwargs)
+            responses = [await super(UsersCategoryExtended, self).get(user_ids=user_ids[i:i + 1000], fields=fields, name_case=name_case, **kwargs)
                          for i in range(0, len(user_ids), 1000)]
             return [y for x in responses for y in x]
-        return await super(UsersCategoryExtended, self).get(user_ids, fields, name_case, **kwargs)
+        return await super(UsersCategoryExtended, self).get(user_ids=user_ids, fields=fields, name_case=name_case, **kwargs)
 
 
 class APICategoriesExtended(APICategories, ABC):
@@ -205,6 +200,7 @@ class AioHTTPClientExtended(AiohttpClient, ABC):
         **kwargs,
     ) -> "ClientResponse":
         if not self.session:
+            connector = TCPConnector(ssl=False)
             self.session = ClientSession(
                 json_serialize=self.json_processing_module.dumps,
                 connector=connector,
