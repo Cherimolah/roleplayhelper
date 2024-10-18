@@ -243,7 +243,7 @@ class Database(Gino):
         self.UserToFraction = UserToFraction
 
     async def connect(self):
-        await self.set_bind(f"postgresql+asyncpg://{USER}:{PASSWORD}@{HOST}/{DATABASE}")
+        await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")
         await self.gino.create_all()
         await self.first_load()
 
