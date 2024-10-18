@@ -73,7 +73,7 @@ class Database(Gino):
             is_request = Column(Boolean, server_default='True')
             balance = Column(BigInteger, server_default='1000')
             freeze = Column(Boolean, server_default='False')
-            last_payment = Column(TIMESTAMP, server_defaultdefault=func.now())
+            last_payment = Column(TIMESTAMP, server_default=func.now())
             status = Column(Integer, ForeignKey("statuses.id", ondelete='SET NULL'), server_default='1')
             active_quest = Column(Integer, ForeignKey("quests.id", ondelete='SET NULL'))
             activated_daylic = Column(Integer, ForeignKey("daylics.id", ondelete='SET NULL'))
