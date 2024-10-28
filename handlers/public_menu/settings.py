@@ -75,9 +75,7 @@ async def freeze_request_send_accepted(m: Message):
         reply = f"Игрок [id{m.from_id}|{name}] хочет заморозить свою анкету по причине:\n{m.text}"
     else:
         reply = f"Игрок [id{m.from_id}|{name}] хочет разморозить свою анкету"
-    await bot.api.messages.send(admins,
-                                reply,
-                                keyboard=kb)
+    await bot.api.messages.send(peer_ids=admins, message=reply, keyboard=kb)
     await m.answer(f"Запрос на {'разморозку' if freeze else 'заморозку'} страницы отправлен")
     states.set(m.from_id, Menu.MAIN)
     await m.answer("Главное меню", keyboard=await main_menu(m.from_id))
@@ -109,8 +107,8 @@ async def send_delete_request(m: Message):
         Callback("Отклонить", {"delete": "decline", "user_id": m.from_id}), KeyboardButtonColor.NEGATIVE
     )
     await db.Form.update.values(delete_request=True).where(db.Form.id == form_id).gino.status()
-    await bot.api.messages.send(admins,
-                                f"Игрок [id{m.from_id}|{name}] хочет удалить свою анкету",
+    await bot.api.messages.send(peer_ids=admins,
+                                message=f"Игрок [id{m.from_id}|{name}] хочет удалить свою анкету",
                                 keyboard=kb)
     await m.answer("Запрос на удаление страницы отправлен")
     await settings(m)

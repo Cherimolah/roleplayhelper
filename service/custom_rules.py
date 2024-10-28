@@ -1,5 +1,6 @@
 from abc import ABC
-from typing import Union
+from typing import Union, Optional
+import re
 
 from vkbottle.dispatch.rules import ABCRule
 from vkbottle.bot import Message, MessageEvent
@@ -39,10 +40,18 @@ class StateRule(ABCRule[Message], ABC):
 
 class NumericRule(ABCRule[Message], ABC):
 
+    def __init__(self, min_number: Optional[int] = 1, max_number: Optional[int] = None):
+        self.min_number = min_number
+        if max_number is None:
+            self.max_number = float('inf')
+        else:
+            self.max_number = max_number
+
     async def check(self, event: Message):
-        if event.text.isdigit() and int(event.text) > 0:
+        if event.text.isdigit() and self.min_number <= int(event.text) <= self.max_number:
             return {"value": int(event.text)}
-        await event.answer("Необходимо ввести целое число больше 0")
+        await event.answer(f"Необходимо ввести целое число от {self.min_number} до "
+                           f"{self.max_number if self.max_number != float('inf') else 'бесконечности'}")
 
 
 class LimitSymbols(ABCRule[Message], ABC):

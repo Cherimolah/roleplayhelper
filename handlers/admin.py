@@ -143,10 +143,10 @@ async def reason_decline_form(m: Message):
     if not main_form:
         keyboard = keyboards.fill_quiz
         await db.User.update.values(state=None).where(db.User.user_id == user_id).gino.status()
-        await bot.api.messages.send(user_id, f"{messages.form_decline}\n\n{m.text}", keyboard=keyboard,
+        await bot.api.messages.send(peer_id=user_id, message=f"{messages.form_decline}\n\n{m.text}", keyboard=keyboard,
                                     is_notification=True)
     else:
-        await bot.api.messages.send(user_id, "Заявка на редактирование анкеты была отклонена", is_notification=True)
+        await bot.api.messages.send(peer_id=user_id, message="Заявка на редактирование анкеты была отклонена", is_notification=True)
     user = (await bot.api.users.get(user_id))[0]
     states.set(m.from_id, Menu.MAIN)
     await m.answer(f"Анкета пользователя [id{user_id}|{user.first_name} {user.last_name}] отклонена",
@@ -203,7 +203,7 @@ async def verify_quest(m: MessageEvent):
             [db.Quest.reward, db.Quest.name, db.Quest.fraction_id, db.Quest.reputation]).where(
             db.Quest.id == quest_id).gino.first()
         await db.Form.update.values(balance=db.Form.balance + reward, active_quest=None).gino.status()
-        await bot.api.messages.send(m.user_id, f"Вы получили награду {reward} монет за выполнение квеста «{name}»",
+        await bot.api.messages.send(peer_id=m.user_id, message=f"Вы получили награду {reward} монет за выполнение квеста «{name}»",
                                     is_notification=True)
         if fraction_id:
             await db.change_reputation(user_id, fraction_id, reputation)
@@ -212,7 +212,7 @@ async def verify_quest(m: MessageEvent):
         await db.ReadyQuest.delete.where(db.ReadyQuest.id == request_id).gino.status()
         await db.Form.update.values(active_quest=None).where(db.Form.user_id == user_id).gino.status()
         name = await db.select([db.Quest.name]).where(db.Quest.id == quest_id).gino.scalar()
-        await bot.api.messages.send(m.user_id, f"К сожалению, администрация отменила вам прохождение квеста «{name}»",
+        await bot.api.messages.send(peer_id=m.user_id, message=f"К сожалению, администрация отменила вам прохождение квеста «{name}»",
                                     is_notification=True)
         await m.edit_message(f"Квест «{name}» не засчитан игроку [id{user_id}|{form_name}]")
 
@@ -234,7 +234,7 @@ async def accept_salary_request(m: MessageEvent):
         and_(db.Form.user_id == user_id)
     ).gino.status()
     await m.edit_message(f"Зарплата выплачена участнику [id{user_id}|{name}]")
-    await bot.api.messages.send(user_id, messages.salary_accepted.format(salary), is_notification=True)
+    await bot.api.messages.send(peer_id=user_id, message=messages.salary_accepted.format(salary), is_notification=True)
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"salary_decline": int}), AdminRule())
@@ -248,7 +248,7 @@ async def decline_salary_request(m: MessageEvent):
     await db.SalaryRequests.delete.where(db.SalaryRequests.id == salary_id).gino.status()
     name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
     await m.edit_message(f"Зарплата отклонена участнику [id{user_id}|{name}]")
-    await bot.api.messages.send(user_id, messages.salary_decline, is_notification=True)
+    await bot.api.messages.send(peer_id=user_id, message=messages.salary_decline, is_notification=True)
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"daylic_confirm": int}), AdminRule())
@@ -267,7 +267,7 @@ async def confirm_daylic(m: MessageEvent):
            .where(db.Form.id == form_id).gino.status())
     await db.CompletedDaylic.delete.where(db.CompletedDaylic.id == response_id).gino.status()
     name, user_id = await db.select([db.Form.name, db.Form.user_id]).where(db.Form.id == form_id).gino.first()
-    await bot.api.messages.send(user_id, f"Вам засчитано выполнения дейлика {daylic_name}\n"
+    await bot.api.messages.send(peer_id=user_id, message=f"Вам засчитано выполнения дейлика {daylic_name}\n"
                                  f"Вы получили награду в размере {reward} монет\n"
                                  f"На вас наложен кулдаун {parse_cooldown(cooldown)}", is_notification=True)
     await m.edit_message(f"Дейлик {daylic_name} засчитан игроку [id{user_id}|{name}], выдана награда {reward} монет")
@@ -285,7 +285,7 @@ async def reject_daylic(m: MessageEvent):
     daylic_name = await db.select([db.Daylic.name]).where(db.Daylic.id == daylic_id).gino.scalar()
     user_id, name = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.id == form_id).gino.first()
     await db.CompletedDaylic.delete.where(db.CompletedDaylic.id == response_id).gino.status()
-    await bot.api.messages.send(user_id, f"К сожалению вам отклонили выполнение дейлика {daylic_name}", is_notification=True)
+    await bot.api.messages.send(peer_id=user_id, message=f"К сожалению вам отклонили выполнение дейлика {daylic_name}", is_notification=True)
     await m.edit_message(f"Отклонено выполнение дейлика {daylic_name} участнику [id{user_id}|{name}]")
 
 
@@ -298,14 +298,14 @@ async def accept_freeze(m: MessageEvent):
     name, freeze = await db.select([db.Form.name, db.Form.freeze]).where(db.Form.user_id == m.payload['user_id']).gino.first()
     if m.payload['freeze'] == "accept":
         await db.Form.update.values(freeze_request=False, freeze=not freeze).where(db.Form.user_id == m.payload['user_id']).gino.status()
-        await bot.api.messages.send(m.payload['user_id'],
-                                    f"Ваша анкета была {'разморожена' if freeze else 'заморожена'}",
+        await bot.api.messages.send(peer_id=m.payload['user_id'],
+                                    message=f"Ваша анкета была {'разморожена' if freeze else 'заморожена'}",
                                     is_notification=True)
         await m.edit_message(f"Анкета [id{m.payload['user_id']}|{name}] была заморожена")
     else:
         await db.Form.update.values(freeze_request=False).where(db.Form.user_id == m.payload['user_id']).gino.status()
-        await bot.api.messages.send(m.payload['user_id'],
-                                    f"Ваш запрос на {'разморозку' if freeze else 'заморозку'} был отклонён",
+        await bot.api.messages.send(peer_id=m.payload['user_id'],
+                                    message=f"Ваш запрос на {'разморозку' if freeze else 'заморозку'} был отклонён",
                                     is_notification=True)
         await m.edit_message(f"Запрос на {'разморозку' if freeze else 'заморозку'} "
                              f"анкеты [id{m.payload['user_id']}|{name}] отклонён")
@@ -320,13 +320,13 @@ async def accept_delete(m: MessageEvent):
     name = await db.select([db.Form.name]).where(db.Form.user_id == m.payload['user_id']).gino.scalar()
     if m.payload['delete'] == "accept":
         await db.User.delete.where(db.User.user_id == m.payload['user_id']).gino.status()
-        await bot.api.messages.send(m.payload['user_id'],
-                                    f"Ваша анкета в боте была удалена! Приятно было с вами общаться, "
+        await bot.api.messages.send(peer_id=m.payload['user_id'],
+                                    message=f"Ваша анкета в боте была удалена! Приятно было с вами общаться, "
                                     f"если захотите вернуться напишите «Начать»", keyboard=Keyboard())
         await m.edit_message(f"Анкета [id{m.payload['user_id']}|{name}] была удалена!")
     else:
         await db.Form.update.values(delete_request=False).where(db.Form.user_id == m.payload['user_id']).gino.status()
-        await bot.api.messages.send(m.payload['user_id'], "Ваша запрос на удаление анкеты был отклонён", is_notification=True)
+        await bot.api.messages.send(peer_id=m.payload['user_id'], message="Ваша запрос на удаление анкеты был отклонён", is_notification=True)
         await m.edit_message(f"Запрос на удаление анкеты [id{m.payload['user_id']}|{name}] отклонён")
 
 

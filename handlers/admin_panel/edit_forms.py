@@ -126,6 +126,24 @@ async def enter_field_value(m: Message):
         value = int(m.text)
         fraction_id = await db.select([db.Fraction.id]).order_by(db.Fraction.id.asc()).offset(value - 1).gino.scalar()
         await db.Form.update.values(fraction_id=fraction_id).where(db.Form.id == form_id).gino.status()
+    elif field == 'edit_level_subordination':
+        if not m.text.isdigit():
+            await m.answer("Необходимо указать число от 0 до 100")
+            return
+        value = int(m.text)
+        if not 0 <= value <= 100:
+            await m.answer("Число не входит в промежуток от 0 до 100")
+            return
+        await db.Form.update.values(subordination_level=value).where(db.Form.id == form_id).gino.status()
+    elif field == 'edit_level_libido':
+        if not m.text.isdigit():
+            await m.answer("Необходимо указать число от 0 до 100")
+            return
+        value = int(m.text)
+        if not 0 <= value <= 100:
+            await m.answer("Число не входит в промежуток от 0 до 100")
+            return
+        await db.Form.update.values(libido_level=value).where(db.Form.id == form_id).gino.status()
     else:
         if m.text.isdigit():
             value = int(m.text)

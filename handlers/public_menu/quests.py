@@ -184,7 +184,7 @@ async def select_ready_quest(m: Message):
         Callback("Отклонить", {"quest_ready": False, "request_id": request.id}),
         KeyboardButtonColor.NEGATIVE
     )
-    await bot.api.messages.send(ADMINS + [OWNER], f"[id{m.from_id}|{name}] выполнил квест {quest.name}",
+    await bot.api.messages.send(peer_ids=ADMINS + [OWNER], message=f"[id{m.from_id}|{name}] выполнил квест {quest.name}",
                         keyboard=keyboard)
     states.set(m.from_id, Menu.MAIN)
     await m.answer("Поздравляем с завершением квеста. Ваш запрос отправлен администрации, после "

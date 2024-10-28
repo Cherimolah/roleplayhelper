@@ -59,7 +59,7 @@ async def send_ready_daylic(m: Message):
     ).add(
         Callback("Отклонить", {"daylic_reject": response.id}), KeyboardButtonColor.NEGATIVE
     )
-    await bot.api.messages.send(ADMINS + [OWNER], f"Отчёт игрока [id{m.from_id}|{name}] о выполненном дейлике {daylic_name}\n"
+    await bot.api.messages.send(peer_ids=ADMINS + [OWNER], message=f"Отчёт игрока [id{m.from_id}|{name}] о выполненном дейлике {daylic_name}\n"
                                           f"Награда: {reward}", keyboard=keyboard)
     await m.answer(f"Ваш отчёт о выполнении {daylic_name} отправлен администрации")
 

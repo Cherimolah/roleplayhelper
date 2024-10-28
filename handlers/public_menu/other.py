@@ -56,7 +56,7 @@ async def save_petition(m: Message):
     name = await db.select([db.Form.name]).where(db.Form.user_id == m.from_id).gino.scalar()
     admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
     day = datetime.now(timezone(timedelta(hours=3))).strftime("%d.%m.%Y %H:%M:%S")
-    await bot.api.messages.send(admins, messages.petition_new.format(f"[id{m.from_id}|{name}]", m.text, day), attachment_str)
+    await bot.api.messages.send(peer_ids=admins, message=messages.petition_new.format(f"[id{m.from_id}|{name}]", m.text, day), attachment=attachment_str)
     states.set(m.from_id, Menu.MAIN)
     await m.answer(messages.petition_send, keyboard=await keyboards.main_menu(m.from_id))
 

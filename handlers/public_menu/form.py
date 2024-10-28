@@ -81,7 +81,7 @@ async def confirm_edit_fields(m: Message):
     form_id = await db.select([db.Form.id]).where(and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))).gino.scalar()
     form, photo = await loads_form(m.from_id, m.from_id, True)
     admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
-    await bot.api.messages.send(admins, form, photo, keyboard=keyboards.create_accept_form(form_id))
+    await bot.api.messages.send(peer_ids=admins, message=form, attachment=photo, keyboard=keyboards.create_accept_form(form_id))
     states.set(m.from_id, Menu.MAIN)
     await db.User.update.values(editing_form=False).where(db.User.user_id == m.from_id).gino.scalar()
     await m.answer("Новая версия анкеты успешно отправлена на проверку")

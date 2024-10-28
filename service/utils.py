@@ -17,7 +17,7 @@ from bot_extended import AioHTTPClientExtended
 import service.states
 from service.states import Admin
 import service.keyboards as keyboards
-from config import DATETIME_FORMAT
+from config import DATETIME_FORMAT, OWNER
 
 mention_regex = re.compile(r"\[(?P<type>id|club|public)(?P<id>\d*)\|(?P<text>.+)\]")
 link_regex = re.compile(r"https:/(?P<type>/|/m.)vk.com/(?P<screen_name>\w*)")
@@ -61,6 +61,7 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
     else:
         fraction = None
     rep_fraction, reputation = await get_reputation(from_user_id, user_id)
+    status = await db.select([db.Status.name]).where(db.Status.id == form.status).gino.scalar()
     reply = f"Анкета пользователя [id{user_id}|{user.first_name} {user.last_name}]:\n\n" \
             f"Имя персонажа: {form.name}\n" \
             f"Должность: {profession or 'не установлена'}\n" \
@@ -77,9 +78,25 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
             f"Каюта: {form.cabin or 'не присвоена'}\n" \
             f"Тип каюты: {await db.select([db.Cabins.name]).where(db.Cabins.id == form.cabin_type).gino.scalar() or 'не указан'}\n" \
             f"Баланс: {form.balance}\n" \
-            f"Статус: {await db.select([db.Status.name]).where(db.Status.id == form.status).gino.scalar()}\n" \
+            f"Статус: {status}\n" \
             f"Фракция: {fraction or 'не установлена'}\n" \
             f"Репутация: {reputation} ({rep_fraction})"
+    if form.status == 2:
+        subordination, libido = await db.select([db.Form.subordination_level, db.Form.libido_level]).where(
+            db.Form.id == form.id
+        ).gino.first()
+        if 1 <= subordination <= 33:
+            reply += '\nУровень подчинения: Низкий'
+        elif 34 <= subordination <= 66:
+            reply += '\nУровень подчинения: Средний'
+        elif 67 <= subordination <= 100:
+            reply += '\nУровень подчинения: Высокий'
+        if 1 <= libido <= 33:
+            reply += '\nУровень либидо: Низкий'
+        elif 34 <= libido <= 66:
+            reply += '\nУровень либидо: Средний'
+        elif 67 <= libido <= 100:
+            reply += '\nУровень либидо: Высокий'
     return reply, form.photo
 
 
@@ -136,7 +153,7 @@ async def reload_image(attachment, name: str, delete: bool = False):
         os.mkdir("/".join(name.split("/")[:-1]))
     async with aiofiles.open(name, mode="wb") as file:
         await file.write(response)
-    photo = await photo_message_uploader.upload(name)
+    photo = await photo_message_uploader.upload(name, peer_id=OWNER)
     if delete:
         os.remove(name)
     return photo
@@ -177,7 +194,7 @@ async def take_off_payments(form_id: int):
                 ).gino.status()
                 group_id = (await bot.api.groups.get_by_id())[0].id
                 if (await bot.api.messages.is_messages_from_group_allowed(group_id, user_id=user_id)).is_allowed:
-                    await bot.api.messages.send(user_id, f"Снята арендная плата в размере {price}\n"
+                    await bot.api.messages.send(peer_id=user_id, message=f"Снята арендная плата в размере {price}\n"
                                                  f"Доступно на балансе: {balance-price}", is_notification=True)
                 await asyncio.sleep(604800)  # Следующее списание через неделю
             else:
@@ -292,7 +309,7 @@ async def quest_over(seconds, form_id, quest_id):
     if current_quest == quest_id:
         name = await db.select([db.Quest.name]).where(db.Quest.id == current_quest).gino.scalar()
         await db.Form.update.values(active_quest=None).where(db.Form.id == form_id).gino.status()
-        await bot.api.messages.send(user_id, f"Время выполнения квеста «{name}» завершилось", is_notification=True)
+        await bot.api.messages.send(peer_id=user_id, message=f"Время выполнения квеста «{name}» завершилось", is_notification=True)
 
 
 async def send_daylics():
@@ -308,7 +325,7 @@ async def send_daylics():
             daylic = await db.select([db.Daylic.id]).where(db.Daylic.profession_id == profession_id).order_by(func.random()).gino.scalar()
             if daylic:
                 await db.Form.update.values(activated_daylic=daylic).where(db.Form.id == form_id).gino.status()
-                await bot.api.messages.send(user_id, "Вам доступно новое ежедневное задание!", is_notification=True)
+                await bot.api.messages.send(peer_id=user_id, message="Вам доступно новое ежедневное задание!", is_notification=True)
         await asyncio.sleep(5)
 
 
@@ -716,3 +733,17 @@ async def check_last_activity(user_id: int):
             await bot.api.messages.send(message=f"❗ Анкета [id{user_id}|{name} / {user.first_name} {user.last_name}] "
                                                 f"была автоматически удалена",
                                         peer_ids=admins)
+
+
+async def update_daughter_levels(user_id: int):
+    while True:
+        now = datetime.datetime.now()
+        tomorrow = now + datetime.timedelta(days=1)
+        tomorrow = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0)
+        await asyncio.sleep((tomorrow - now).total_seconds())
+        bonus, sub_level, lib_level, fraction_id = await db.select([db.Form.daughter_bonus, db.Form.subordination_level, db.Form.libido_level, db.Form.fraction_id]).where(db.Form.user_id == user_id).gino.first()
+        multiplier = await db.select([db.Fraction.daughter_multiplier]).where(db.Fraction.id == fraction_id).gino.scalar()
+        sub_level = min(100, max(0, int(sub_level + 2 + 2 * multiplier + bonus)))
+        lib_level = min(100, max(0, int(lib_level + 2 + 2 * multiplier + bonus)))
+        await db.Form.update.values(subordination_level=sub_level, libido_level=lib_level).where(db.Form.user_id == user_id).gino.status()
+        await asyncio.sleep(15)

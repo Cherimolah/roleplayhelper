@@ -44,7 +44,9 @@ fields_admin = (Field("Имя", Registration.PERSONAL_NAME), Field("Должно
                 Field("Фетиши", Registration.FETISHES), Field("Табу", Registration.TABOO),
                 Field("Визуальный портрет", Registration.PHOTO), Field("Каюта", Admin.EDIT_CABIN),
                 Field("Класс каюты", Admin.EDIT_CLASS_CABIN), Field("Заморозка", Admin.EDIT_FREEZE),
-                Field("Статус", Admin.EDIT_STATUS), Field("Фракция", Admin.EDIT_FRACTION))
+                Field("Статус", Admin.EDIT_STATUS), Field("Фракция", Admin.EDIT_FRACTION),
+                Field('Уровень подчинения', Admin.EDIT_LEVEL_SUBORDINATION),
+                Field('Уровень либидо', Admin.EDIT_LEVEL_LIBIDO))
 
 bot = Bot(api=APIExtended(BOT_TOKEN, http_client=AioHTTPClientExtended()),
           labeler=BotLabeler(raw_event_view=RawBotEventViewExtended(),

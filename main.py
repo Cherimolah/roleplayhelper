@@ -8,7 +8,7 @@ import traceback
 from loader import bot
 import handlers  # Important
 from service.db_engine import db
-from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity
+from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity, update_daughter_levels
 from config import ADMINS
 from service.middleware import MaintainenceMiddleware, StateMiddleware, FormMiddleware, ActivityUsersMiddleware
 
@@ -55,6 +55,10 @@ async def on_startup():
     user_ids = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
     for user_id in user_ids:
         asyncio.get_event_loop().create_task(check_last_activity(user_id))
+
+    daughters_ids = [x[0] for x in await db.select([db.Form.user_id]).where(db.Form.status == 2).gino.all()]
+    for user_id in daughters_ids:
+        asyncio.get_event_loop().create_task(update_daughter_levels(user_id))
 
 
 def number_error():

@@ -152,7 +152,7 @@ async def confirm_transaction(m: Message):
     name = f"[id{user_id}|{name}]"
     from_name = await db.select([db.Form.name]).where(db.Form.user_id == m.from_id).gino.scalar()
     from_name = f"[id{m.from_id}|{from_name}]"
-    await bot.api.messages.send(user_id, messages.trasaction_catch.format(name, amount, from_name), is_notification=True)
+    await bot.api.messages.send(peer_id=user_id, message=messages.trasaction_catch.format(name, amount, from_name), is_notification=True)
     states.set(m.from_id, Menu.BANK_MENU)
     await m.answer(messages.transfer_success, keyboard=keyboards.bank)
 
@@ -181,7 +181,7 @@ async def ask_salary(m: Message):
     ).add(
         Callback("Отклонить", {"salary_decline": salary.id}), KeyboardButtonColor.NEGATIVE
     )
-    await bot.api.messages.send(admins, messages.salery_request.format(name, profession, day),
+    await bot.api.messages.send(peer_ids=admins, message=messages.salery_request.format(name, profession, day),
                         keyboard=keyboard)
     await m.answer(messages.salary_request_send)
 

@@ -22,23 +22,23 @@ class Database(Gino):
             __tablename__ = "users"
 
             user_id = Column(Integer, primary_key=True)
-            admin = Column(Integer, server_default='0')
+            admin = Column(Integer, default=0)
             state = Column(Text)
-            creating_form = Column(Boolean, server_default='True')
-            editing_form = Column(Boolean, server_default='False')
-            notification_enabled = Column(Boolean, server_default='True')
-            editing_content = Column(Boolean, server_default='False')
-            last_activity = Column(TIMESTAMP, server_default=func.now())
+            creating_form = Column(Boolean, default=True)
+            editing_form = Column(Boolean, default=False)
+            notification_enabled = Column(Boolean, default=True)
+            editing_content = Column(Boolean, default=False)
+            last_activity = Column(TIMESTAMP, default=datetime.datetime.now)
 
         self.User = User
 
         class Profession(self.Model):
             __tablename__ = "professions"
 
-            id = Column(Integer, primary_key='True')
+            id = Column(Integer, primary_key=True)
             name = Column(Text, unique=True)
-            special = Column(Boolean, server_default='False')
-            salary = Column(Integer, server_default='100')
+            special = Column(Boolean, default=False)
+            salary = Column(Integer, default=100)
 
         self.Profession = Profession
 
@@ -70,18 +70,21 @@ class Database(Gino):
             photo = Column(Text)
             cabin = Column(Integer)
             cabin_type = Column(Integer, ForeignKey("cabins.id", ondelete='SET NULL'))
-            is_request = Column(Boolean, server_default='True')
-            balance = Column(BigInteger, server_default='1000')
-            freeze = Column(Boolean, server_default='False')
-            last_payment = Column(TIMESTAMP, server_default=func.now())
-            status = Column(Integer, ForeignKey("statuses.id", ondelete='SET NULL'), server_default='1')
+            is_request = Column(Boolean, default=True)
+            balance = Column(BigInteger, default=1000)
+            freeze = Column(Boolean, default=False)
+            last_payment = Column(TIMESTAMP, default=datetime.datetime.now)
+            status = Column(Integer, ForeignKey("statuses.id", ondelete='SET NULL'), default=1)
             active_quest = Column(Integer, ForeignKey("quests.id", ondelete='SET NULL'))
             activated_daylic = Column(Integer, ForeignKey("daylics.id", ondelete='SET NULL'))
-            deactivated_daylic = Column(TIMESTAMP, server_default=func.now())
-            freeze_request = Column(Boolean, server_default='False')
-            delete_request = Column(Boolean, server_default='False')
-            created_at = Column(TIMESTAMP, server_default=func.now())
+            deactivated_daylic = Column(TIMESTAMP, default=datetime.datetime.now)
+            freeze_request = Column(Boolean, default=False)
+            delete_request = Column(Boolean, default=False)
+            created_at = Column(TIMESTAMP, default=datetime.datetime.now)
             fraction_id = Column(Integer, ForeignKey("fractions.id", ondelete='SET NULL'))
+            daughter_bonus = Column(Integer, default=0)
+            subordination_level = Column(Integer, default=0)
+            libido_level = Column(Integer, default=0)
 
         self.Form = Form
 
@@ -93,7 +96,7 @@ class Database(Gino):
             photo = Column(Text)
             description = Column(Text)
             price = Column(BigInteger)
-            service = Column(Boolean, server_default='False')
+            service = Column(Boolean, default=False)
 
         self.Shop = Shop
 
@@ -178,7 +181,7 @@ class Database(Gino):
             cooldown = Column(Integer)
             profession_id = Column(Integer, ForeignKey("professions.id", ondelete='SET NULL'))
             fraction_id = Column(Integer, ForeignKey("fractions.id", ondelete='SET NULL'))
-            reputation = Column(Integer, server_default='0')
+            reputation = Column(Integer, default=0)
 
         self.Daylic = Daylic
 
@@ -194,9 +197,9 @@ class Database(Gino):
         class Metadata(self.Model):
             __tablename__ = "metadata"
 
-            maintainence_break = Column(Boolean, server_default='False')
-            time_to_freeze = Column(Integer, server_default='604800')  # 1 week
-            time_to_delete = Column(Integer, server_default='2592000')  # 30 days
+            maintainence_break = Column(Boolean, default=False)
+            time_to_freeze = Column(Integer, default=604800)  # 1 week
+            time_to_delete = Column(Integer, default=2592000)  # 30 days
 
         self.Metadata = Metadata
 
@@ -229,7 +232,7 @@ class Database(Gino):
             description = Column(Text)
             leader_id = Column(Integer, ForeignKey("users.user_id", ondelete='SET NULL'))
             photo = Column(Text)
-            daughter_multiplier = Column(Float, server_default='0')
+            daughter_multiplier = Column(Float, default=0)
 
         self.Fraction = Fraction
 
@@ -239,7 +242,7 @@ class Database(Gino):
             id = Column(Integer, primary_key=True)
             user_id = Column(Integer, ForeignKey("users.user_id", ondelete='CASCADE'))
             fraction_id = Column(Integer, ForeignKey("fractions.id", ondelete='CASCADE'))
-            reputation = Column(Integer, server_default='0')
+            reputation = Column(Integer, default=0)
 
         self.UserToFraction = UserToFraction
 
@@ -256,6 +259,7 @@ class Database(Gino):
         statuses = await self.select([func.count(db.Status.id)]).gino.scalar()
         if statuses == 0:
             await self.Status.create(name="Резидент")
+            await self.Status.create(name="Дочь❤")
         cabins = await self.select([func.count(db.Cabins.id)]).gino.scalar()
         if cabins == 0:
             await self.Cabins.create(name="Тестовая каюта", cost=250, decor_slots=10, functional_slots=5)

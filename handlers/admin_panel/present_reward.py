@@ -66,7 +66,7 @@ async def accept_reward(m: Message, forms: List[Tuple[int, int]]):
     await m.answer(messages.reward_accept.format(amount, mentions),
                         keyboard=keyboards.admin_menu)
     reply = f"Вам выдан{'а награда' if amount > 0 else ' штраф'} в размере {abs(amount)}"
-    await bot.api.messages.send(user_ids, reply, is_notification=True)
+    await bot.api.messages.send(peer_ids=user_ids, message=reply, is_notification=True)
 
 
 @bot.on.private_message(StateRule(Admin.CONFIRM_REWARD), PayloadRule({"reward": "decline"}), AdminRule())

@@ -3,12 +3,12 @@ from collections import namedtuple
 
 from vkbottle.bot import Message, MessageEvent
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule, AttachmentTypeRule, FromPeerRule
-from vkbottle import Keyboard, GroupEventType, Callback, KeyboardButtonColor
+from vkbottle import Keyboard, GroupEventType, Callback, KeyboardButtonColor, Text
 from sqlalchemy import and_, func
 
 from service.db_engine import db
 from loader import bot
-from service.states import Registration, Menu
+from service.states import Registration, Menu, DaughterQuestions
 import messages
 from service.custom_rules import StateRule, NumericRule, LimitSymbols, CommandWithAnyArgs
 import service.keyboards as keyboards
@@ -315,17 +315,82 @@ async def set_character(m: Message):
     await db.Form.update.values(photo=photo).where(
         and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))
     ).gino.status()
-    admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
-    admins = list(set(admins).union(ADMINS))
     creating_form = await db.select([db.User.creating_form]).where(db.User.user_id == m.from_id).gino.scalar()
     if creating_form:
-        states.set(m.from_id, Registration.WAIT)
-        await db.User.update.values(creating_form=False).where(db.User.user_id == m.from_id).gino.scalar()
-        await m.answer(messages.form_ready, keyboard=Keyboard())
-        form_id = await db.select([db.Form.id]).where(db.Form.user_id == m.from_id).gino.scalar()
-        for admin in admins:
-            form, photo = await loads_form(m.from_id, admin, True)
-            await bot.api.messages.send(admin, form, photo, keyboard=keyboards.create_accept_form(form_id))
+        states.set(m.from_id, Registration.WANT_DAUGHTER)
+        keyboard = Keyboard().add(
+            Text("Да", {"want_daughter": True}), KeyboardButtonColor.POSITIVE
+        ).add(
+            Text("Нет", {"want_daughter": False}), KeyboardButtonColor.NEGATIVE
+        )
+        await m.answer('Фото успешно установлено!\n\nОсновная анкета заполнена, хотите ли заполнить дополнительную '
+                       'для получения статуса «Дочь❤»?', keyboard=keyboard)
     else:
         await m.answer("Новое значение установлено")
         await show_fields_edit(m.from_id, new=False)
+
+
+@bot.on.private_message(StateRule(Registration.WANT_DAUGHTER), PayloadRule({"want_daughter": False}))
+async def want_daughter(m: Message):
+    states.set(m.from_id, Registration.WAIT)
+    await db.User.update.values(creating_form=False).where(db.User.user_id == m.from_id).gino.scalar()
+    await m.answer(messages.form_ready, keyboard=Keyboard())
+    form_id = await db.select([db.Form.id]).where(db.Form.user_id == m.from_id).gino.scalar()
+    admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
+    admins = list(set(admins).union(ADMINS))
+    for admin in admins:
+        form, photo = await loads_form(m.from_id, admin, True)
+        await bot.api.messages.send(peer_ids=admin, message=form, attachment=photo, keyboard=keyboards.create_accept_form(form_id))
+
+
+@bot.on.private_message(StateRule(Registration.WANT_DAUGHTER), PayloadRule({"want_daughter": True}))
+async def q1(m: Message):
+    states.set(m.from_id, DaughterQuestions.Q1)
+    await db.Form.update.values(status=2).where(db.Form.user_id == m.from_id).gino.status()
+    await m.answer('Как вы родились?\n\n'
+                   '1) Родилась от матери - дочери\n'
+                   '2) Искусственным оплодотворением\n'
+                   '3) Клонированием или иным полностью искусственным способом\n\n'
+                   'В сообщении укажите номер варианта ответа', keyboard=Keyboard())
+
+
+@bot.on.private_message(StateRule(DaughterQuestions.Q1), NumericRule(max_number=3))
+async def q2(m: Message, value: int):
+    await db.Form.update.values(daughter_bonus=db.Form.daughter_bonus + value).where(db.Form.user_id == m.from_id).gino.scalar()
+    states.set(m.from_id, DaughterQuestions.Q2)
+    await m.answer('Вам от 13 до 16 лет. Как вы справлялись с первичными проявлениями ваших генетических особенностей, '
+                   'как Дочери?\n\n'
+                   '1) Сдерживала их любыми доступным способами\n'
+                   '2) Действовала так, как скажут родители/учителя/учёные\n'
+                   '3) Пустила всё на самотёк')
+
+
+@bot.on.private_message(StateRule(DaughterQuestions.Q2), NumericRule(max_number=3))
+async def q3(m: Message, value: int):
+    await db.Form.update.values(daughter_bonus=db.Form.daughter_bonus + value).where(db.Form.user_id == m.from_id).gino.scalar()
+    states.set(m.from_id, DaughterQuestions.Q3)
+    await m.answer('Вы вступили в "высшие" заведения для вашей подготовки. На кого вас учат?\n\n'
+                   '1) На боевую специальность\n'
+                   '2) На сложную техническую/медицинскую специальность\n'
+                   '3) На административную или иную специальность\n')
+
+
+@bot.on.private_message(StateRule(DaughterQuestions.Q3), NumericRule(max_number=3))
+async def q4(m: Message, value: int):
+    await db.Form.update.values(daughter_bonus=db.Form.daughter_bonus + value).where(db.Form.user_id == m.from_id).gino.scalar()
+    states.set(m.from_id, DaughterQuestions.Q4)
+    await m.answer('Какова ваша цель, как Дочери?\n\n'
+                   '1) Служить во благо своей фракции\n'
+                   '2) Трудиться ради блага других\n'
+                   '3) Жить ради себя')
+
+
+@bot.on.private_message(StateRule(DaughterQuestions.Q4), NumericRule(max_number=3))
+async def q4(m: Message, value: int):
+    fraction_id, bonus = await db.select([db.Form.fraction_id, db.Form.daughter_bonus]).where(db.Form.user_id == m.from_id).gino.first()
+    fraction_multiplier = await db.select([db.Fraction.daughter_multiplier]).where(db.Fraction.id == fraction_id).gino.scalar()
+    bonus += value
+    level = min(100, max(0, int(2 + 2 * fraction_multiplier + bonus)))
+    await db.Form.update.values(daughter_bonus=bonus,
+                                subordination_level=level, libido_level=level).where(db.Form.user_id == m.from_id).gino.scalar()
+    await want_daughter(m)

@@ -13,8 +13,16 @@ class Registration:
     TABOO = "taboo"
     FRACTION = "fraction"
     PHOTO = "photo"
+    WANT_DAUGHTER = "want_daughter"
     ACCEPT = "accept"
     WAIT = "wait"
+
+
+class DaughterQuestions:
+    Q1 = "q1"
+    Q2 = "q2"
+    Q3 = "q3"
+    Q4 = "q4"
 
 
 class Menu:
@@ -137,3 +145,5 @@ class Admin:
     SET_NEW_REPUTATION = "set_new_reputation"
     DELETE_USER_REPUTATION = "delete_user_reputation"
     FRACTION_MULTIPLIER = "fraction_multiplier"
+    EDIT_LEVEL_SUBORDINATION = 'edit_level_subordination'
+    EDIT_LEVEL_LIBIDO = 'edit_level_libido'
