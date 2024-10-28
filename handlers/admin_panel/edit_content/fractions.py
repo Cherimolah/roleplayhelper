@@ -9,7 +9,7 @@ from service.custom_rules import AdminRule, StateRule, UserSpecified, NumericRul
 from service.states import Admin
 from service.db_engine import db
 from service.middleware import states
-from service.utils import allow_edit_content, reload_image, send_content_page
+from service.utils import allow_edit_content, reload_image, send_content_page, FormatDataException
 import messages
 from service.keyboards import gen_type_change_content
 
@@ -46,8 +46,9 @@ async def set_leader_fraction(m: Message, form: Tuple[int, int]):
 
 
 @bot.on.private_message(StateRule(Admin.PHOTO_FRACTION), AdminRule(), AttachmentTypeRule("photo"))
-@allow_edit_content("Fraction", state=Admin.PHOTO_FRACTION,
-                    keyboard=gen_type_change_content("Decor"), end=True, text="Фракция успешно создана")
+@allow_edit_content("Fraction", state=Admin.FRACTION_MULTIPLIER,
+                    text="Фото фракции успешно установлено. "
+                         "Пришлите мультипликатор для дочерей (дробную часть стоит отделять точкой)")
 async def set_photo_fraction(m: Message):
     fraction_id = int(states.get(m.from_id).split("*")[1])
     if not m.attachments or m.attachments[0].type != m.attachments[0].type.PHOTO:
@@ -55,6 +56,20 @@ async def set_photo_fraction(m: Message):
         return
     photo = await reload_image(m.attachments[0], f"data/photo{m.from_id}.jpg")
     await db.Fraction.update.values(photo=photo).where(db.Fraction.id == fraction_id).gino.status()
+
+
+@bot.on.private_message(StateRule(Admin.FRACTION_MULTIPLIER), AdminRule())
+@allow_edit_content("Fraction", state=f"{Admin.SELECT_ACTION}_Fraction", end=True,
+                    text='Фракция успешно создана', keyboard=gen_type_change_content("Fraction"))
+async def set_fraction_multiplier(m: Message):
+    try:
+        value = float(m.text)
+    except ValueError:
+        raise FormatDataException('Неправильный формат мультипликатора')
+    if value in (float('inf'), float('-inf'), float('nan')):
+        raise FormatDataException('Не стоит ломать работу с числами')
+    fraction_id = int(states.get(m.from_id).split("*")[1])
+    await db.Fraction.update.values(daughter_multiplier=value).where(db.Fraction.id == fraction_id).gino.status()
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Fraction"), PayloadRule({"Fraction": "delete"}), AdminRule())
@@ -73,7 +88,7 @@ async def select_number_product_to_delete(m: Message):
 async def delete_poduct(m: Message, value: int):
     fraction_id = await db.select([db.Fraction.id]).order_by(db.Fraction.id.asc()).offset(value-1).limit(1).gino.scalar()
     if not fraction_id:
-        await m.answer("Указан неверный номер товара")
+        await m.answer("Указан неверный номер фракции")
         return
     await db.Fraction.delete.where(db.Fraction.id == fraction_id).gino.status()
     states.set(m.from_id, f"{Admin.SELECT_ACTION}_Fraction")

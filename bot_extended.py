@@ -1,6 +1,7 @@
+import enum
 import json
 import typing
-from typing import Optional, Union
+from typing import Optional, Union, List
 from abc import ABC
 
 from vkbottle_types.methods.messages import MessagesCategory
@@ -10,87 +11,65 @@ from vkbottle_types.methods import messages
 from vkbottle.api.api import API, ABCAPI
 from vkbottle_types.responses.messages import MessagesSendUserIdsResponseItem
 from vkbottle_types.responses.users import UsersUserFull
-from vkbottle import VKAPIError, Keyboard
+from vkbottle import VKAPIError, Keyboard, ErrorHandler, Router
 from vkbottle.dispatch.views.bot import RawBotEventView, BotHandlerBasement, ABCBotMessageView, BotMessageView
-from vkbottle_types.events.bot_events import BaseGroupEvent
 from vkbottle.tools.mini_types.bot.message_event import MessageEventMin
 from vkbottle.tools.mini_types.bot import MessageMin
-from vkbottle.tools.mini_types.bot import message_min
-from vkbottle.dispatch.base import Router
-from vkbottle.modules import logger
-from vkbottle.exception_factory.error_handler.error_handler import ErrorHandler
+from vkbottle.tools.mini_types.base.message import BaseMessageMin
 from vkbottle.http.aiohttp import AiohttpClient
+from vkbottle_types.codegen.objects import VideoVideo, VideoVideoFull, PollsPoll
+from vkbottle_types.objects import MessagesMessageAttachment, MessagesMessage, MessagesForeignMessage
+from vkbottle_types.events.objects.group_event_objects import MessageNewObject
+from vkbottle_types.events.bot_events import MessageNew, BaseGroupEvent
 
-from sqlalchemy import and_
 from aiohttp import ClientSession, ClientResponse, TCPConnector
-
-from service.db_engine import db
+from pydantic import Field
+from loguru import logger
 
 
 class MessagesCategoryExtended(MessagesCategory):
 
     async def send(
             self,
-            peer_ids=None,
-            message=None,
-            attachment=None,
-            keyboard=None,
-            disable_mentions=True,
+            user_id=None,
             random_id=0,
             peer_id=None,
-            user_id=None,
+            peer_ids=None,
             domain=None,
             chat_id=None,
             user_ids=None,
+            message=None,
             lat=None,
             long=None,
+            attachment=None,
             reply_to=None,
             forward_messages=None,
             forward=None,
             sticker_id=None,
             group_id=None,
+            keyboard=None,
             template=None,
             payload=None,
             content_source=None,
             dont_parse_links=None,
+            disable_mentions=True,
             intent=None,
             subscribe_id=None,
-            is_notification=False,
             **kwargs
     ) -> typing.Union[int, typing.List[MessagesSendUserIdsResponseItem]]:
         if user_id:
-            if isinstance(user_id, list):
-                peer_ids = user_id
-            else:
-                peer_ids = [user_id]
+            peer_ids = [user_id]
             del user_id
         if peer_id:
-            if isinstance(peer_id, list):
-                peer_ids = peer_id
-            else:
-                peer_ids = [peer_id]
+            peer_ids = [peer_id]
             del peer_id
-        if user_ids:
-            if isinstance(user_ids, list):
-                peer_ids = user_ids
-            else:
-                peer_ids = [user_ids]
-            del user_ids
-        if not isinstance(peer_ids, list):
-            peer_ids = [peer_ids]
         if message is None:
             message = ""  # Set iterable
         if isinstance(random_id, str):  # Compatible
             message = random_id
             random_id = 0
-        if is_notification:
-            peer_ids = [x[0] for x in await db.select([db.User.user_id]).where(
-                and_(db.User.user_id.in_(peer_ids), db.User.notification_enabled.is_(True))).gino.all()]
-        if not peer_ids:
-            return []
         count = int(len(message) // 4096)
         msgs = []
-        # Если длина сообщения больше 4096 символов, отправляем вложения и клавиатуру последним сообщением
         for number, i in enumerate(range(0, len(message), 4096)):
             if number < count:
                 params = {k: v for k, v in locals().items() if k not in ('self', 'message', 'attachment', 'keyboard')}
@@ -98,9 +77,6 @@ class MessagesCategoryExtended(MessagesCategory):
             else:
                 params = {k: v for k, v in locals().items() if k not in ('self', 'message')}
                 msgs.append(await super().send(message=message[i:i + 4096], **params))
-        if not message:
-            params = {k: v for k, v in locals().items() if k not in ('self',)}
-            msgs.append(await super().send(**params))
         msgs = [y for x in msgs for y in x]
         return msgs
 
@@ -134,32 +110,34 @@ class MessagesCategoryExtended(MessagesCategory):
             keyboard: typing.Optional[str] = None,
             **kwargs
     ) -> bool:
-        """Кастомная настройка обходит ошибку устаревшего сообщения"""
         try:
-            if isinstance(keyboard, Keyboard):
-                keyboard = keyboard.get_json()
-            response = await super().edit(peer_id, message, lat, long, attachment, keep_forward_messages,
-                                          keep_snippets, group_id, dont_parse_links, disable_mentions,
-                                          message_id, conversation_message_id, template, keyboard, **kwargs)
+            response = await super().edit(peer_id=peer_id, message=message, lat=lat, long=long,
+                                          attachment=attachment, keep_forward_messages=keep_forward_messages,
+                                          keep_snippets=keep_snippets, group_id=group_id,
+                                          dont_parse_links=dont_parse_links,
+                                          disable_mentions=disable_mentions,
+                                          message_id=message_id, conversation_message_id=conversation_message_id,
+                                          template=template, keyboard=keyboard, **kwargs)
             return response
         except VKAPIError:
-            try:
-                if message_id:
-                    message_ids = [message_id]
-                else:
-                    message_ids = None
-                if conversation_message_id:
-                    cmids = [conversation_message_id]
-                else:
-                    cmids = None
-                await self.delete(message_ids, delete_for_all=True, peer_id=peer_id, cmids=cmids)
-            except:
-                pass
             await self.send(
                 peer_id=peer_id, message=message, lat=lat, attachment=attachment, group_id=group_id,
                 dont_parse_links=dont_parse_links, disable_mentions=disable_mentions, template=template,
                 keyboard=keyboard, **kwargs
             )
+
+    async def delete(
+            self,
+            message_ids: typing.Optional[typing.List[int]] = None,
+            spam: typing.Optional[bool] = None,
+            group_id: typing.Optional[int] = None,
+            delete_for_all: typing.Optional[bool] = None,
+            peer_id: typing.Optional[int] = None,
+            cmids: typing.Optional[typing.List[int]] = None,
+            **kwargs
+    ) -> typing.Dict[str, int]:
+        return await super().delete(message_ids=message_ids, spam=spam, group_id=group_id,
+                                    delete_for_all=delete_for_all, peer_id=peer_id, cmids=cmids, **kwargs)
 
 
 class UsersCategoryExtended(UsersCategory, ABC):
@@ -174,10 +152,12 @@ class UsersCategoryExtended(UsersCategory, ABC):
             **kwargs
     ) -> typing.List[UsersUserFull]:
         if isinstance(user_ids, list):
-            responses = [await super(UsersCategoryExtended, self).get(user_ids=user_ids[i:i + 1000], fields=fields, name_case=name_case, **kwargs)
+            responses = [await super(UsersCategoryExtended, self).get(user_ids=user_ids[i:i + 1000], fields=fields,
+                                                                      name_case=name_case, **kwargs)
                          for i in range(0, len(user_ids), 1000)]
             return [y for x in responses for y in x]
-        return await super(UsersCategoryExtended, self).get(user_ids=user_ids, fields=fields, name_case=name_case, **kwargs)
+        return await super(UsersCategoryExtended, self).get(user_ids=user_ids, fields=fields, name_case=name_case,
+                                                            **kwargs)
 
 
 class APICategoriesExtended(APICategories, ABC):
@@ -188,27 +168,6 @@ class APICategoriesExtended(APICategories, ABC):
     @property
     def users(self) -> UsersCategory:
         return UsersCategoryExtended(self.api_instance)
-
-
-class AioHTTPClientExtended(AiohttpClient, ABC):
-
-    async def request_raw(
-        self,
-        url: str,
-        method: str = "GET",
-        data: Optional[dict] = None,
-        **kwargs,
-    ) -> "ClientResponse":
-        if not self.session:
-            connector = TCPConnector(ssl=False)
-            self.session = ClientSession(
-                json_serialize=self.json_processing_module.dumps,
-                connector=connector,
-                **self._session_params,
-            )
-        async with self.session.request(url=url, method=method, data=data, **kwargs) as response:
-            await response.read()
-            return response
 
 
 class APIExtended(APICategoriesExtended, API):
@@ -230,12 +189,13 @@ class MessageEventMinExtended(MessageEventMin):
             keyboard: Optional[str] = None,
             **kwargs,
     ) -> int:
-        """Кастомное редактирование сообщения с обработкой ошибки устаревшего сообщения"""
         if isinstance(keyboard, Keyboard):
             keyboard = keyboard.get_json()
         try:
-            response = await super().edit_message(message, lat, long, attachment, keep_forward_messages, keep_snippets,
-                                                  dont_parse_links, template, keyboard, **kwargs)
+            response = await super().edit_message(message=message, lat=lat, long=long, attachment=attachment,
+                                                  keep_forward_messages=keep_forward_messages, keep_snippets=keep_snippets,
+                                                  dont_parse_links=dont_parse_links, template=template,
+                                                  keyboard=keyboard, **kwargs)
             return response
         except VKAPIError:
             await self.send_message(message=message, lat=lat, long=long, attachment=attachment,
@@ -247,10 +207,84 @@ class RawBotEventViewExtended(RawBotEventView, ABC):
     def get_event_model(
             self, handler_basement: "BotHandlerBasement", event: dict
     ) -> typing.Union[dict, "BaseGroupEvent"]:
-        """Кастомная настройка вьюхи событий, чтобы работал дополненный MessageEvent"""
         if handler_basement.dataclass == MessageEventMin:
             return MessageEventMinExtended(**event)
         return super().get_event_model(handler_basement, event)
+
+
+class VideoVideoTypeExtended(enum.Enum):
+    VIDEO = "video"
+    MUSIC_VIDEO = "music_video"
+    MOVIE = "movie"
+    LIVE = "live"
+    SHORT_VIDEO = "short_video"
+    VIDEO_MESSAGE = 'video_message'
+
+
+class VideoVideoExtended(VideoVideo):
+    type: typing.Optional["VideoVideoTypeExtended"] = Field(default=None)
+
+
+class VideoVideoFullExtended(VideoVideoExtended, VideoVideoFull):
+    pass
+
+
+class PollsPollExtended(PollsPoll):
+    anonymous: bool = Field(
+        default=None,
+    )
+
+
+class MessagesMessageAttachmentExtended(MessagesMessageAttachment):
+    video: Optional["VideoVideoFullExtended"] = None
+    poll: Optional["PollsPollExtended"] = None
+
+
+class MessagesForeignMessageExtended(MessagesForeignMessage):
+    attachments: Optional[List["MessagesMessageAttachmentExtended"]] = None
+    reply_message: Optional["MessagesForeignMessageExtended"] = None
+    fwd_messages: Optional[List["MessagesForeignMessageExtended"]] = None
+
+
+class MessagesMessageExtended(MessagesMessage):
+    attachments: Optional[List["MessagesMessageAttachmentExtended"]] = None
+    reply_message: Optional["MessagesForeignMessageExtended"] = None
+    fwd_messages: Optional[List["MessagesForeignMessageExtended"]] = None
+
+
+class MessageNewObjectExtended(MessageNewObject):
+    message: Optional["MessagesMessageExtended"] = None
+
+
+class MessageNewExtended(MessageNew):
+    object: MessageNewObjectExtended
+
+
+class BaseMessageMinExtended(MessagesMessageExtended, BaseMessageMin):
+    pass
+
+
+class MessageMinExtended(BaseMessageMinExtended, MessageMin):
+    pass
+
+
+MessagesForeignMessageExtended.update_forward_refs()
+
+
+def message_min(event: dict, ctx_api: "ABCAPI", replace_mention: bool = True) -> "MessageMin":
+    update = MessageNewExtended(**event)
+
+    if update.object.message is None:
+        msg = "Please set longpoll to latest version"
+        raise RuntimeError(msg)
+
+    return MessageMinExtended(
+        **update.object.message.dict(),
+        client_info=update.object.client_info,
+        group_id=update.group_id,
+        replace_mention=replace_mention,
+        unprepared_ctx_api=ctx_api,
+    )
 
 
 class ABCBotMessageViewExtended(ABCBotMessageView, ABC):
@@ -258,7 +292,6 @@ class ABCBotMessageViewExtended(ABCBotMessageView, ABC):
     async def get_message(
             event: dict, ctx_api: Union["API", "ABCAPI"], replace_mention: bool
     ) -> "MessageMin":
-        """Кастомная вьюха, чтобы payload был формата JSON"""
         message = message_min(event, ctx_api, replace_mention)
         if isinstance(message.payload, str):
             message.payload = json.loads(message.payload)
@@ -266,8 +299,28 @@ class ABCBotMessageViewExtended(ABCBotMessageView, ABC):
 
 
 class BotMessageViewExtended(ABCBotMessageViewExtended, BotMessageView):
-    """Микс дополненных классов и обычных из vkbottle"""
     pass
+
+
+class AioHTTPClientExtended(AiohttpClient, ABC):
+
+    async def request_raw(
+            self,
+            url: str,
+            method: str = "GET",
+            data: Optional[dict] = None,
+            **kwargs,
+    ) -> "ClientResponse":
+        connector = TCPConnector(ssl=False)
+        if not self.session:
+            self.session = ClientSession(
+                json_serialize=self.json_processing_module.dumps,
+                connector=connector,
+                **self._session_params,
+            )
+        async with self.session.request(url=url, method=method, data=data, **kwargs) as response:
+            await response.read()
+            return response
 
 
 class ErrorHandlerExtended(ErrorHandler):

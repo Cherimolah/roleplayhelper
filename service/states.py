@@ -136,3 +136,4 @@ class Admin:
     SELECT_USER_FRACTION = "select_user_fraction"
     SET_NEW_REPUTATION = "set_new_reputation"
     DELETE_USER_REPUTATION = "delete_user_reputation"
+    FRACTION_MULTIPLIER = "fraction_multiplier"

@@ -641,7 +641,8 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field("Название", Admin.NAME_FRACTION),
             Field("Описание", Admin.DESCRIPTION_FRACTION),
             Field("Лидер", Admin.LEADER_FRACTION, info_leader_fraction, serialize_leader_fraction),
-            Field("Фото", Admin.PHOTO_FRACTION)
+            Field("Фото", Admin.PHOTO_FRACTION),
+            Field('Мультпиликатор дочери', Admin.FRACTION_MULTIPLIER)
         ],
         "name": "Фракция"
     }

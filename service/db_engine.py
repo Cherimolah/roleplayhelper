@@ -2,7 +2,7 @@ import datetime
 from typing import List, Tuple
 
 from gino import Gino
-from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, Boolean, TIMESTAMP, func, and_
+from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, Boolean, TIMESTAMP, func, and_, Float
 
 from config import USER, PASSWORD, HOST, DATABASE
 
@@ -229,6 +229,7 @@ class Database(Gino):
             description = Column(Text)
             leader_id = Column(Integer, ForeignKey("users.user_id", ondelete='SET NULL'))
             photo = Column(Text)
+            daughter_multiplier = Column(Float, server_default='0')
 
         self.Fraction = Fraction
 
