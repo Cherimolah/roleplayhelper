@@ -7,6 +7,7 @@ Create PostgreSQL database
 Create `.env` file
 Fill .env by sample in .env_sample
 Run:
+`sudo apt-get install libpq-dev`
 `pip3 install -r requirements.txt`
 `alembic init alembic`
 Set in alembic.ini

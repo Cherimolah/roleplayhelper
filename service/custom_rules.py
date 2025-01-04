@@ -1,6 +1,5 @@
 from abc import ABC
 from typing import Union, Optional
-import re
 
 from vkbottle.dispatch.rules import ABCRule
 from vkbottle.bot import Message, MessageEvent
@@ -11,7 +10,7 @@ import messages
 from service.states import Menu, Admin
 import service.keyboards as keyboards
 from service.utils import get_mention_from_message, get_current_form_id, fields_content
-from config import ADMINS
+from config import ADMINS, CHAT_IDS
 
 
 class StateRule(ABCRule[Message], ABC):
@@ -187,3 +186,13 @@ class SelectContent(ABCRule[Message], ABC):
             if state == f"{Admin.SELECT_ACTION}_{content}":
                 return {"content_type": content, "table": getattr(db, content)}
         return False
+
+
+class ChatAction(ABCRule[Message], ABC):
+
+    def __init__(self, command: str):
+        self.command = command
+
+    async def check(self, m: Message):
+        if m.chat_id in CHAT_IDS and f"{{{self.command}}}" in m.text.lower():
+            return True

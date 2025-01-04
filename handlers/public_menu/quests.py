@@ -11,10 +11,30 @@ from loader import bot
 from service.custom_rules import StateRule
 from service.states import Menu
 from service.db_engine import db
-from service.utils import get_current_form_id, parse_cooldown, quest_over
+from service.utils import get_current_form_id, parse_cooldown, quest_over, calculate_time
 from service import keyboards
 from service.middleware import states
-from config import ADMINS, OWNER
+from config import ADMINS, OWNER, DATETIME_FORMAT
+
+
+async def view_quest(quest: db.Quest) -> str:
+    starts = quest.start_at.strftime(DATETIME_FORMAT)
+    if quest.closed_at:
+        ends = quest.closed_at.strftime(DATETIME_FORMAT)
+    else:
+        ends = 'нет'
+    reply = (f"Название: {quest.name}\n"
+             f"Начало: {starts}\n"
+             f"Завершение: {ends}\n"
+             f"Время на выполнение: {parse_cooldown(quest.execution_time) or 'бессрочно'}\n"
+             f"Награда: {quest.reward}\n"
+             f"Описание: {quest.description}\n")
+    if quest.fraction_id:
+        fraction = await db.select([db.Fraction.name]).where(db.Fraction.id == quest.fraction_id).gino.scalar()
+        reply += f"\nБонус к фракции: {fraction}\nБонус к репутации: {quest.reputation}"
+    else:
+        reply += "\n\nБез бонуса к репутации"
+    return reply
 
 
 async def send_quest_page(m: Union[Message, MessageEvent], page: int):
@@ -23,67 +43,43 @@ async def send_quest_page(m: Union[Message, MessageEvent], page: int):
     else:
         user_id = m.user_id
     form_id = await get_current_form_id(user_id)
-    ready_quests = [x[0] for x in
-                    await db.select([db.ReadyQuest.quest_id]).where(db.ReadyQuest.form_id == form_id).gino.all()]
-    active_quest = await db.select([db.Form.active_quest]).where(db.Form.id == form_id).gino.scalar()
+    ready = await db.select([db.ReadyQuest.id]).where(
+        and_(db.ReadyQuest.form_id == form_id, db.ReadyQuest.is_checked.is_(False))
+    ).gino.scalar()
+    if ready:
+        await m.answer("Новые квесты можно будет выполнить после проверки администрацией ваших отчётов")
+        return
+    completed_qusts = [x[0] for x in
+                    await db.select([db.ReadyQuest.quest_id]).where(
+                        and_(db.ReadyQuest.form_id == form_id, db.ReadyQuest.is_claimed.is_(True))).gino.all()]
+    active_quest, starts_at = await db.select([db.Form.active_quest, db.Form.quest_start]).where(db.Form.id == form_id).gino.first()
     if active_quest:
-        ready_quests.append(active_quest)
+        quest = await db.Quest.get(active_quest)
+        execution_time = calculate_time(quest, starts_at) or 'бессрочно'
+        reply = "У вас активирован квест:\n\n" + await view_quest(quest) + (f"\n\n"
+                                                                            f"Остаётся на исполнение: {parse_cooldown(execution_time) or 'бессрочно'}")
+        await m.answer(reply, keyboard=Keyboard().add(
+                Text("Отправить отчёт", {"quest": "ready"}), KeyboardButtonColor.PRIMARY
+            ).row().add(
+            Text("Назад", {"menu": "quests and daylics"}), KeyboardButtonColor.NEGATIVE
+        ))
+        return
     quest = await (
         db.select([*db.Quest])
-        .where(and_(db.Quest.id.notin_(ready_quests),
+        .where(and_(db.Quest.id.notin_(completed_qusts),
                     or_(db.Quest.closed_at > datetime.datetime.now(), db.Quest.closed_at.is_(None)))).limit(
             1).offset(page - 1).gino.first())
-    count = await db.select([func.count(db.Quest.id)]).where(and_(db.Quest.id.notin_(ready_quests),
+    count = await db.select([func.count(db.Quest.id)]).where(and_(db.Quest.id.notin_(completed_qusts),
                     or_(db.Quest.closed_at > datetime.datetime.now(), db.Quest.closed_at.is_(None)))
     ).gino.scalar()
     if not quest:
-        await m.answer("На данный момент нет доступных квестов", keyboard=await keyboards.main_menu(m.from_id))
+        await m.answer("На данный момент нет доступных квестов")
         return
-    sex = (await bot.api.users.get(user_id, fields=["sex"]))[0].sex
-    quest_ready = Keyboard()
-    if active_quest:
-        quest_ready.add(
-            Text(f"Я выполнил{'а' if sex == sex.female else ''} квест!", {"quest": "ready"}), KeyboardButtonColor.PRIMARY
-        ).row()
-    quest_ready.add(
-        Text("Назад", {"menu": "quests and daylics"}), KeyboardButtonColor.NEGATIVE
-    )
     if isinstance(m, Message):
-        await m.answer("Доступные квесты:", keyboard=quest_ready)
-    if not quest.closed_at:
-        if quest.execution_time:
-            execution_time = parse_cooldown(quest.execution_time)
-        else:
-            execution_time = "Бессрочно"
-    else:
-        if not quest.execution_time:
-            if datetime.datetime.now() < quest.start_at:
-                execution_time = "До конца срока квеста"
-            else:
-                execution_time = parse_cooldown((quest.closed_at - datetime.datetime.now()).total_seconds())
-        else:
-            nearest = min(quest.closed_at.timestamp(), datetime.datetime.now().timestamp())
-            execution_time = parse_cooldown(nearest - datetime.datetime.now().timestamp())
-    reply = f"Квест №{page}: {quest.name}\n" \
-            f"{quest.description}\n" \
-            f"Нагарада: {quest.reward}\n" \
-            f"Время на выполнение: " \
-            f"{execution_time}\n"
-    delta = None
-    if quest.start_at > datetime.datetime.now():
-        delta: datetime.timedelta = quest.start_at - datetime.datetime.now()
-        active = False
-    elif quest.closed_at:
-        delta: datetime.timedelta = quest.closed_at - datetime.datetime.now()
-        active = True
-    if delta:
-        total_seconds = delta.total_seconds()
-        days = int(total_seconds / 86400)
-        hours = int((total_seconds - days * 86400) / 3600)
-        minutes = int((total_seconds - days * 86400 - hours * 3600) / 60)
-        seconds = int(total_seconds - days * 86400 - hours * 3600 - minutes * 60)
-        reply += f"{'Закончится через' if active else 'Начнётся через'} {days} дней {hours} часов {minutes} минут " \
-                 f"{seconds} секунд\n\n"
+        await m.answer("Доступные квесты:", keyboard=Keyboard().add(
+            Text("Назад", {"menu": "quests and daylics"}), KeyboardButtonColor.NEGATIVE
+        ))
+    reply = f"Квест №{page}\n\n" + await view_quest(quest)
     states.set(m.peer_id, Menu.SHOW_QUESTS)
     keyboard = Keyboard(inline=True)
     if count > 1 and page > 1:
@@ -105,50 +101,17 @@ async def send_quest_page(m: Union[Message, MessageEvent], page: int):
 async def take_quest(m: MessageEvent):
     form_id = await get_current_form_id(m.user_id)
     quest_id = m.payload['quest_take']
-    await db.Form.update.values(active_quest=quest_id).where(db.Form.id == form_id).gino.status()
+    now = datetime.datetime.now()
+    await db.Form.update.values(active_quest=quest_id, quest_start=now).where(db.Form.id == form_id).gino.status()
     quest = await db.select([*db.Quest]).where(db.Quest.id == quest_id).gino.first()
-    cooldown = None
-    execution_time = ""
-    if not quest.closed_at:
-        if quest.execution_time:
-            cooldown = quest.execution_time
-        else:
-            execution_time = "Бессрочно"
-    else:
-        if not quest.execution_time:
-            if datetime.datetime.now() < quest.start_at:
-                execution_time = "До конца срока квеста"
-            else:
-                cooldown = (quest.closed_at - datetime.datetime.now()).total_seconds()
-        else:
-            nearest = min(quest.closed_at.timestamp(), datetime.datetime.now().timestamp())
-            cooldown = nearest - datetime.datetime.now().timestamp()
-    reply = f"Вы взяли на выполнение квест: {quest.name}\n" \
-            f"{quest.description}\n" \
-            f"Нагарада: {quest.reward}\n" \
-            f"Время на выполнение: {execution_time or parse_cooldown(cooldown)}\n"
-    delta = None
-    if quest.start_at > datetime.datetime.now():
-        delta: datetime.timedelta = quest.start_at - datetime.datetime.now()
-        active = False
-    elif quest.closed_at:
-        delta: datetime.timedelta = quest.closed_at - datetime.datetime.now()
-        active = True
-    if delta:
-        total_seconds = delta.total_seconds()
-        days = int(total_seconds / 86400)
-        hours = int((total_seconds - days * 86400) / 3600)
-        minutes = int((total_seconds - days * 86400 - hours * 3600) / 60)
-        seconds = int(total_seconds - days * 86400 - hours * 3600 - minutes * 60)
-        reply += f"{'Закончится через' if active else 'Начнётся через'} {days} дней {hours} часов {minutes} минут " \
-                 f"{seconds} секунд\n\n"
+    reply = await view_quest(quest) + (f"\n\nВы взяли этот квест на выполнение\n")
     await m.edit_message(reply)
-    sex = (await bot.api.users.get(m.user_id, fields=["sex"]))[0].sex
     keyboard = Keyboard().add(
-        Text(f"Я выполнил{'а' if sex == sex.female else ''} квест!", {"quest": "ready"}), KeyboardButtonColor.PRIMARY
+        Text(f"Отправить отчёт", {"quest": "ready"}), KeyboardButtonColor.PRIMARY
     ).row().add(
         Text("Назад", {"menu": "quests and daylics"}), KeyboardButtonColor.NEGATIVE
     )
+    cooldown = calculate_time(quest, now)
     if cooldown:
         asyncio.get_event_loop().create_task(quest_over(cooldown, form_id, quest_id))
     await m.send_message("После завершения квеста нажмите на кнопку завершения. Вы можете выйти и вернутся "
@@ -167,25 +130,35 @@ async def new_page_quest(m: MessageEvent):
 
 
 @bot.on.private_message(StateRule(Menu.SHOW_QUESTS), PayloadRule({"quest": "ready"}))
-async def select_ready_quest(m: Message):
+async def send_ready_quest(m: Message):
     form_id = await get_current_form_id(m.from_id)
     quest_id = await db.select([db.Form.active_quest]).where(db.Form.id == form_id).gino.scalar()
     if not quest_id:
         await m.answer("У вас сейчас нет квеста на выполнении. Похоже вы брали когда-то его, "
                                        "но не выполнили")
         return
+    exist = await db.select([db.ReadyQuest.id]).where(
+        and_(db.ReadyQuest.form_id == form_id, db.ReadyQuest.is_checked.is_(False))).gino.scalar()
+    if exist:
+        await m.answer("Вы уже отправили запрос на проверку квеста")
+        return
     name = await db.select([db.Form.name]).where(db.Form.id == form_id).gino.scalar()
     quest = await db.select([*db.Quest]).where(db.Quest.id == quest_id).gino.first()
     request = await db.ReadyQuest.create(quest_id=quest.id, form_id=form_id)
+    await db.Form.update.values(active_quest=None, quest_start=None).where(db.Form.id == form_id).gino.status()
     keyboard = Keyboard(inline=True).add(
-        Callback("Выдать награду", {"quest_ready": True, "request_id": request.id}),
+        Callback("Принять", {"quest_ready": True, "request_id": request.id}),
         KeyboardButtonColor.PRIMARY
-    ).add(
+    ).row().add(
         Callback("Отклонить", {"quest_ready": False, "request_id": request.id}),
         KeyboardButtonColor.NEGATIVE
     )
     await bot.api.messages.send(peer_ids=ADMINS + [OWNER], message=f"[id{m.from_id}|{name}] выполнил квест {quest.name}",
                         keyboard=keyboard)
+    if m.peer_id > 2000000000:
+        await m.answer("Поздравляем с завершением квеста. Ваш запрос отправлен администрации, после "
+                       "проверки вам придёт награда!", keyboard=Keyboard())
+        return
     states.set(m.from_id, Menu.MAIN)
     await m.answer("Поздравляем с завершением квеста. Ваш запрос отправлен администрации, после "
                                    "проверки вам придёт награда!", keyboard=await keyboards.main_menu(m.from_id))

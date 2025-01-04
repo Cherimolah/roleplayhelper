@@ -192,7 +192,7 @@ async def take_off_payments(form_id: int):
                                             last_payment=today-datetime.timedelta(seconds=20)).where(
                     db.Form.id == form_id
                 ).gino.status()
-                group_id = (await bot.api.groups.get_by_id())[0].id
+                group_id = (await bot.api.groups.get_by_id()).id
                 if (await bot.api.messages.is_messages_from_group_allowed(group_id, user_id=user_id)).is_allowed:
                     await bot.api.messages.send(peer_id=user_id, message=f"Снята арендная плата в размере {price}\n"
                                                  f"Доступно на балансе: {balance-price}", is_notification=True)
@@ -311,6 +311,22 @@ async def quest_over(seconds, form_id, quest_id):
         await db.Form.update.values(active_quest=None).where(db.Form.id == form_id).gino.status()
         await bot.api.messages.send(peer_id=user_id, message=f"Время выполнения квеста «{name}» завершилось", is_notification=True)
 
+
+def calculate_time(quest: db.Quest, starts_at: datetime.datetime) -> int | None:
+    if not quest.closed_at:
+        if quest.execution_time:
+            ends_at = starts_at + datetime.timedelta(seconds=quest.execution_time)
+            execution_time = (ends_at - datetime.datetime.now()).total_seconds()
+        else:
+            execution_time = None
+    else:
+        if not quest.execution_time:
+            execution_time = (quest.closed_at - datetime.datetime.now()).total_seconds()
+        else:
+            ends_at = starts_at + datetime.timedelta(seconds=quest.execution_time)
+            nearest = min(quest.closed_at.timestamp(), ends_at.timestamp())
+            execution_time = nearest - datetime.datetime.now().timestamp()
+    return execution_time
 
 async def send_daylics():
     while True:
@@ -705,7 +721,7 @@ async def check_last_activity(user_id: int):
     freeze = await db.select([db.Form.freeze]).where(db.Form.user_id == user_id).gino.scalar()
     if (datetime.datetime.now() - last_activity).total_seconds() >= time_to_freeze and not freeze:
         await db.Form.update.values(freeze=True).where(db.Form.user_id == user_id).gino.status()
-        await bot.api.messages.send(message="❗ В связи с отсутствием вашей активности в течении "
+        await bot.api.messages.send(message="❗ В связи с отсутствием вашей активности в течение "
                                             f"{parse_cooldown(time_to_freeze)} ваша анкета автоматически заморожена",
                                     peer_id=user_id,  is_notification=True)
         name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
@@ -723,7 +739,7 @@ async def check_last_activity(user_id: int):
         is_exists = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
         freeze = await db.select([db.Form.freeze]).where(db.Form.user_id == user_id).gino.scalar()
         if last_activity and freeze and (datetime.datetime.now() - last_activity).total_seconds() >= time_to_delete and is_exists:
-            await bot.api.messages.send(message=f"❗ В связми с отсутствием вашей активности в течении "
+            await bot.api.messages.send(message=f"❗ В связми с отсутствием вашей активности в течение "
                                                 f"{parse_cooldown(time_to_delete)} ваша анкета автоматичкески удалена",
                                         peer_id=user_id, is_notification=True)
             name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()

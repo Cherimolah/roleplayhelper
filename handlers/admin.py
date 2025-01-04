@@ -192,13 +192,14 @@ async def export(m: Message):
                                                                               "request_id": int}))
 async def verify_quest(m: MessageEvent):
     request_id = m.payload['request_id']
-    exist = await db.select([db.ReadyQuest.id]).where(db.ReadyQuest.id == request_id).gino.scalar()
-    if not exist:
+    checked = await db.select([db.ReadyQuest.is_checked]).where(db.ReadyQuest.id == request_id).gino.scalar()
+    if checked:
         await m.edit_message("Другой администратор уже проверил этот запрос")
         return
     form_id, quest_id = await db.select([db.ReadyQuest.form_id, db.ReadyQuest.quest_id]).where(db.ReadyQuest.id == request_id).gino.first()
     form_name, user_id = await db.select([db.Form.name, db.Form.user_id]).where(db.Form.id == form_id).gino.first()
     if m.payload['quest_ready']:
+        await db.ReadyQuest.update.values(is_checked=True, is_claimed=True).where(db.ReadyQuest.id == request_id).gino.status()
         reward, name, fraction_id, reputation = await db.select(
             [db.Quest.reward, db.Quest.name, db.Quest.fraction_id, db.Quest.reputation]).where(
             db.Quest.id == quest_id).gino.first()
@@ -209,7 +210,8 @@ async def verify_quest(m: MessageEvent):
             await db.change_reputation(user_id, fraction_id, reputation)
         await m.edit_message(f"Квест «{name}» засчитан игроку [id{user_id}|{form_name}]")
     else:
-        await db.ReadyQuest.delete.where(db.ReadyQuest.id == request_id).gino.status()
+        await db.ReadyQuest.update.values(is_checked=True, is_claimed=False).where(
+            db.ReadyQuest.id == request_id).gino.status()
         await db.Form.update.values(active_quest=None).where(db.Form.user_id == user_id).gino.status()
         name = await db.select([db.Quest.name]).where(db.Quest.id == quest_id).gino.scalar()
         await bot.api.messages.send(peer_id=m.user_id, message=f"К сожалению, администрация отменила вам прохождение квеста «{name}»",
@@ -251,42 +253,35 @@ async def decline_salary_request(m: MessageEvent):
     await bot.api.messages.send(peer_id=user_id, message=messages.salary_decline, is_notification=True)
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"daylic_confirm": int}), AdminRule())
-async def confirm_daylic(m: MessageEvent):
-    response_id = m.payload.get("daylic_confirm")
-    exist = await db.select([db.CompletedDaylic.daylic_id,
-                                          db.CompletedDaylic.form_id]).where(db.CompletedDaylic.id == response_id).gino.first()
-    if not exist:
-        await m.edit_message("Другой администратор уже проверил выполнение дейлика")
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"daylic_check": int, "action": str}), AdminRule())
+async def check_daylic(m: MessageEvent):
+    response_id = int(m.payload.get("daylic_check"))
+    checked = await db.select([db.CompletedDaylic.is_checked]).where(db.CompletedDaylic.id == response_id).gino.scalar()
+    if checked:
+        await m.edit_message('Этот дейлик уже проверил другой адмнисратор')
         return
-    daylic_id, form_id = exist
-    reward, daylic_name, cooldown = await db.select([db.Daylic.reward, db.Daylic.name, db.Daylic.cooldown]).where(db.Daylic.id == daylic_id).gino.first()
-    await (db.Form.update.values(balance=db.Form.balance + reward,
-                                deactivated_daylic=datetime.datetime.now()+datetime.timedelta(seconds=cooldown),
-                                 activated_daylic=None)
-           .where(db.Form.id == form_id).gino.status())
-    await db.CompletedDaylic.delete.where(db.CompletedDaylic.id == response_id).gino.status()
+    daylic_id, form_id = await db.select([db.CompletedDaylic.daylic_id, db.CompletedDaylic.form_id]).where(db.CompletedDaylic.id == response_id).gino.first()
     name, user_id = await db.select([db.Form.name, db.Form.user_id]).where(db.Form.id == form_id).gino.first()
-    await bot.api.messages.send(peer_id=user_id, message=f"Вам засчитано выполнения дейлика {daylic_name}\n"
-                                 f"Вы получили награду в размере {reward} монет\n"
-                                 f"На вас наложен кулдаун {parse_cooldown(cooldown)}", is_notification=True)
-    await m.edit_message(f"Дейлик {daylic_name} засчитан игроку [id{user_id}|{name}], выдана награда {reward} монет")
-
-
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"daylic_reject": int}), AdminRule())
-async def reject_daylic(m: MessageEvent):
-    response_id = m.payload.get("daylic_reject")
-    exist = await db.select([db.CompletedDaylic.daylic_id,
-                             db.CompletedDaylic.form_id]).where(db.CompletedDaylic.id == response_id).gino.first()
-    if not exist:
-        await m.edit_message("Другой администратор уже проверил выполнение дейлика")
-        return
-    daylic_id, form_id = exist
-    daylic_name = await db.select([db.Daylic.name]).where(db.Daylic.id == daylic_id).gino.scalar()
-    user_id, name = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.id == form_id).gino.first()
-    await db.CompletedDaylic.delete.where(db.CompletedDaylic.id == response_id).gino.status()
-    await bot.api.messages.send(peer_id=user_id, message=f"К сожалению вам отклонили выполнение дейлика {daylic_name}", is_notification=True)
-    await m.edit_message(f"Отклонено выполнение дейлика {daylic_name} участнику [id{user_id}|{name}]")
+    reward, daylic_name, cooldown = await db.select([db.Daylic.reward, db.Daylic.name, db.Daylic.cooldown]).where(
+        db.Daylic.id == daylic_id).gino.first()
+    if m.payload['action'] == 'accept':
+        await (db.Form.update.values(balance=db.Form.balance + reward,
+                                     deactivated_daylic=datetime.datetime.now()+datetime.timedelta(seconds=cooldown),
+                                     activated_daylic=None)
+               .where(db.Form.id == form_id).gino.status())
+        await db.CompletedDaylic.update.values(is_checked=True, is_claimed=True).where(db.CompletedDaylic.id == response_id).gino.status()
+        await bot.api.messages.send(peer_id=user_id, message=f"Вам засчитано выполнения дейлика {daylic_name}\n"
+                                     f"Вы получили награду в размере {reward} монет\n"
+                                     f"На вас наложен кулдаун {parse_cooldown(cooldown)}", is_notification=True)
+        await m.edit_message(f"Дейлик {daylic_name} засчитан игроку [id{user_id}|{name}], выдана награда {reward} монет")
+    else:
+        await db.CompletedDaylic.update.values(is_checked=True, is_claimed=False).where(
+            db.CompletedDaylic.id == response_id).gino.status()
+        await bot.api.messages.send(peer_id=user_id,
+                                    message=f"К сожалению вам отклонили выполнение дейлика {daylic_name}\n\n"
+                                            f"Завершите выполнение и отправьте отчёт заново",
+                                    is_notification=True)
+        await m.edit_message(f"Отклонено выполнение дейлика {daylic_name} участнику [id{user_id}|{name}]")
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"freeze": str, "user_id": int}))

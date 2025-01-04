@@ -8,7 +8,7 @@ import traceback
 from loader import bot
 import handlers  # Important
 from service.db_engine import db
-from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity, update_daughter_levels
+from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity, update_daughter_levels, calculate_time
 from config import ADMINS
 from service.middleware import MaintainenceMiddleware, StateMiddleware, FormMiddleware, ActivityUsersMiddleware
 
@@ -37,20 +37,14 @@ async def on_startup():
         asyncio.get_event_loop().create_task(take_off_payments(form_id))
     quests = await db.select([db.Form.id, db.Form.active_quest]).where(db.Form.active_quest.isnot(None)).gino.all()
     for form_id, quest_id in quests:
-        quest = await db.select([*db.Quest]).where(db.Quest.id == quest_id).gino.first()
-        cooldown = None
-        if not quest.closed_at:
-            if quest.execution_time:
-                cooldown = quest.execution_time
-        else:
-            if not quest.execution_time:
-                cooldown = (quest.closed_at - datetime.now()).total_seconds()
-            else:
-                nearest = min(quest.closed_at.timestamp(), datetime.now().timestamp())
-                cooldown = nearest - datetime.now().timestamp()
-        asyncio.get_event_loop().create_task(quest_over(cooldown, form_id, quest_id))
+        quest = await db.Quest.get(quest_id)
+        start_at = await db.select([db.Form.quest_start]).where(db.Form.id == form_id).gino.scalar()
+        cooldown = calculate_time(quest, start_at)
+        if cooldown:
+            asyncio.get_event_loop().create_task(quest_over(cooldown, form_id, quest_id))
     admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
-    await bot.api.messages.send(peer_ids=admins, message="🎉 Бот запущен!", is_notification=True)
+    if admins:
+        await bot.api.messages.send(peer_ids=admins, message="🎉 Бот запущен!", is_notification=True)
 
     user_ids = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
     for user_id in user_ids:

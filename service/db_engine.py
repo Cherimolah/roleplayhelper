@@ -85,6 +85,7 @@ class Database(Gino):
             daughter_bonus = Column(Integer, default=0)
             subordination_level = Column(Integer, default=0)
             libido_level = Column(Integer, default=0)
+            quest_start = Column(TIMESTAMP)
 
         self.Form = Form
 
@@ -168,6 +169,8 @@ class Database(Gino):
             id = Column(Integer, primary_key=True)
             quest_id = Column(Integer, ForeignKey("quests.id", ondelete='SET NULL'))
             form_id = Column(Integer, ForeignKey("forms.id", ondelete='CASCADE'))
+            is_claimed = Column(Boolean, default=False)
+            is_checked = Column(Boolean, default=False)
 
         self.ReadyQuest = ReadyQuest
 
@@ -191,6 +194,8 @@ class Database(Gino):
             id = Column(Integer, primary_key=True)
             form_id = Column(Integer, ForeignKey("forms.id"))
             daylic_id = Column(Integer, ForeignKey("daylics.id", ondelete='SET NULL'))
+            is_claimed = Column(Boolean, default=False)
+            is_checked = Column(Boolean, default=False)
 
         self.CompletedDaylic = CompletedDaylic
 
@@ -270,6 +275,11 @@ class Database(Gino):
         fractions = await self.select([func.count(db.Fraction.id)]).gino.scalar()
         if fractions == 0:
             await self.Fraction.create(name="Без фракции", description="Это базовая фракция, чтобы пройти регистрацию")
+        shop = await self.select([func.count(db.Shop.id)]).gino.scalar()
+        if shop == 0:
+            await self.Shop.create(name='Коктейль в баре', price=10, service=False)
+            await self.Shop.create(name='Премиальный коктейль в баре', price=50, service=False)
+            await self.Shop.create(name='Бутылка дорогого алкоголя', price=100, service=False)
 
     async def change_reputation(self, user_id: int, fraction_id: int, delta: int):
         id = await self.select([self.UserToFraction.id]).where(
