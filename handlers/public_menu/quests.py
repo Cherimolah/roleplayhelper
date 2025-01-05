@@ -5,7 +5,7 @@ from typing import Union
 from vkbottle.bot import Message, MessageEvent
 from vkbottle import Keyboard, KeyboardButtonColor, Callback, Text, GroupEventType
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func, or_, not_
 
 from loader import bot
 from service.custom_rules import StateRule
@@ -64,13 +64,26 @@ async def send_quest_page(m: Union[Message, MessageEvent], page: int):
             Text("Назад", {"menu": "quests and daylics"}), KeyboardButtonColor.NEGATIVE
         ))
         return
+    profession_id, fraction_id = await db.select([db.Form.profession, db.Form.fraction_id]).where(db.Form.id == form_id).gino.first()
+    restricted_quests = [x[0] for x in await db.select([db.Quest.id]).where(
+        and_(db.Quest.allowed_forms != [], not_(db.Quest.allowed_forms.is_(None)), not_(db.Quest.allowed_forms.op('@>')([form_id])))
+    ).gino.all()]
+    restricted_quests += [x[0] for x in await db.select([db.Quest.id]).where(
+        and_(not_(db.Quest.allowed_fraction.is_(None)), db.Quest.allowed_fraction != fraction_id)
+    ).gino.all()]
+    restricted_quests += [x[0] for x in await db.select([db.Quest.id]).where(
+        and_(not_(db.Quest.allowed_profession.is_(None)), db.Quest.allowed_profession != profession_id)
+    ).gino.all()]
     quest = await (
         db.select([*db.Quest])
         .where(and_(db.Quest.id.notin_(completed_qusts),
-                    or_(db.Quest.closed_at > datetime.datetime.now(), db.Quest.closed_at.is_(None)))).limit(
+                    or_(db.Quest.closed_at > datetime.datetime.now(), db.Quest.closed_at.is_(None)),
+                    db.Quest.id.notin_(restricted_quests))).limit(
             1).offset(page - 1).gino.first())
-    count = await db.select([func.count(db.Quest.id)]).where(and_(db.Quest.id.notin_(completed_qusts),
-                    or_(db.Quest.closed_at > datetime.datetime.now(), db.Quest.closed_at.is_(None)))
+    count = await db.select([func.count(db.Quest.id)]).where(
+        and_(db.Quest.id.notin_(completed_qusts),
+             or_(db.Quest.closed_at > datetime.datetime.now(), db.Quest.closed_at.is_(None)),
+             db.Quest.id.notin_(restricted_quests))
     ).gino.scalar()
     if not quest:
         await m.answer("На данный момент нет доступных квестов")
