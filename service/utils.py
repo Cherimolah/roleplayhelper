@@ -44,11 +44,13 @@ def parse_orientation(number: int) -> str:
         return "гомо"
 
 
-async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, form_id: int = None) -> Tuple[str, Optional[str]]:
+async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, form_id: int = None) -> Tuple[
+    str, Optional[str]]:
     if form_id:
         form = await db.select([*db.Form]).where(db.Form.id == form_id).gino.first()
     elif is_request:
-        form = await db.select([*db.Form]).where(and_(db.Form.is_request.is_(True), db.Form.user_id == user_id)).gino.first()
+        form = await db.select([*db.Form]).where(
+            and_(db.Form.is_request.is_(True), db.Form.user_id == user_id)).gino.first()
     else:
         form = await db.select([*db.Form]).where(db.Form.user_id == user_id).gino.first()
     user = (await bot.api.users.get(user_id))[0]
@@ -163,7 +165,8 @@ async def send_mailing(sleep, message_id, mailing_id):
     await asyncio.sleep(sleep)
     user_ids = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
     for i in range(0, len(user_ids), 100):
-        await bot.api.messages.send(peer_ids=user_ids[i:i + 100], forward_messages=message_id, random_id=0, is_notification=True)
+        await bot.api.messages.send(peer_ids=user_ids[i:i + 100], forward_messages=message_id, random_id=0,
+                                    is_notification=True)
     await db.Mailings.delete.where(db.Mailings.id == mailing_id).gino.status()
 
 
@@ -176,7 +179,8 @@ async def take_off_payments(form_id: int):
         if not balance or balance < 0 or freeze:
             await asyncio.sleep(86400)  # Ждём сутки, вдруг появятся деньги или анкета разморозиться
             continue
-        last_payment: datetime.datetime = await db.select([db.Form.last_payment]).where(db.Form.id == form_id).gino.scalar()
+        last_payment: datetime.datetime = await db.select([db.Form.last_payment]).where(
+            db.Form.id == form_id).gino.scalar()
         today = datetime.datetime.now()
         delta = today - last_payment
         user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
@@ -188,14 +192,15 @@ async def take_off_payments(form_id: int):
                     db.UserDecor.join(db.Decor, db.UserDecor.decor_id == db.Decor.id)
                 ).where(and_(db.UserDecor.user_id == user_id, db.Decor.is_func.is_(True))).gino.all()])
                 price += func_price
-                await db.Form.update.values(balance=db.Form.balance-price,
-                                            last_payment=today-datetime.timedelta(seconds=20)).where(
+                await db.Form.update.values(balance=db.Form.balance - price,
+                                            last_payment=today - datetime.timedelta(seconds=20)).where(
                     db.Form.id == form_id
                 ).gino.status()
                 group_id = (await bot.api.groups.get_by_id()).id
                 if (await bot.api.messages.is_messages_from_group_allowed(group_id, user_id=user_id)).is_allowed:
                     await bot.api.messages.send(peer_id=user_id, message=f"Снята арендная плата в размере {price}\n"
-                                                 f"Доступно на балансе: {balance-price}", is_notification=True)
+                                                                         f"Доступно на балансе: {balance - price}",
+                                                is_notification=True)
                 await asyncio.sleep(604800)  # Следующее списание через неделю
             else:
                 await asyncio.sleep(86400)  # Каюта может быть не присвоена подождём сутки, вдруг появится
@@ -207,12 +212,13 @@ async def take_off_payments(form_id: int):
 
 
 async def send_page_users(m: Union[Message, MessageEvent], page: int = 1):
-    users = await db.select([db.User.user_id, db.User.admin]).order_by(db.User.admin.desc()).order_by(db.User.user_id.asc()).offset((page-1)*15).limit(15).gino.all()
+    users = await db.select([db.User.user_id, db.User.admin]).order_by(db.User.admin.desc()).order_by(
+        db.User.user_id.asc()).offset((page - 1) * 15).limit(15).gino.all()
     user_ids = [x[0] for x in users]
     users_info = await bot.api.users.get(user_ids)
     reply = messages.list_users
     for i, user in enumerate(users):
-        reply = f"{reply}{(page-1)*15 + i + 1}. {'👑' if user.admin == 2 else '🅰' if user.admin == 1 else ''}" \
+        reply = f"{reply}{(page - 1) * 15 + i + 1}. {'👑' if user.admin == 2 else '🅰' if user.admin == 1 else ''}" \
                 f" [id{user.user_id}|{users_info[i].first_name} {users_info[i].last_name}]\n"
     keyboard = None
     count_users = await db.func.count(db.User.user_id).gino.scalar()
@@ -305,11 +311,13 @@ async def quest_over(seconds, form_id, quest_id):
     if not seconds:
         return
     await asyncio.sleep(seconds)
-    user_id, current_quest = await db.select([db.Form.user_id, db.Form.active_quest]).where(db.Form.id == form_id).gino.first()
+    user_id, current_quest = await db.select([db.Form.user_id, db.Form.active_quest]).where(
+        db.Form.id == form_id).gino.first()
     if current_quest == quest_id:
         name = await db.select([db.Quest.name]).where(db.Quest.id == current_quest).gino.scalar()
         await db.Form.update.values(active_quest=None).where(db.Form.id == form_id).gino.status()
-        await bot.api.messages.send(peer_id=user_id, message=f"Время выполнения квеста «{name}» завершилось", is_notification=True)
+        await bot.api.messages.send(peer_id=user_id, message=f"Время выполнения квеста «{name}» завершилось",
+                                    is_notification=True)
 
 
 def calculate_time(quest: db.Quest, starts_at: datetime.datetime) -> int | None:
@@ -328,20 +336,24 @@ def calculate_time(quest: db.Quest, starts_at: datetime.datetime) -> int | None:
             execution_time = nearest - datetime.datetime.now().timestamp()
     return execution_time
 
+
 async def send_daylics():
     while True:
         today = datetime.datetime.now()
         expected = datetime.datetime(today.year, today.month, today.day, 18, 0, 0)
         if today > expected:
             expected = expected + datetime.timedelta(days=1)
-        await asyncio.sleep((expected-today).total_seconds())
-        data = await db.select([db.Form.id, db.Form.user_id]).where(db.Form.deactivated_daylic < datetime.datetime.now()).gino.all()
+        await asyncio.sleep((expected - today).total_seconds())
+        data = await db.select([db.Form.id, db.Form.user_id]).where(
+            db.Form.deactivated_daylic < datetime.datetime.now()).gino.all()
         for form_id, user_id in data:
             profession_id = await db.select([db.Form.profession]).where(db.Form.id == form_id).gino.scalar()
-            daylic = await db.select([db.Daylic.id]).where(db.Daylic.profession_id == profession_id).order_by(func.random()).gino.scalar()
+            daylic = await db.select([db.Daylic.id]).where(db.Daylic.profession_id == profession_id).order_by(
+                func.random()).gino.scalar()
             if daylic:
                 await db.Form.update.values(activated_daylic=daylic).where(db.Form.id == form_id).gino.status()
-                await bot.api.messages.send(peer_id=user_id, message="Вам доступно новое ежедневное задание!", is_notification=True)
+                await bot.api.messages.send(peer_id=user_id, message="Вам доступно новое ежедневное задание!",
+                                            is_notification=True)
         await asyncio.sleep(5)
 
 
@@ -352,18 +364,20 @@ async def show_fields_edit(user_id: int, new=True):
         params['is_request'] = True
         await db.Form.create(**params)
         await db.User.update.values(editing_form=True).where(db.User.user_id == user_id).gino.status()
-    await db.User.update.values(state=service.states.Menu.SELECT_FIELD_EDIT_NUMBER).where(db.User.user_id == user_id).gino.status()
+    await db.User.update.values(state=service.states.Menu.SELECT_FIELD_EDIT_NUMBER).where(
+        db.User.user_id == user_id).gino.status()
     states.set(user_id, service.states.Menu.SELECT_FIELD_EDIT_NUMBER)
     reply = ("Выберите поле для редактирования. "
              "Когда закончите нажмите кнопку «Подтвердить изменения»\n\n")
     for i, field in enumerate(fields):
-        reply += f"{i+1}. {field.name}\n"
+        reply += f"{i + 1}. {field.name}\n"
     await bot.api.messages.send(message=reply, keyboard=keyboards.confirm_edit_form, peer_id=user_id)
 
 
 async def page_content(table_name, page: int) -> Tuple[str, Optional[Keyboard]]:
     table = getattr(db, table_name)
-    names = [x[0] for x in await db.select([table.name]).order_by(table.id.asc()).offset((page - 1) * 15).limit(15).gino.all()]
+    names = [x[0] for x in
+             await db.select([table.name]).order_by(table.id.asc()).offset((page - 1) * 15).limit(15).gino.all()]
     count = await db.select([func.count(table.id)]).gino.scalar()
     if count % 15 == 0:
         pages = count // 15
@@ -441,7 +455,7 @@ class FormatDataException(Exception):
     pass
 
 
-def allow_edit_content(content_type: str, end: bool = False, text: str = None, state: str = None, keyboard = None):
+def allow_edit_content(content_type: str, end: bool = False, text: str = None, state: str = None, keyboard=None):
     def decorator(function):
         async def wrapper(m: Message, value=None, form=None, *args, **kwargs):
             kwargs["m"] = m
@@ -455,7 +469,8 @@ def allow_edit_content(content_type: str, end: bool = False, text: str = None, s
                 await m.answer(f"Неправильный формат данных!\n{e}")
                 return
             item_id = int(states.get(m.from_id).split("*")[1])
-            editing_content = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
+            editing_content = await db.select([db.User.editing_content]).where(
+                db.User.user_id == m.from_id).gino.scalar()
             if editing_content:
                 await m.answer("Новое значение успешно установлено")
                 await send_edit_item(m.from_id, item_id, content_type)
@@ -467,7 +482,9 @@ def allow_edit_content(content_type: str, end: bool = False, text: str = None, s
                     await send_content_page(m, content_type, 1)
                     states.set(m.from_id, service.states.Admin.SELECT_ACTION + "_" + content_type)
             return data
+
         return wrapper
+
     return decorator
 
 
@@ -478,13 +495,14 @@ async def send_edit_item(user_id: int, item_id: int, item_type: str):
     attachment = None
     for i, data in enumerate(fields_content[item_type]['fields']):
         if data.name == "Фото":
-            attachment = item[i+1]
+            attachment = item[i + 1]
         if not data.serialize_func:
-            reply += f"{i+1}. {data.name}: {item[i + 1]}\n"
+            reply += f"{i + 1}. {data.name}: {item[i + 1]}\n"
         else:
-            reply += f"{i+1}. {data.name}: {await data.serialize_func(item[i + 1])}\n"
+            reply += f"{i + 1}. {data.name}: {await data.serialize_func(item[i + 1])}\n"
     keyboard = keyboards.get_edit_content(item_type)
-    await db.User.update.values(state=f"{service.states.Admin.EDIT_CONTENT}_{item_type}*{item.id}").where(db.User.user_id == user_id).gino.status()
+    await db.User.update.values(state=f"{service.states.Admin.EDIT_CONTENT}_{item_type}*{item.id}").where(
+        db.User.user_id == user_id).gino.status()
     states.set(user_id, f"{service.states.Admin.EDIT_CONTENT}_{item_type}*{item.id}")
     await bot.api.messages.send(message=reply, keyboard=keyboard.get_json(), peer_id=user_id, attachment=attachment)
 
@@ -600,6 +618,57 @@ async def serialize_fraction_daylic(fraction_id: int) -> str:
     return name
 
 
+async def info_quest_users_allowed():
+    return ("Пришлите ссылки на пользователей, у которых будет доступен квест",
+            Keyboard().add(Text('Без ограничений по игрокам', {"quest_for_all": True}),
+                           KeyboardButtonColor.PRIMARY))
+
+
+async def serialize_quest_users_allowed(form_ids: List[int]) -> str:
+    if not form_ids:
+        return 'нет ограничений'
+    response = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.id.in_(form_ids)).gino.all()
+    user_ids: List[int] = [x[0] for x in response]
+    users = await bot.api.users.get(user_ids=user_ids)
+    names = [x[1] for x in response]
+    reply = ""
+    for i, name in enumerate(names):
+        reply += f'{i + 1}. [id{users[i].id}|{users[i].first_name} {users[i].last_name} / {name}]\n'
+    return reply
+
+
+async def info_quest_fraction_allowed():
+    fractions = [x[0] for x in await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()]
+    reply = "Пришлите номер фракции у которой будет доступ к квесту\n\n"
+    for i, name in enumerate(fractions):
+        reply += f"{i + 1}. {name}\n"
+    return (reply,
+            Keyboard().add(Text('Без ограничения по фракциям', {"quest_for_all_fractions": True}),
+                           KeyboardButtonColor.PRIMARY))
+
+
+async def serialize_quest_fraction_allowed(fraction_id: int) -> str:
+    if not fraction_id:
+        return "нет ограничения"
+    return await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+
+
+async def info_quest_profession_allowed():
+    professions = [x[0] for x in await db.select([db.Profession.name]).order_by(db.Profession.id.asc()).gino.all()]
+    reply = "Пришлите номер профессии у которой будет доступ к квесту\n\n"
+    for i, name in enumerate(professions):
+        reply += f"{i + 1}. {name}\n"
+    return (reply,
+            Keyboard().add(Text('Без ограничения по профессиям', {"quest_for_all_professions": True}),
+                           KeyboardButtonColor.PRIMARY))
+
+
+async def serialize_quest_profession_allowed(profession_id: int) -> str:
+    if not profession_id:
+        return "нет ограничения"
+    return await db.select([db.Profession.name]).where(db.Profession.id == profession_id).gino.scalar()
+
+
 fields_content: Dict[str, Dict[str, List[Field]]] = {
     "Cabins": {
         "fields": [
@@ -639,7 +708,10 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field("Конец", Admin.QUEST_END_DATE, info_end_quest, parse_datetime_async),
             Field("Даётся на выполнение", Admin.QUEST_EXECUTION_TIME, info_cooldown_quest, parse_cooldown_async),
             Field("Фракция", Admin.QUEST_FRACTION, info_fraction_daylic, serialize_fraction_daylic),
-            Field("Бонус к репутации", Admin.QUEST_REPUTATION)
+            Field("Бонус к репутации", Admin.QUEST_REPUTATION),
+            Field("Для фракции", Admin.QUEST_FRACTION_ALLOWED, info_quest_fraction_allowed, serialize_quest_fraction_allowed),
+            Field("Для профессии", Admin.QUEST_PROFESSION_ALLOWED, info_quest_profession_allowed, serialize_quest_profession_allowed),
+            Field("Для игроков", Admin.QUEST_USERS_ALLOWED, info_quest_users_allowed, serialize_quest_users_allowed)
         ],
         "name": "Квест"
     },
@@ -716,14 +788,15 @@ async def check_last_activity(user_id: int):
         return
     time_to_freeze: int = await db.select([db.Metadata.time_to_freeze]).gino.scalar()
     await asyncio.sleep(time_to_freeze)
-    last_activity: datetime.datetime = await db.select([db.User.last_activity]).where(db.User.user_id == user_id).gino.scalar()
+    last_activity: datetime.datetime = await db.select([db.User.last_activity]).where(
+        db.User.user_id == user_id).gino.scalar()
     time_to_freeze: int = await db.select([db.Metadata.time_to_freeze]).gino.scalar()  # Can be updated after sleeping
     freeze = await db.select([db.Form.freeze]).where(db.Form.user_id == user_id).gino.scalar()
     if (datetime.datetime.now() - last_activity).total_seconds() >= time_to_freeze and not freeze:
         await db.Form.update.values(freeze=True).where(db.Form.user_id == user_id).gino.status()
         await bot.api.messages.send(message="❗ В связи с отсутствием вашей активности в течение "
                                             f"{parse_cooldown(time_to_freeze)} ваша анкета автоматически заморожена",
-                                    peer_id=user_id,  is_notification=True)
+                                    peer_id=user_id, is_notification=True)
         name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
         user = (await bot.api.users.get(user_id=user_id))[0]
         admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
@@ -738,7 +811,8 @@ async def check_last_activity(user_id: int):
         time_to_delete: int = await db.select([db.Metadata.time_to_delete]).gino.scalar()
         is_exists = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
         freeze = await db.select([db.Form.freeze]).where(db.Form.user_id == user_id).gino.scalar()
-        if last_activity and freeze and (datetime.datetime.now() - last_activity).total_seconds() >= time_to_delete and is_exists:
+        if last_activity and freeze and (
+                datetime.datetime.now() - last_activity).total_seconds() >= time_to_delete and is_exists:
             await bot.api.messages.send(message=f"❗ В связми с отсутствием вашей активности в течение "
                                                 f"{parse_cooldown(time_to_delete)} ваша анкета автоматичкески удалена",
                                         peer_id=user_id, is_notification=True)
@@ -757,9 +831,13 @@ async def update_daughter_levels(user_id: int):
         tomorrow = now + datetime.timedelta(days=1)
         tomorrow = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0)
         await asyncio.sleep((tomorrow - now).total_seconds())
-        bonus, sub_level, lib_level, fraction_id = await db.select([db.Form.daughter_bonus, db.Form.subordination_level, db.Form.libido_level, db.Form.fraction_id]).where(db.Form.user_id == user_id).gino.first()
-        multiplier = await db.select([db.Fraction.daughter_multiplier]).where(db.Fraction.id == fraction_id).gino.scalar()
+        bonus, sub_level, lib_level, fraction_id = await db.select(
+            [db.Form.daughter_bonus, db.Form.subordination_level, db.Form.libido_level, db.Form.fraction_id]).where(
+            db.Form.user_id == user_id).gino.first()
+        multiplier = await db.select([db.Fraction.daughter_multiplier]).where(
+            db.Fraction.id == fraction_id).gino.scalar()
         sub_level = min(100, max(0, int(sub_level + 2 + 2 * multiplier + bonus)))
         lib_level = min(100, max(0, int(lib_level + 2 + 2 * multiplier + bonus)))
-        await db.Form.update.values(subordination_level=sub_level, libido_level=lib_level).where(db.Form.user_id == user_id).gino.status()
+        await db.Form.update.values(subordination_level=sub_level, libido_level=lib_level).where(
+            db.Form.user_id == user_id).gino.status()
         await asyncio.sleep(15)

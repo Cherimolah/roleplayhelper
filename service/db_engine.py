@@ -2,7 +2,7 @@ import datetime
 from typing import List, Tuple
 
 from gino import Gino
-from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, Boolean, TIMESTAMP, func, and_, Float
+from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, Boolean, TIMESTAMP, func, and_, Float, ARRAY
 
 from config import USER, PASSWORD, HOST, DATABASE
 
@@ -160,6 +160,9 @@ class Database(Gino):
             execution_time = Column(Integer)
             fraction_id = Column(Integer, ForeignKey("fractions.id", ondelete='SET NULL'))
             reputation = Column(Integer)
+            allowed_fraction = Column(Integer, ForeignKey('fractions.id', ondelete='SET NULL'))
+            allowed_profession = Column(Integer, ForeignKey('professions.id', ondelete='SET NULL'))
+            allowed_forms = Column(ARRAY(Integer))
 
         self.Quest = Quest
 
