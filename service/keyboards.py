@@ -95,6 +95,8 @@ manage_content = Keyboard().add(
 ).add(
     Text("Фракции", {"edit_content": "Fraction"}), KeyboardButtonColor.PRIMARY
 ).row().add(
+    Text("Доп. цели к квестам", {"edit_content": "AdditionalTarget"}), KeyboardButtonColor.PRIMARY
+).row().add(
     Text("Назад", {"edit_content": "back"}), KeyboardButtonColor.NEGATIVE
 )
 

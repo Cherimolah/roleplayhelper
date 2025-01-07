@@ -150,3 +150,12 @@ class Admin:
     FRACTION_MULTIPLIER = "fraction_multiplier"
     EDIT_LEVEL_SUBORDINATION = 'edit_level_subordination'
     EDIT_LEVEL_LIBIDO = 'edit_level_libido'
+    TARGET_DELETE = "target_delete"
+    TARGET_NAME = "target_name"
+    TARGET_DESCRIPTION = "target_description"
+    TARGET_FRACTION_REPUTATION = "target_fraction_reputation"
+    TARGET_REPUTATION = "target_reputation"
+    TARGET_FRACTION = "target_fraction"
+    TARGET_PROFESSION = "target_profession"
+    TARGET_DAUGHTER_PARAMS = 'target_daughter_params'
+    TARGET_FORMS = "target_forms"

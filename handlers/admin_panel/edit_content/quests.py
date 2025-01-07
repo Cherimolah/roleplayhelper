@@ -195,7 +195,11 @@ async def quest_users_all_allowed(m: Message):
 @allow_edit_content('Quest', state=Admin.QUEST_FRACTION_ALLOWED)
 async def quest_users_allowed(m: Message):
     user_ids = list(set(await parse_ids(m)))
+    if not user_ids:
+        raise FormatDataException('Пользователи не указаны')
     form_ids = [x[0] for x in await db.select([db.Form.id]).where(db.Form.user_id.in_(user_ids)).gino.all()]
+    if not form_ids:
+        raise FormatDataException('Указанные пользователи не найдены в базе')
     quest_id = int(states.get(m.from_id).split("*")[-1])
     await db.Quest.update.values(allowed_forms=form_ids).where(db.Quest.id == quest_id).gino.status()
     status = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()

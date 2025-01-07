@@ -626,7 +626,7 @@ async def info_quest_users_allowed():
 
 async def serialize_quest_users_allowed(form_ids: List[int]) -> str:
     if not form_ids:
-        return 'нет ограничений'
+        return 'не установлено'
     response = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.id.in_(form_ids)).gino.all()
     user_ids: List[int] = [x[0] for x in response]
     users = await bot.api.users.get(user_ids=user_ids)
@@ -667,6 +667,68 @@ async def serialize_quest_profession_allowed(profession_id: int) -> str:
     if not profession_id:
         return "нет ограничения"
     return await db.select([db.Profession.name]).where(db.Profession.id == profession_id).gino.scalar()
+
+
+async def info_target_fraction_reputation():
+    fractions = [x[0] for x in await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()]
+    reply = "Пришлите номер фракции, по уровню репутации в которой будет доступ к доп. цели\n\n"
+    for i, name in enumerate(fractions):
+        reply += f"{i + 1}. {name}\n"
+    return (reply,
+            Keyboard().add(Text('Без выдачи по уровню репутации', {"target_reputation": False})))
+
+
+async def serialize_target_fraction(fraction_id: int) -> str:
+    if not fraction_id:
+        return "не установлено"
+    return await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+
+
+async def info_target_fraction():
+    fractions = [x[0] for x in await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()]
+    reply = "Пришлите номер фракции у которой будет доступ к доп. цели\n\n"
+    for i, name in enumerate(fractions):
+        reply += f"{i + 1}. {name}\n"
+    return (reply,
+            Keyboard().add(Text('Без выдачи по фракции', {"target_fraction": False})))
+
+
+async def info_target_profession_allowed():
+    professions = [x[0] for x in await db.select([db.Profession.name]).order_by(db.Profession.id.asc()).gino.all()]
+    reply = "Пришлите номер профессии у которой будет доступ к доп. цели\n\n"
+    for i, name in enumerate(professions):
+        reply += f"{i + 1}. {name}\n"
+    return (reply,
+            Keyboard().add(Text('Без выдачи по профессии', {"target_profession": False})))
+
+
+async def serialize_target_profession_allowed(profession_id: int) -> str:
+    if not profession_id:
+        return "не установлено"
+    return await db.select([db.Profession.name]).where(db.Profession.id == profession_id).gino.scalar()
+
+
+async def info_target_daughter_params():
+    return ('Укажите значения для необходимых параметров дочери.\n{Либидо} {и/или} {Подчинение}\n'
+                         'Примеры:\n\n'
+                         '10 и 15\n10 или 5\n\n', Keyboard().add(Text('Без выдачи по параметрам', {"target_params": False})))
+
+
+async def serialize_target_daughter_params(params: List[int]):
+    if not params:
+        return 'не установлено'
+    return f"{params[0]} {'или' if params[1] else 'и'} {params[2]}"
+
+
+async def info_target_users_allowed():
+    return ("Пришлите ссылки на пользователей, у которых будет доступна доп. цель",
+            Keyboard().add(Text('Без ограничений по игрокам', {"target_forms": False})))
+
+
+async def serialize_target_reputation(reputation: int):
+    if reputation is None:
+        return "не установлено"
+    return str(reputation)
 
 
 fields_content: Dict[str, Dict[str, List[Field]]] = {
@@ -750,6 +812,19 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field('Мультпиликатор дочери', Admin.FRACTION_MULTIPLIER)
         ],
         "name": "Фракция"
+    },
+    'AdditionalTarget': {
+        "fields": [
+            Field('Название', Admin.TARGET_NAME),
+            Field('Описание', Admin.TARGET_DESCRIPTION),
+            Field('Значение репутации во фракции', Admin.TARGET_FRACTION_REPUTATION, info_target_fraction_reputation, serialize_target_fraction),
+            Field('Необходимый уровень репутации', Admin.TARGET_REPUTATION, serialize_func=serialize_target_reputation),
+            Field('Для фракции', Admin.TARGET_FRACTION, info_target_fraction, serialize_target_fraction),
+            Field('Для профессии', Admin.TARGET_PROFESSION, info_target_profession_allowed, serialize_target_profession_allowed),
+            Field('С параметрами дочери', Admin.TARGET_DAUGHTER_PARAMS, info_target_daughter_params, serialize_target_daughter_params),
+            Field('Для пользователей', Admin.TARGET_FORMS, info_target_users_allowed, serialize_quest_users_allowed)
+        ],
+        "name": "Доп. цель"
     }
 }
 

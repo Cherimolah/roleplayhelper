@@ -162,9 +162,24 @@ class Database(Gino):
             reputation = Column(Integer)
             allowed_fraction = Column(Integer, ForeignKey('fractions.id', ondelete='SET NULL'))
             allowed_profession = Column(Integer, ForeignKey('professions.id', ondelete='SET NULL'))
-            allowed_forms = Column(ARRAY(Integer))
+            allowed_forms = Column(ARRAY(Integer), default=[])
 
         self.Quest = Quest
+
+        class AdditionalTarget(self.Model):
+            __tablename__ = 'additional_target'
+
+            id = Column(Integer, primary_key=True)
+            name = Column(Text)
+            description = Column(Text)
+            fraction_reputation = Column(Integer, ForeignKey('fractions.id', ondelete='SET NULL'))
+            reputation = Column(Integer)
+            fraction = Column(Integer, ForeignKey("fractions.id", ondelete='SET NULL'))
+            profession = Column(Integer, ForeignKey('professions.id', ondelete='SET NULL'))
+            daughter_params = Column(ARRAY(Integer))
+            forms = Column(ARRAY(Integer), default=[])
+
+        self.AdditionalTarget = AdditionalTarget
 
         class ReadyQuest(self.Model):
             __tablename__ = "ready_quests"
