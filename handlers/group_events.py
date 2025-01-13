@@ -11,7 +11,7 @@ import messages
 @bot.on.raw_event(GroupEventType.GROUP_JOIN, GroupJoin)
 async def group_join(event: GroupJoin):
     user: API = random.choice(users)
-    group_id = (await bot.api.groups.get_by_id())[0].id
+    group_id = (await bot.api.groups.get_by_id()).groups[0].id
     if await bot.api.groups.is_member(group_id, event.object.user_id):
         return
     await user.groups.approve_request(event.group_id, event.object.user_id)
