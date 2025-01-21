@@ -13,7 +13,7 @@ import messages
 async def group_join(event: GroupJoin):
     user: API = random.choice(users)
     group_id = (await bot.api.groups.get_by_id()).groups[0].id
-    if await bot.api.groups.is_member(group_id, event.object.user_id):
+    if await bot.api.groups.is_member(group_id=group_id, user_id=event.object.user_id):
         return
     await user.groups.approve_request(group_id=event.group_id, user_id=event.object.user_id)
     await asyncio.sleep(0.34)
