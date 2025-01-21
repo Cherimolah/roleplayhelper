@@ -14,7 +14,7 @@ async def group_join(event: GroupJoin):
     group_id = (await bot.api.groups.get_by_id()).groups[0].id
     if await bot.api.groups.is_member(group_id, event.object.user_id):
         return
-    await user.groups.approve_request(event.group_id, event.object.user_id)
+    await user.groups.approve_request(group_id=event.group_id, user_id=event.object.user_id)
     await asyncio.sleep(0.34)
     can_write = (await user.users.get([event.object.user_id],
                                       fields=["can_write_private_message"]))[0].can_write_private_message
