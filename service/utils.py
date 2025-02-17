@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import json
 import os
 from typing import List, Tuple, Optional, Union, Dict
 import re
@@ -463,19 +464,23 @@ def allow_edit_content(content_type: str, end: bool = False, text: str = None, s
                 kwargs["value"] = value
             if form:
                 kwargs["form"] = form
+            item_id = int(states.get(m.from_id).split("*")[1])
+            editing_content = await db.select([db.User.editing_content]).where(
+                db.User.user_id == m.from_id).gino.scalar()
+            # TODO
+            # kwargs['editing_content'] = editing_content
+            # kwargs['item_id'] = item_id
             try:
                 data = await function(**kwargs)
             except FormatDataException as e:
                 await m.answer(f"Неправильный формат данных!\n{e}")
                 return
-            item_id = int(states.get(m.from_id).split("*")[1])
-            editing_content = await db.select([db.User.editing_content]).where(
-                db.User.user_id == m.from_id).gino.scalar()
             if editing_content:
                 await m.answer("Новое значение успешно установлено")
                 await send_edit_item(m.from_id, item_id, content_type)
             else:
-                states.set(m.from_id, f"{state}*{item_id}")
+                if state:
+                    states.set(m.from_id, f"{state}*{item_id}")
                 if text:
                     await m.answer(text, keyboard=keyboard)
                 if end:
@@ -731,6 +736,54 @@ async def serialize_target_reputation(reputation: int):
     return str(reputation)
 
 
+async def info_quest_additional_targets():
+    targets = [x[0] for x in
+               await db.select([db.AdditionalTarget.name]).order_by(db.AdditionalTarget.id.asc()).gino.all()]
+    reply = 'Укажите номера дополнительных целей через запятую:\n\n'
+    if not targets:
+        reply += 'Дополнительных целей на данный момент не создано'
+    else:
+        for i, target in enumerate(targets):
+            reply += f"{i + 1}. {target}\n"
+    return reply, Keyboard().add(Text('Без дополнительных целей', {"quest_without_targets": True}))
+
+
+async def serialize_quest_additional_targets(target_ids: List[int]) -> str:
+    if not target_ids:
+        return 'Без дополнительных целей'
+    else:
+        names = [x[0] for x in await db.select([db.AdditionalTarget.name]).where(db.AdditionalTarget.id.in_(target_ids)).gino.all()]
+        reply = "\n\n"
+        for i, name in enumerate(names):
+            reply += f"{i+1}. {name}\n"
+        return reply
+
+
+async def info_target_reward():
+    reply = ('Возможные варианты награды:\n'
+             'I. Бонус к репутациям\n'
+             'II. Награда валютой\n\n'
+             'Список фракций:\n')
+    fractions = [x[0] for x in await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()]
+    for i, fraction in enumerate(fractions):
+        reply += f"{i + 1}. {fraction}\n"
+    reply += ("\nЧтобы указать награду в виде бонуса к фракциям необходимо написать команду «РЕП {номер фракции} "
+              "{бонус}». Например:\nРЕП 1 10\n\n"
+              "Чтобы указать награду в виде валюты необходимо написать команду «ВАЛ {бонус}». Например:\n"
+              "ВАЛ 100")
+    return reply, None
+
+
+async def serialize_target_reward(data: str):
+    data = json.loads(data)
+    if data['type'] == 'fraction_bonus':
+        fraction = await db.select([db.Fraction.name]).where(db.Fraction.id == data['fraction_id']).gino.scalar()
+        bonus = f"{'+' if data['reputation_bonus'] >= 0 else ''}{data['reputation_bonus']}"
+        return f'Бонус к репутации {bonus} во фракции «{fraction}»'
+    elif data['type'] == 'value_bonus':
+        return str(data['bonus']) + ' валюты'
+
+
 fields_content: Dict[str, Dict[str, List[Field]]] = {
     "Cabins": {
         "fields": [
@@ -773,7 +826,8 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field("Бонус к репутации", Admin.QUEST_REPUTATION),
             Field("Для фракции", Admin.QUEST_FRACTION_ALLOWED, info_quest_fraction_allowed, serialize_quest_fraction_allowed),
             Field("Для профессии", Admin.QUEST_PROFESSION_ALLOWED, info_quest_profession_allowed, serialize_quest_profession_allowed),
-            Field("Для игроков", Admin.QUEST_USERS_ALLOWED, info_quest_users_allowed, serialize_quest_users_allowed)
+            Field("Для игроков", Admin.QUEST_USERS_ALLOWED, info_quest_users_allowed, serialize_quest_users_allowed),
+            Field('Доп. цели', Admin.QUEST_ADDITIONAL_TARGETS, info_quest_additional_targets, serialize_quest_additional_targets)
         ],
         "name": "Квест"
     },
@@ -822,7 +876,8 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field('Для фракции', Admin.TARGET_FRACTION, info_target_fraction, serialize_target_fraction),
             Field('Для профессии', Admin.TARGET_PROFESSION, info_target_profession_allowed, serialize_target_profession_allowed),
             Field('С параметрами дочери', Admin.TARGET_DAUGHTER_PARAMS, info_target_daughter_params, serialize_target_daughter_params),
-            Field('Для пользователей', Admin.TARGET_FORMS, info_target_users_allowed, serialize_quest_users_allowed)
+            Field('Для пользователей', Admin.TARGET_FORMS, info_target_users_allowed, serialize_quest_users_allowed),
+            Field('Награда', Admin.TARGET_REWARD, info_target_reward, serialize_target_reward)
         ],
         "name": "Доп. цель"
     }

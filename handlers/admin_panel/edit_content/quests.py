@@ -257,14 +257,24 @@ async def quest_fractions_allowed(m: Message, value: int):
 
 
 @bot.on.private_message(StateRule(Admin.QUEST_PROFESSION_ALLOWED), PayloadRule({"quest_for_all_professions": True}), AdminRule())
-@allow_edit_content('Quest', text='Квест успешно создан', end=True)
+@allow_edit_content('Quest', state=Admin.QUEST_ADDITIONAL_TARGETS)
 async def quest_allow_all_professions(m: Message):
     quest_id = int(states.get(m.from_id).split("*")[-1])
     await db.Quest.update.values(allowed_profession=None).where(db.Quest.id == quest_id).gino.status()
+    editing_content = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
+    if not editing_content:
+        targets = [x[0] for x in await db.select([db.AdditionalTarget.name]).order_by(db.AdditionalTarget.id.asc()).gino.all()]
+        reply = 'Укажите номера дополнительных целей через запятую:\n\n'
+        if not targets:
+            reply += 'Дополнительных целей на данный момент не создано'
+        else:
+            for i, target in enumerate(targets):
+                reply += f"{i + 1}. {target}\n"
+        await m.answer(reply, keyboard=Keyboard().add(Text('Без дополнительных целей', {"quest_without_targets": True})))
 
 
 @bot.on.private_message(StateRule(Admin.QUEST_PROFESSION_ALLOWED), NumericRule(), AdminRule())
-@allow_edit_content('Quest', text='Квесту спешно создан', end=True)
+@allow_edit_content('Quest', state=Admin.QUEST_ADDITIONAL_TARGETS)
 async def quest_allow_professions(m: Message, value: int):
     quest_id = int(states.get(m.from_id).split("*")[-1])
     professions = [x[0] for x in await db.select([db.Profession.id]).order_by(db.Profession.id.asc()).gino.all()]
@@ -272,6 +282,38 @@ async def quest_allow_professions(m: Message, value: int):
         raise FormatDataException("Номер профессии слишком большой")
     profession_id = professions[value - 1]
     await db.Quest.update.values(allowed_profession=profession_id).where(db.Quest.id == quest_id).gino.status()
+    editing_content = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
+    if not editing_content:
+        targets = [x[0] for x in
+                   await db.select([db.AdditionalTarget.name]).order_by(db.AdditionalTarget.id.asc()).gino.all()]
+        reply = 'Укажите номера дополнительных целей через запятую:\n\n'
+        if not targets:
+            reply += 'Дополнительных целей на данный момент не создано'
+        else:
+            for i, target in enumerate(targets):
+                reply += f"{i + 1}. {target}\n"
+        await m.answer(reply,
+                       keyboard=Keyboard().add(Text('Без дополнительных целей', {"quest_without_targets": True})))
+
+
+@bot.on.private_message(StateRule(Admin.QUEST_ADDITIONAL_TARGETS), PayloadRule({"quest_without_targets": True}), AdminRule())
+@allow_edit_content('Quest', text='Квест успешно создан', end=True)
+async def quest_without_targets(m: Message):
+    quest_id = int(states.get(m.from_id).split("*")[-1])
+    await db.Quest.update.values(target_ids=[]).where(db.Quest.id == quest_id).gino.status()
+
+
+@bot.on.private_message(StateRule(Admin.QUEST_ADDITIONAL_TARGETS), AdminRule())
+@allow_edit_content('Quest', text='Квест успешно создан', end=True)
+async def quest_additional_targets(m: Message):
+    try:
+        numbers = list(set(map(int, m.text.replace(' ', '').split(','))))
+    except:
+        raise FormatDataException('Необходимо указать номера доп. целей через запятую. Например: 1, 2, 3')
+    target_ids = [x[0] for x in await db.select([db.AdditionalTarget.id]).order_by(db.AdditionalTarget.id.asc()).gino.all()]
+    numbers = list(map(lambda x: target_ids[x - 1], numbers))
+    quest_id = int(states.get(m.from_id).split("*")[-1])
+    await db.Quest.update.values(target_ids=numbers).where(db.Quest.id == quest_id).gino.status()
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Quest"), PayloadRule({"Quest": "delete"}), AdminRule())

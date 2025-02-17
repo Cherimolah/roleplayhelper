@@ -113,6 +113,7 @@ class Admin:
     QUEST_USERS_ALLOWED = "quest_users_allowed"
     QUEST_FRACTION_ALLOWED = "quest_fraction_allowed"
     QUEST_PROFESSION_ALLOWED = "quest_profession_allowed"
+    QUEST_ADDITIONAL_TARGETS = "quest_additional_targets"
     DAYLIC_NAME = "daylic_name"
     DAYLIC_DESCRIPTION = "daylic_description"
     DAYLIC_REWARD = "daylic_reward"
@@ -159,3 +160,4 @@ class Admin:
     TARGET_PROFESSION = "target_profession"
     TARGET_DAUGHTER_PARAMS = 'target_daughter_params'
     TARGET_FORMS = "target_forms"
+    TARGET_REWARD = "target_reward"
