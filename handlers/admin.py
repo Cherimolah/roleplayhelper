@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import shutil
+import json
 
 from vkbottle.bot import MessageEvent, Message
 from vkbottle.dispatch.rules.base import PayloadMapRule, PayloadRule
@@ -15,7 +16,7 @@ from service import keyboards
 from service.states import Menu, Admin
 from service.middleware import states
 from service.custom_rules import StateRule, NumericRule, AdminRule
-from service.utils import take_off_payments, parse_cooldown, parse_reputation, create_mention
+from service.utils import take_off_payments, parse_cooldown, parse_reputation, create_mention, check_quest_completed
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_accept": int}), AdminRule())
@@ -198,25 +199,73 @@ async def verify_quest(m: MessageEvent):
         return
     form_id, quest_id = await db.select([db.ReadyQuest.form_id, db.ReadyQuest.quest_id]).where(db.ReadyQuest.id == request_id).gino.first()
     form_name, user_id = await db.select([db.Form.name, db.Form.user_id]).where(db.Form.id == form_id).gino.first()
+    user = (await bot.api.users.get(user_id=user_id))[0]
+    user_name = f"{user.first_name} {user.last_name}"
     if m.payload['quest_ready']:
         await db.ReadyQuest.update.values(is_checked=True, is_claimed=True).where(db.ReadyQuest.id == request_id).gino.status()
         reward, name, fraction_id, reputation = await db.select(
             [db.Quest.reward, db.Quest.name, db.Quest.fraction_id, db.Quest.reputation]).where(
             db.Quest.id == quest_id).gino.first()
-        await db.Form.update.values(balance=db.Form.balance + reward, active_quest=None).gino.status()
-        await bot.api.messages.send(peer_id=m.user_id, message=f"Вы получили награду {reward} монет за выполнение квеста «{name}»",
-                                    is_notification=True)
+        await db.Form.update.values(balance=db.Form.balance + reward).gino.status()
+        reply = (f"Вам успешно приняли выполнение квеста «{name}»\n"
+                 f"Получена награда:\n{'+' if reward >= 0 else ''}{reward} валюты")
         if fraction_id:
             await db.change_reputation(user_id, fraction_id, reputation)
-        await m.edit_message(f"Квест «{name}» засчитан игроку [id{user_id}|{form_name}]")
+            fraction_name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+            reply += f", {'+' if reputation >= 0 else ''}{reputation} к репутации во фракции «{fraction_name}»"
+        if await check_quest_completed(form_id):
+            await db.QuestToForm.delete.where(db.QuestToForm.form_id == form_id).gino.status()
+        await bot.api.messages.send(peer_id=m.user_id, message=reply, is_notification=True)
+        await m.edit_message(f"Квест «{name}» засчитан игроку [id{user_id}|{form_name} / {user_name}]")
     else:
         await db.ReadyQuest.update.values(is_checked=True, is_claimed=False).where(
             db.ReadyQuest.id == request_id).gino.status()
-        await db.Form.update.values(active_quest=None).where(db.Form.user_id == user_id).gino.status()
         name = await db.select([db.Quest.name]).where(db.Quest.id == quest_id).gino.scalar()
-        await bot.api.messages.send(peer_id=m.user_id, message=f"К сожалению, администрация отменила вам прохождение квеста «{name}»",
+        await bot.api.messages.send(peer_id=m.user_id, message=f"К сожалению, администрация отклонила вам прохождение квеста «{name}»",
                                     is_notification=True)
-        await m.edit_message(f"Квест «{name}» не засчитан игроку [id{user_id}|{form_name}]")
+        await m.edit_message(f"Квест «{name}» не засчитан игроку [id{user_id}|{form_name} / {user_name}]")
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"target_accept": bool, "request_id": int}))
+async def verify_target(m: MessageEvent):
+    request_id = int(m.payload['request_id'])
+    target_accept = m.payload['target_accept']
+    checked = await db.select([db.ReadyTarget.is_checked]).where(db.ReadyTarget.id == request_id).gino.scalar()
+    if checked:
+        await m.edit_message("Другой администратор уже проверил этот запрос")
+        return
+    form_id, target_id = await db.select([db.ReadyTarget.form_id, db.ReadyTarget.target_id]).where(db.ReadyTarget.id == request_id).gino.first()
+    form_name, user_id = await db.select([db.Form.name, db.Form.user_id]).where(db.Form.id == form_id).gino.first()
+    user = (await bot.api.users.get(user_id=user_id))[0]
+    user_name = f"{user.first_name} {user.last_name}"
+    if target_accept:
+        reward, name = await db.select([db.AdditionalTarget.reward_info, db.AdditionalTarget.name]).where(db.AdditionalTarget.id == target_id).gino.first()
+        reward = json.loads(reward)
+        reply = (f"Вам успешно приняли выполнение квеста «{name}»\n"
+                 f"Получена награда:\n")
+        if reward['type'] == 'fraction_bonus':
+            fraction_id = reward['fraction_id']
+            reputation_bonus = reward['reputation_bonus']
+            await db.change_reputation(user_id, fraction_id, reputation_bonus)
+            fraction_name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+            reply += f"{'+' if reputation_bonus >= 0 else ''}{reputation_bonus} к репутации во фракции «{fraction_name}»"
+        elif reward['type'] == 'value_bonus':
+            bonus = reward['bonus']
+            await db.Form.update.values(balance=db.Form.balance + bonus).gino.status()
+            reply += f"{'+' if bonus >= 0 else ''}{bonus} валюты"
+        await db.ReadyTarget.update.values(is_checked=True, is_claimed=True).where(db.ReadyTarget.id == request_id).gino.status()
+        if await check_quest_completed(form_id):
+            await db.QuestToForm.delete.where(db.QuestToForm.form_id == form_id).gino.status()
+        await bot.api.messages.send(peer_id=m.user_id, message=reply, is_notification=True)
+        await m.edit_message(f"Дополнительная цель «{name}» засчитана игроку [id{user_id}|{form_name} / {user_name}]")
+    else:
+        await db.ReadyTarget.update.values(is_checked=True, is_claimed=False).where(
+            db.ReadyTarget.id == request_id).gino.status()
+        name = await db.select([db.AdditionalTarget.name]).where(db.AdditionalTarget.id == target_id).gino.scalar()
+        await bot.api.messages.send(peer_id=m.user_id,
+                                    message=f"К сожалению, администрация отклонила выполнение дополнительной цели «{name}»",
+                                    is_notification=True)
+        await m.edit_message(f"Дополнительная цель «{name}» не засчитана игроку [id{user_id}|{form_name} / {user_name}]")
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"salary_accept": int}), AdminRule())

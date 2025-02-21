@@ -236,10 +236,8 @@ def another_profession_to_user(user_id: int):
 def manage_item(item_type: str, item_id: int) -> Keyboard:
     return Keyboard(inline=True).add(
         Callback("Редактировать", {"item_type": item_type, "item_id": item_id, "action": "edit"}), KeyboardButtonColor.POSITIVE
-    ).add(
-        Callback("Удалить", {"item_type": item_type, "item_id": item_id, "action": "delete"}), KeyboardButtonColor.NEGATIVE
     ).row().add(
-        Callback("Назад", {"content_page": 1, "content": item_type}), KeyboardButtonColor.NEGATIVE
+        Callback("Удалить", {"item_type": item_type, "item_id": item_id, "action": "delete"}), KeyboardButtonColor.NEGATIVE
     )
 
 

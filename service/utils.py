@@ -308,17 +308,25 @@ def parse_cooldown(cooldown: Optional[Union[int, float]]) -> Optional[str]:
             f"{f'{minutes} минут' if minutes > 0 else ''} {f'{seconds} секунд' if seconds > 0 else ''}")
 
 
-async def quest_over(seconds, form_id, quest_id):
+async def quest_over(seconds, form_id, quest_id, timer_id=None):
     if not seconds:
         return
     await asyncio.sleep(seconds)
-    user_id, current_quest = await db.select([db.Form.user_id, db.Form.active_quest]).where(
-        db.Form.id == form_id).gino.first()
-    if current_quest == quest_id:
-        name = await db.select([db.Quest.name]).where(db.Quest.id == current_quest).gino.scalar()
-        await db.Form.update.values(active_quest=None).where(db.Form.id == form_id).gino.status()
-        await bot.api.messages.send(peer_id=user_id, message=f"Время выполнения квеста «{name}» завершилось",
-                                    is_notification=True)
+    active_quest = await db.select([db.QuestToForm.quest_id]).where(db.QuestToForm.form_id == form_id).gino.scalar()
+    if active_quest != quest_id:
+        return
+    if timer_id is not None:  #  Квест еще живой
+        timer_id_db = await db.select([db.QuestToForm.timer_id]).where(
+            and_(db.QuestToForm.quest_id == quest_id, db.QuestToForm.form_id == form_id)
+        ).gino.scalar()
+        if timer_id_db != timer_id:
+            return
+    user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
+    current_quest = await db.select([db.QuestToForm.active_quest]).where(db.QuestToForm.form_id == form_id).gino.first()
+    name = await db.select([db.Quest.name]).where(db.Quest.id == current_quest).gino.scalar()
+    await db.QuestToForm.delete.where(db.QuestToForm.form_id == form_id).gino.status()
+    await bot.api.messages.send(peer_id=user_id, message=f"Время выполнения квеста «{name}» завершилось",
+                                is_notification=True)
 
 
 def calculate_time(quest: db.Quest, starts_at: datetime.datetime) -> int | None:
@@ -336,6 +344,24 @@ def calculate_time(quest: db.Quest, starts_at: datetime.datetime) -> int | None:
             nearest = min(quest.closed_at.timestamp(), ends_at.timestamp())
             execution_time = nearest - datetime.datetime.now().timestamp()
     return execution_time
+
+
+async def check_quest_completed(form_id: int) -> bool:
+    quest_id, target_ids = await db.select([db.QuestToForm.quest_id, db.QuestToForm.active_targets]).where(
+        db.QuestToForm.form_id == form_id
+    ).gino.first()
+    ready_quest = await db.select([db.ReadyQuest.id]).where(
+        and_(db.ReadyQuest.quest_id == quest_id, db.ReadyQuest.form_id == form_id, db.ReadyQuest.is_claimed.is_(True))
+    ).gino.scalar()
+    completed_targets = set()
+    for target_id in target_ids:
+        is_claimed = await db.select([db.ReadyTarget.is_claimed]).where(
+            and_(db.ReadyTarget.form_id == form_id, db.ReadyTarget.target_id == target_id, db.ReadyTarget.is_claimed.is_(True))).gino.scalar()
+        if is_claimed:
+            completed_targets.add(target_id)
+    target_ids = set(target_ids)
+    ready_targets = target_ids == completed_targets
+    return ready_quest and ready_targets
 
 
 async def send_daylics():
@@ -636,7 +662,7 @@ async def serialize_quest_users_allowed(form_ids: List[int]) -> str:
     user_ids: List[int] = [x[0] for x in response]
     users = await bot.api.users.get(user_ids=user_ids)
     names = [x[1] for x in response]
-    reply = ""
+    reply = "\n\n"
     for i, name in enumerate(names):
         reply += f'{i + 1}. [id{users[i].id}|{users[i].first_name} {users[i].last_name} / {name}]\n'
     return reply
@@ -784,6 +810,16 @@ async def serialize_target_reward(data: str):
         return str(data['bonus']) + ' валюты'
 
 
+async def info_target_for_all_users():
+    return "Доп. цель будет доступна для всех?", Keyboard().add(Text('Доступна для всех', {"target_for_all": True})).row().add(Text('Указать фильтры', {"target_for_all": False}))
+
+
+async def serialize_target_for_all_users(for_all_users: bool):
+    if not for_all_users:
+        return "нет"
+    return 'да'
+
+
 fields_content: Dict[str, Dict[str, List[Field]]] = {
     "Cabins": {
         "fields": [
@@ -877,7 +913,8 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field('Для профессии', Admin.TARGET_PROFESSION, info_target_profession_allowed, serialize_target_profession_allowed),
             Field('С параметрами дочери', Admin.TARGET_DAUGHTER_PARAMS, info_target_daughter_params, serialize_target_daughter_params),
             Field('Для пользователей', Admin.TARGET_FORMS, info_target_users_allowed, serialize_quest_users_allowed),
-            Field('Награда', Admin.TARGET_REWARD, info_target_reward, serialize_target_reward)
+            Field('Награда', Admin.TARGET_REWARD, info_target_reward, serialize_target_reward),
+            Field('Для всех пользователей', Admin.TARGET_FOR_ALL_USERS, info_target_for_all_users, serialize_target_for_all_users)
         ],
         "name": "Доп. цель"
     }

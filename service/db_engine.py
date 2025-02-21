@@ -75,7 +75,6 @@ class Database(Gino):
             freeze = Column(Boolean, default=False)
             last_payment = Column(TIMESTAMP, default=datetime.datetime.now)
             status = Column(Integer, ForeignKey("statuses.id", ondelete='SET NULL'), default=1)
-            active_quest = Column(Integer, ForeignKey("quests.id", ondelete='SET NULL'))
             activated_daylic = Column(Integer, ForeignKey("daylics.id", ondelete='SET NULL'))
             deactivated_daylic = Column(TIMESTAMP, default=datetime.datetime.now)
             freeze_request = Column(Boolean, default=False)
@@ -85,7 +84,6 @@ class Database(Gino):
             daughter_bonus = Column(Integer, default=0)
             subordination_level = Column(Integer, default=0)
             libido_level = Column(Integer, default=0)
-            quest_start = Column(TIMESTAMP)
 
         self.Form = Form
 
@@ -180,6 +178,7 @@ class Database(Gino):
             daughter_params = Column(ARRAY(Integer))
             forms = Column(ARRAY(Integer), default=[])
             reward_info = Column(JSON)
+            for_all_users = Column(Boolean, default=False)
 
         self.AdditionalTarget = AdditionalTarget
 
@@ -193,6 +192,31 @@ class Database(Gino):
             is_checked = Column(Boolean, default=False)
 
         self.ReadyQuest = ReadyQuest
+
+        class QuestToForm(self.Model):
+            __tablename__ = "quests_to_forms"
+
+            id = Column(Integer, primary_key=True)
+            quest_id = Column(Integer, ForeignKey("quests.id", ondelete='CASCADE'))
+            form_id = Column(Integer, ForeignKey("forms.id", ondelete='CASCADE'))
+            quest_start = Column(TIMESTAMP, default=datetime.datetime.now)
+            active_targets = Column(ARRAY(Integer), default=[])
+            is_paused = Column(Boolean, default=False)
+            remained_time = Column(Integer)
+            timer_id = Column(Integer, default=0)
+
+        self.QuestToForm = QuestToForm
+
+        class ReadyTarget(self.Model):
+            __tablename__ = "ready_targets"
+
+            id = Column(Integer, primary_key=True)
+            target_id = Column(Integer, ForeignKey("additional_target.id", ondelete='CASCADE'))
+            form_id = Column(Integer, ForeignKey("forms.id", ondelete='CASCADE'))
+            is_claimed = Column(Boolean, default=False)
+            is_checked = Column(Boolean, default=False)
+
+        self.ReadyTarget = ReadyTarget
 
         class Daylic(self.Model):
             __tablename__ = "daylics"
@@ -270,6 +294,8 @@ class Database(Gino):
             reputation = Column(Integer, default=0)
 
         self.UserToFraction = UserToFraction
+
+        # TODO: Тут я дурачек зачем-то фракции, декор привзяал к user_id, а не к form_id. Переделывать не хочется. Пока и так рабоатет
 
     async def connect(self):
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")

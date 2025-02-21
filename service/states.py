@@ -154,6 +154,7 @@ class Admin:
     TARGET_DELETE = "target_delete"
     TARGET_NAME = "target_name"
     TARGET_DESCRIPTION = "target_description"
+    TARGET_FOR_ALL_USERS = "target_for_all_users"
     TARGET_FRACTION_REPUTATION = "target_fraction_reputation"
     TARGET_REPUTATION = "target_reputation"
     TARGET_FRACTION = "target_fraction"

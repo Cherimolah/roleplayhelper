@@ -2,8 +2,8 @@ import json
 import re
 
 from vkbottle.bot import Message
-from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
-from vkbottle import Keyboard, Text, KeyboardButtonColor
+from vkbottle.dispatch.rules.base import PayloadRule
+from vkbottle import Keyboard, Text
 
 import service.keyboards as keyboards
 from loader import bot
@@ -33,10 +33,19 @@ async def name_quest(m: Message):
 
 
 @bot.on.private_message(StateRule(Admin.TARGET_DESCRIPTION), AdminRule())
-@allow_edit_content('AdditionalTarget', state=Admin.TARGET_FRACTION_REPUTATION)
+@allow_edit_content('AdditionalTarget', state=Admin.TARGET_FOR_ALL_USERS,
+                    text='Доп. цель будет доступна для всех?',
+                    keyboard=Keyboard().add(Text('Доступна для всех', {"target_for_all": True})).row().add(Text('Указать фильтры', {"target_for_all": False})))
 async def target_description(m: Message):
     target_id = int(states.get(m.peer_id).split("*")[1])
     await db.AdditionalTarget.update.values(description=m.text).where(db.AdditionalTarget.id == target_id).gino.status()
+
+
+@bot.on.private_message(StateRule(Admin.TARGET_FOR_ALL_USERS), AdminRule(), PayloadRule({"target_for_all": False}))
+@allow_edit_content('AdditionalTarget', state=Admin.TARGET_FRACTION_REPUTATION, keyboard=Keyboard())
+async def fraction_reputation(m: Message):
+    target_id = int(states.get(m.peer_id).split("*")[1])
+    await db.AdditionalTarget.update.values(for_all_users=False).where(db.AdditionalTarget.id == target_id).gino.status()
     status = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
     if not status:
         fractions = [x[0] for x in await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()]
@@ -48,6 +57,16 @@ async def target_description(m: Message):
             Text('Без выдачи по уровню репутации', {"target_reputation": False})
         )
         await m.answer(reply, keyboard=keyboard)
+
+
+@bot.on.private_message(StateRule(Admin.TARGET_FOR_ALL_USERS), AdminRule(), PayloadRule({"target_for_all": True}))
+@allow_edit_content('AdditionalTarget', state=Admin.TARGET_REWARD)
+async def target_for_all(m: Message):
+    target_id = int(states.get(m.peer_id).split("*")[1])
+    await db.AdditionalTarget.update.values(for_all_users=True).where(db.AdditionalTarget.id == target_id).gino.status()
+    editing_content = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
+    if not editing_content:
+        await m.answer((await info_target_reward())[0], keyboard=Keyboard())
 
 
 @bot.on.private_message(StateRule(Admin.TARGET_FRACTION_REPUTATION), PayloadRule({"target_reputation": False}), AdminRule())
@@ -80,9 +99,13 @@ async def target_fraction_reputation(m: Message, value: int):
     await db.AdditionalTarget.update.values(fraction_reputation=fraction_id).where(db.AdditionalTarget.id == target_id).gino.status()
 
 
-@bot.on.private_message(StateRule(Admin.TARGET_REPUTATION), NumericRule(), AdminRule())
+@bot.on.private_message(StateRule(Admin.TARGET_REPUTATION), AdminRule())
 @allow_edit_content('AdditionalTarget', state=Admin.TARGET_FRACTION)
-async def target_reputation(m: Message, value: int):
+async def target_reputation(m: Message):
+    try:
+        value = int(m.text)
+    except ValueError:
+        raise FormatDataException('Не удалось преобразовать число')
     if not -100 <= value <= 100:
         raise FormatDataException('Диапазон значений [-100; 100]')
     target_id = int(states.get(m.peer_id).split("*")[1])
@@ -261,6 +284,14 @@ async def select_delete_quest(m: Message):
 async def delete_quest(m: Message, value: int):
     target_id = await db.select([db.AdditionalTarget.id]).order_by(db.AdditionalTarget.id.asc()).offset(value - 1).limit(1).gino.scalar()
     await db.AdditionalTarget.delete.where(db.AdditionalTarget.id == target_id).gino.status()
+    response = await db.select([db.Quest.id, db.Quest.target_ids]).where(db.Quest.target_ids.op("@>")([target_id])).gino.all()
+    for quest_id, target_ids in response:
+        target_ids.remove(target_id)
+        await db.Quest.update.values(target_ids=target_ids).where(db.Quest.id == quest_id).gino.status()
+    response = await db.select([db.Form.id, db.Form.active_targets]).where(db.Form.active_targets.op("@>")([target_id])).gino.all()
+    for form_id, active_targets in response:
+        active_targets.remove(active_targets)
+        await db.Form.update.values(active_targets=active_targets).where(db.Form.id == form_id).gino.status()
     states.set(m.peer_id, f"{Admin.SELECT_ACTION}_AdditionalTarget")
     await m.answer("Дополнительная цель успешно удалена", keyboard=keyboards.gen_type_change_content("AdditionalTarget"))
     await send_content_page(m, "AdditionalTarget", 1)
