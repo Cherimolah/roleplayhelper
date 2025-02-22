@@ -108,12 +108,12 @@ class Admin:
     QUEST_END_DATE = "quest_end_date"
     QUEST_DELETE = "quest_delete"
     QUEST_EXECUTION_TIME = "quest_execution_time"
-    QUEST_FRACTION = "quest_fraction"
-    QUEST_REPUTATION = "quest_reputation"
     QUEST_USERS_ALLOWED = "quest_users_allowed"
     QUEST_FRACTION_ALLOWED = "quest_fraction_allowed"
     QUEST_PROFESSION_ALLOWED = "quest_profession_allowed"
     QUEST_ADDITIONAL_TARGETS = "quest_additional_targets"
+    QUEST_STRICT_MODE = 'quest_strict_mode'
+    QUEST_PENALTY = 'quest_penalty'
     DAYLIC_NAME = "daylic_name"
     DAYLIC_DESCRIPTION = "daylic_description"
     DAYLIC_REWARD = "daylic_reward"

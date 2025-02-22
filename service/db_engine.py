@@ -152,16 +152,16 @@ class Database(Gino):
             id = Column(Integer, primary_key=True)
             name = Column(Text)
             description = Column(Text)
-            reward = Column(Integer)
             start_at = Column(TIMESTAMP, server_default=func.now())
             closed_at = Column(TIMESTAMP)
             execution_time = Column(Integer)
-            fraction_id = Column(Integer, ForeignKey("fractions.id", ondelete='SET NULL'))
-            reputation = Column(Integer)
             allowed_fraction = Column(Integer, ForeignKey('fractions.id', ondelete='SET NULL'))
             allowed_profession = Column(Integer, ForeignKey('professions.id', ondelete='SET NULL'))
             allowed_forms = Column(ARRAY(Integer), default=[])
             target_ids = Column(ARRAY(Integer), default=[])
+            strict = Column(Boolean, default=False)  # В строгом режиме сначала выполняются доп. цели
+            penalty = Column(JSON)
+            reward = Column(JSON)
 
         self.Quest = Quest
 

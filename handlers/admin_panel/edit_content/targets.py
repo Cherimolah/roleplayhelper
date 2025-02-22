@@ -11,7 +11,7 @@ from service.custom_rules import AdminRule, StateRule, NumericRule
 from service.middleware import states
 from service.states import Admin
 from service.db_engine import db
-from service.utils import send_content_page, allow_edit_content, FormatDataException, parse_ids, info_target_reward
+from service.utils import send_content_page, allow_edit_content, FormatDataException, parse_ids, info_target_reward, parse_reward
 
 
 daughter_params_regex = re.compile(r'^(?P<libido>\d+)\s*(?P<word>(или|и))\s*(?P<subordination>\d+)$')
@@ -239,33 +239,8 @@ async def target_forms(m: Message):
 async def target_reward(m: Message):
     text = m.text.lower()
     target_id = int(states.get(m.peer_id).split("*")[1])
-    if text.startswith('реп'):
-        try:
-            fraction_id, reputation_bonus = map(int, text.split()[1:])
-        except ValueError:
-            raise FormatDataException('Неверно указаны параметры')
-        fraction_id = await db.select([db.Fraction.id]).order_by(db.Fraction.id.asc()).offset(fraction_id - 1).limit(1).gino.scalar()
-        if not fraction_id:
-            raise FormatDataException('Неправильный номер фракции')
-        data = json.dumps({
-            'type': 'fraction_bonus',
-            'fraction_id': fraction_id,
-            'reputation_bonus': reputation_bonus
-        })
-        await db.AdditionalTarget.update.values(reward_info=data).where(db.AdditionalTarget.id == target_id).gino.status()
-    elif text.startswith('вал'):
-        try:
-            _, bonus = text.split()
-            bonus = int(bonus)
-        except ValueError:
-            raise FormatDataException('Неверно указаны параметры')
-        data = json.dumps({
-            'type': 'value_bonus',
-            'bonus': bonus
-        })
-        await db.AdditionalTarget.update.values(reward_info=data).where(db.AdditionalTarget.id == target_id).gino.status()
-    else:
-        raise FormatDataException('Недоступный вариант награды')
+    data = await parse_reward(text)
+    await db.AdditionalTarget.update.values(reward_info=json.dumps(data)).where(db.AdditionalTarget.id == target_id).gino.status()
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_AdditionalTarget"), PayloadRule({"AdditionalTarget": "delete"}), AdminRule())

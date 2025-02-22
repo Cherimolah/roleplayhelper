@@ -812,18 +812,55 @@ async def info_target_reward():
     reply += ("\nЧтобы указать награду в виде бонуса к фракциям необходимо написать команду «РЕП {номер фракции} "
               "{бонус}». Например:\nРЕП 1 10\n\n"
               "Чтобы указать награду в виде валюты необходимо написать команду «ВАЛ {бонус}». Например:\n"
-              "ВАЛ 100")
+              "ВАЛ 100\n\n❗️ Можно указать оба варианта через новую строку")
     return reply, None
 
 
-async def serialize_target_reward(data: str):
-    data = json.loads(data)
-    if data['type'] == 'fraction_bonus':
-        fraction = await db.select([db.Fraction.name]).where(db.Fraction.id == data['fraction_id']).gino.scalar()
-        bonus = f"{'+' if data['reputation_bonus'] >= 0 else ''}{data['reputation_bonus']}"
-        return f'Бонус к репутации {bonus} во фракции «{fraction}»'
-    elif data['type'] == 'value_bonus':
-        return str(data['bonus']) + ' валюты'
+async def parse_reward(text: str) -> List[Dict]:
+    data = []
+    for line in text.split("\n"):
+        if line.startswith('реп'):
+            try:
+                fraction_id, reputation_bonus = map(int, line.split()[1:])
+            except ValueError:
+                raise FormatDataException('Неверно указаны параметры')
+            fraction_id = await db.select([db.Fraction.id]).order_by(db.Fraction.id.asc()).offset(
+                fraction_id - 1).limit(1).gino.scalar()
+            if not fraction_id:
+                raise FormatDataException('Неправильный номер фракции')
+            data.append({
+                'type': 'fraction_bonus',
+                'fraction_id': fraction_id,
+                'reputation_bonus': reputation_bonus
+            })
+        elif line.startswith('вал'):
+            try:
+                _, bonus = line.split()
+                bonus = int(bonus)
+            except ValueError:
+                raise FormatDataException('Неверно указаны параметры')
+            data.append({
+                'type': 'value_bonus',
+                'bonus': bonus
+            })
+        else:
+            raise FormatDataException('Недоступный вариант награды')
+    return data
+
+
+async def serialize_target_reward(data):
+    if not data:
+        return 'не задано'
+    reply = ""
+    for reward in data:
+        if reward['type'] == 'fraction_bonus':
+            fraction = await db.select([db.Fraction.name]).where(db.Fraction.id == reward['fraction_id']).gino.scalar()
+            bonus = f"{'+' if reward['reputation_bonus'] >= 0 else ''}{reward['reputation_bonus']}"
+            reply += f'Бонус к репутации {bonus} во фракции «{fraction}»'
+        elif reward['type'] == 'value_bonus':
+            reply += str(reward['bonus']) + ' валюты'
+        reply += ", "
+    return reply[:-2]
 
 
 async def info_target_for_all_users():
@@ -834,6 +871,16 @@ async def serialize_target_for_all_users(for_all_users: bool):
     if not for_all_users:
         return "нет"
     return 'да'
+
+
+async def info_quest_strict_mode():
+    return ('Укажите режим квеста\nВ строгом режиме отчет по основному квесту можно '
+                                  'будет выполнить толко после принятия всех отчётов по доп. целям',
+            Keyboard().add(Text('Строгий', {"quest_strict": True})).add(Text('Не строгий', {"quest_strict": True})))
+
+
+async def serialize_strict_mode(strict: bool):
+    return 'да' if strict else 'нет'
 
 
 fields_content: Dict[str, Dict[str, List[Field]]] = {
@@ -870,16 +917,16 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
         "fields": [
             Field("Название", Admin.QUEST_NAME),
             Field("Описание", Admin.QUEST_DESCRIPTION),
-            Field("Награда", Admin.QUEST_REWARD),
             Field("Начало", Admin.QUEST_START_DATE, info_date, parse_datetime_async),
             Field("Конец", Admin.QUEST_END_DATE, info_end_quest, parse_datetime_async),
             Field("Даётся на выполнение", Admin.QUEST_EXECUTION_TIME, info_cooldown_quest, parse_cooldown_async),
-            Field("Фракция", Admin.QUEST_FRACTION, info_fraction_daylic, serialize_fraction_daylic),
-            Field("Бонус к репутации", Admin.QUEST_REPUTATION),
-            Field("Для фракции", Admin.QUEST_FRACTION_ALLOWED, info_quest_fraction_allowed, serialize_quest_fraction_allowed),
+            Field("Фракция", Admin.QUEST_FRACTION_ALLOWED, info_fraction_daylic, serialize_fraction_daylic),
             Field("Для профессии", Admin.QUEST_PROFESSION_ALLOWED, info_quest_profession_allowed, serialize_quest_profession_allowed),
             Field("Для игроков", Admin.QUEST_USERS_ALLOWED, info_quest_users_allowed, serialize_quest_users_allowed),
-            Field('Доп. цели', Admin.QUEST_ADDITIONAL_TARGETS, info_quest_additional_targets, serialize_quest_additional_targets)
+            Field('Доп. цели', Admin.QUEST_ADDITIONAL_TARGETS, info_quest_additional_targets, serialize_quest_additional_targets),
+            Field('Строгий режим', Admin.QUEST_STRICT_MODE, info_quest_strict_mode, serialize_strict_mode),
+            Field("Штраф", Admin.QUEST_PENALTY, info_target_reward, serialize_target_reward),
+            Field("Награда", Admin.QUEST_REWARD, info_target_reward, serialize_target_reward)
         ],
         "name": "Квест"
     },

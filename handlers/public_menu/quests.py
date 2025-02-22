@@ -65,7 +65,7 @@ async def view_quest(quest: db.Quest, user_id: int, targets_active: bool = False
              f"Начало: {starts}\n"
              f"Завершение: {ends}\n"
              f"Время на выполнение: {parse_cooldown(quest.execution_time) or 'бессрочно'}\n"
-             f"Награда: {quest.reward}\n"
+             f"Награда: {await serialize_target_reward(quest.reward)}\n"
              f"Описание: {quest.description}")
     if quest.fraction_id:
         fraction = await db.select([db.Fraction.name]).where(db.Fraction.id == quest.fraction_id).gino.scalar()
