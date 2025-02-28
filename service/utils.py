@@ -102,7 +102,7 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
             elif 67 <= libido <= 100:
                 reply += '\nУровень либидо: Высокий'
         else:
-            reply += (f'Уровень подчинения: {subordination}\n'
+            reply += (f'\nУровень подчинения: {subordination}\n'
                       f'Уровень либидо: {libido}')
     return reply, form.photo
 
