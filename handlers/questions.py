@@ -48,10 +48,9 @@ async def api_request(m: Message):
 
 
 @bot.on.private_message(PayloadRule({"command": "start"}))
-@bot.on.private_message(text=["начать", "регистрация", "заполнить заново"])
+@bot.on.private_message(text=["начать", "регистрация", "заполнить заново", 'старт', 'меню', 'start', 'menu'])
 @bot.on.private_message(command="start")
 @bot.on.private_message(PayloadRule({"menu": "home"}))
-@bot.on.private_message(text="меню")
 @bot.on.private_message(StateRule(Menu.SHOP_MENU), PayloadRule({"shop": "back"}))
 async def start(m: Message):
     user = await db.User.get(m.from_id)
