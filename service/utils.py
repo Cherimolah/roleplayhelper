@@ -45,7 +45,7 @@ def parse_orientation(number: int) -> str:
         return "гомо"
 
 
-async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, form_id: int = None) -> Tuple[
+async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, form_id: int = None, absolute_params: bool = False) -> Tuple[
     str, Optional[str]]:
     if form_id:
         form = await db.select([*db.Form]).where(db.Form.id == form_id).gino.first()
@@ -88,18 +88,22 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
         subordination, libido = await db.select([db.Form.subordination_level, db.Form.libido_level]).where(
             db.Form.id == form.id
         ).gino.first()
-        if 1 <= subordination <= 33:
-            reply += '\nУровень подчинения: Низкий'
-        elif 34 <= subordination <= 66:
-            reply += '\nУровень подчинения: Средний'
-        elif 67 <= subordination <= 100:
-            reply += '\nУровень подчинения: Высокий'
-        if 1 <= libido <= 33:
-            reply += '\nУровень либидо: Низкий'
-        elif 34 <= libido <= 66:
-            reply += '\nУровень либидо: Средний'
-        elif 67 <= libido <= 100:
-            reply += '\nУровень либидо: Высокий'
+        if not absolute_params:
+            if 1 <= subordination <= 33:
+                reply += '\nУровень подчинения: Низкий'
+            elif 34 <= subordination <= 66:
+                reply += '\nУровень подчинения: Средний'
+            elif 67 <= subordination <= 100:
+                reply += '\nУровень подчинения: Высокий'
+            if 1 <= libido <= 33:
+                reply += '\nУровень либидо: Низкий'
+            elif 34 <= libido <= 66:
+                reply += '\nУровень либидо: Средний'
+            elif 67 <= libido <= 100:
+                reply += '\nУровень либидо: Высокий'
+        else:
+            reply += (f'Уровень подчинения: {subordination}\n'
+                      f'Уровень либидо: {libido}')
     return reply, form.photo
 
 
