@@ -284,14 +284,15 @@ async def select_delete_quest(m: Message):
 async def delete_quest(m: Message, value: int):
     target_id = await db.select([db.AdditionalTarget.id]).order_by(db.AdditionalTarget.id.asc()).offset(value - 1).limit(1).gino.scalar()
     await db.AdditionalTarget.delete.where(db.AdditionalTarget.id == target_id).gino.status()
-    response = await db.select([db.Quest.id, db.Quest.target_ids]).where(db.Quest.target_ids.op("@>")([target_id])).gino.all()
-    for quest_id, target_ids in response:
-        target_ids.remove(target_id)
-        await db.Quest.update.values(target_ids=target_ids).where(db.Quest.id == quest_id).gino.status()
-    response = await db.select([db.Form.id, db.Form.active_targets]).where(db.Form.active_targets.op("@>")([target_id])).gino.all()
-    for form_id, active_targets in response:
-        active_targets.remove(active_targets)
-        await db.Form.update.values(active_targets=active_targets).where(db.Form.id == form_id).gino.status()
+    # TODO: переделать
+    # response = await db.select([db.Quest.id, db.Quest.target_ids]).where(db.Quest.target_ids.op("@>")([target_id])).gino.all()
+    # for quest_id, target_ids in response:
+    #     target_ids.remove(target_id)
+    #     await db.Quest.update.values(target_ids=target_ids).where(db.Quest.id == quest_id).gino.status()
+    # response = await db.select([db.Form.id, db.Form.active_targets]).where(db.Form.active_targets.op("@>")([target_id])).gino.all()
+    # for form_id, active_targets in response:
+    #     active_targets.remove(active_targets)
+    #     await db.Form.update.values(active_targets=active_targets).where(db.Form.id == form_id).gino.status()
     states.set(m.peer_id, f"{Admin.SELECT_ACTION}_AdditionalTarget")
     await m.answer("Дополнительная цель успешно удалена", keyboard=keyboards.gen_type_change_content("AdditionalTarget"))
     await send_content_page(m, "AdditionalTarget", 1)
