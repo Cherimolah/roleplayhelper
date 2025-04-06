@@ -201,7 +201,7 @@ async def take_off_payments(form_id: int):
                                             last_payment=today - datetime.timedelta(seconds=20)).where(
                     db.Form.id == form_id
                 ).gino.status()
-                group_id = (await bot.api.groups.get_by_id()).id
+                group_id = (await bot.api.groups.get_by_id()).groups[0].id
                 if (await bot.api.messages.is_messages_from_group_allowed(group_id, user_id=user_id)).is_allowed:
                     await bot.api.messages.send(peer_id=user_id, message=f"Снята арендная плата в размере {price}\n"
                                                                          f"Доступно на балансе: {balance - price}",
