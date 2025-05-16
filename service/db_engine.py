@@ -249,6 +249,7 @@ class Database(Gino):
             maintainence_break = Column(Boolean, default=False)
             time_to_freeze = Column(Integer, default=604800)  # 1 week
             time_to_delete = Column(Integer, default=2592000)  # 30 days
+            last_daylic_date = Column(TIMESTAMP(timezone=False), default=datetime.datetime.now)
 
         self.Metadata = Metadata
 

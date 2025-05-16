@@ -368,13 +368,24 @@ async def check_quest_completed(form_id: int) -> bool:
     return ready_quest and ready_targets
 
 
+def calculate_wait_time(hours: int = 0, minutes: int = 0, seconds: int = 0) -> float:
+    today = datetime.datetime.now()
+    expected = datetime.datetime(today.year, today.month, today.day, hours, minutes, seconds)
+    if today > expected:
+        expected = expected + datetime.timedelta(days=1)
+    return (expected - today).total_seconds()
+
+
 async def send_daylics():
+    await asyncio.sleep(5)  # Wait for initialize gino
     while True:
-        today = datetime.datetime.now()
-        expected = datetime.datetime(today.year, today.month, today.day, 18, 0, 0)
-        if today > expected:
-            expected = expected + datetime.timedelta(days=1)
-        await asyncio.sleep((expected - today).total_seconds())
+        last_daylic = await db.select([db.Metadata.last_daylic_date]).gino.scalar()
+        if not last_daylic:
+            seconds = calculate_wait_time(hours=18)
+        else:
+            next_time = last_daylic + datetime.timedelta(days=3)
+            seconds = (datetime.datetime.now() - next_time).total_seconds()
+        await asyncio.sleep(seconds)
         data = await db.select([db.Form.id, db.Form.user_id]).where(
             db.Form.deactivated_daylic < datetime.datetime.now()).gino.all()
         for form_id, user_id in data:
@@ -385,6 +396,7 @@ async def send_daylics():
                 await db.Form.update.values(activated_daylic=daylic).where(db.Form.id == form_id).gino.status()
                 await bot.api.messages.send(peer_id=user_id, message="Вам доступно новое ежедневное задание!",
                                             is_notification=True)
+        await db.Metadata.update.values(last_daylic_date=datetime.datetime.now()).gino.status()
         await asyncio.sleep(5)
 
 
