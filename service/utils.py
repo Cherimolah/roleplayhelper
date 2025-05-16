@@ -384,7 +384,8 @@ async def send_daylics():
             seconds = calculate_wait_time(hours=18)
         else:
             next_time = last_daylic + datetime.timedelta(days=3)
-            seconds = (datetime.datetime.now() - next_time).total_seconds()
+            seconds = (next_time - datetime.datetime.now()).total_seconds()
+        print(seconds)
         await asyncio.sleep(seconds)
         data = await db.select([db.Form.id, db.Form.user_id]).where(
             db.Form.deactivated_daylic < datetime.datetime.now()).gino.all()
