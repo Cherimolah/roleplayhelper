@@ -53,7 +53,7 @@ async def get_available_target_ids(quest: db.Quest, user_id: int) -> List[int]:
     return allowed_target_ids
 
 
-async def view_quest(quest: db.Quest, user_id: int, targets_active: bool = False) -> Tuple[str, Keyboard]:
+async def view_quest(quest: db.Quest, user_id: int, quest_active: bool = False) -> Tuple[str, Keyboard]:
     #  targets_active - чтобы сделать описание квестов, которые активны у чувака
     starts = quest.start_at.strftime(DATETIME_FORMAT)
     form_id = await get_current_form_id(user_id)
@@ -67,12 +67,7 @@ async def view_quest(quest: db.Quest, user_id: int, targets_active: bool = False
              f"Время на выполнение: {parse_cooldown(quest.execution_time) or 'бессрочно'}\n"
              f"Награда: {await serialize_target_reward(quest.reward)}\n"
              f"Описание: {quest.description}")
-    if quest.fraction_id:
-        fraction = await db.select([db.Fraction.name]).where(db.Fraction.id == quest.fraction_id).gino.scalar()
-        reply += f"\nБонус {quest.reputation} во фракции «{fraction}»"
-    else:
-        reply += "\nБез бонуса к репутации"
-    if not targets_active:
+    if not quest_active:
         target_ids = await get_available_target_ids(quest, user_id)
     else:
         active_targets = set(await db.select([db.QuestToForm.active_targets]).where(db.QuestToForm.form_id == form_id).gino.scalar())
@@ -94,11 +89,9 @@ async def view_quest(quest: db.Quest, user_id: int, targets_active: bool = False
                       f'Описание: {target.description}\n'
                       f'Награда: {(await serialize_target_reward(target.reward_info))}')
     starts_at = await db.select([db.QuestToForm.quest_start]).where(db.QuestToForm.form_id == form_id).gino.scalar()
-    execution_time = calculate_time(quest, starts_at)
-    reply = ("У вас активирован квест:\n\n" + reply + f"\n\n"f"Остаётся на исполнение: {parse_cooldown(execution_time) if execution_time else 'бессрочно'}")
-    is_paused = await db.select([db.QuestToForm.is_paused]).where(db.QuestToForm.form_id == form_id).gino.scalar()
-    if is_paused:
-        reply += " (на паузе)"
+    if quest_active:
+        execution_time = calculate_time(quest, starts_at)
+        reply = ("У вас активирован квест:\n\n" + reply + f"\n\n"f"Остаётся на исполнение: {parse_cooldown(execution_time) if execution_time else 'бессрочно'}")
     keyboard = Keyboard()
     quest_ready = await db.select([db.ReadyQuest.id]).where(
         or_(and_(db.ReadyQuest.quest_id == quest.id, db.ReadyQuest.form_id == form_id,
@@ -126,9 +119,7 @@ async def send_quest_page(m: Union[Message, MessageEvent], page: int):
     else:
         user_id = m.user_id
     form_id = await get_current_form_id(user_id)
-    completed_quests = [x[0] for x in
-                    await db.select([db.ReadyQuest.quest_id]).where(
-                        and_(db.ReadyQuest.form_id == form_id, db.ReadyQuest.is_claimed.is_(True))).gino.all()]
+    taked_quests = [x[0] for x in await db.select([db.QuestHistory.quest_id]).where(db.QuestHistory.form_id == form_id).gino.all()]
     active_quest = await db.select([db.QuestToForm.quest_id]).where(db.QuestToForm.form_id == form_id).gino.scalar()
     if active_quest:
         quest = await db.Quest.get(active_quest)
@@ -158,12 +149,12 @@ async def send_quest_page(m: Union[Message, MessageEvent], page: int):
     ).gino.all()]
     quest = await (
         db.select([*db.Quest])
-        .where(and_(db.Quest.id.notin_(completed_quests),
+        .where(and_(db.Quest.id.notin_(taked_quests),
                     or_(db.Quest.closed_at > datetime.datetime.now(), db.Quest.closed_at.is_(None)),
                     db.Quest.id.notin_(restricted_quests))).limit(
             1).offset(page - 1).gino.first())
     count = await db.select([func.count(db.Quest.id)]).where(
-        and_(db.Quest.id.notin_(completed_quests),
+        and_(db.Quest.id.notin_(taked_quests),
              or_(db.Quest.closed_at > datetime.datetime.now(), db.Quest.closed_at.is_(None)),
              db.Quest.id.notin_(restricted_quests))
     ).gino.scalar()
@@ -174,7 +165,9 @@ async def send_quest_page(m: Union[Message, MessageEvent], page: int):
         await m.answer("Доступные квесты:", keyboard=Keyboard().add(
             Text("Назад", {"menu": "quests and daylics"}), KeyboardButtonColor.NEGATIVE
         ))
-    reply = f"Квест №{page}\n\n" + (await view_quest(quest, m.from_id))[0]
+        reply = f"Квест №{page}\n\n" + (await view_quest(quest, m.from_id))[0]
+    else:
+        reply = f"Квест №{page}\n\n" + (await view_quest(quest, m.user_id))[0]
     states.set(m.peer_id, Menu.SHOW_QUESTS)
     keyboard = Keyboard(inline=True)
     if count > 1 and page > 1:
@@ -205,11 +198,12 @@ async def take_quest(m: MessageEvent):
     await m.edit_message(reply[0])
     cooldown = calculate_time(quest, now)
     if cooldown:
-        asyncio.get_event_loop().create_task(quest_over(cooldown, form_id, quest_id, 0))
+        asyncio.get_event_loop().create_task(quest_over(cooldown, form_id, quest_id))
     if quest.closed_at:
         seconds = (quest.closed_at - datetime.datetime.now()).total_seconds()
         asyncio.get_event_loop().create_task(quest_over(seconds, form_id, quest_id))
     await db.User.update.values(state=Menu.SHOW_QUESTS).where(db.User.user_id == m.user_id).gino.status()
+    await db.QuestHistory.create(quest_id=quest_id, form_id=form_id)
     await m.send_message("После завершения квеста нажмите на кнопку завершения. Вы можете выйти и вернутся "
                                    "во вкладку квесты", keyboard=reply[1].get_json())
 

@@ -112,8 +112,6 @@ class Admin:
     QUEST_FRACTION_ALLOWED = "quest_fraction_allowed"
     QUEST_PROFESSION_ALLOWED = "quest_profession_allowed"
     QUEST_ADDITIONAL_TARGETS = "quest_additional_targets"
-    QUEST_STRICT_MODE = 'quest_strict_mode'
-    QUEST_PENALTY = 'quest_penalty'
     DAYLIC_NAME = "daylic_name"
     DAYLIC_DESCRIPTION = "daylic_description"
     DAYLIC_REWARD = "daylic_reward"

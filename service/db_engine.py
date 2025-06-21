@@ -159,8 +159,6 @@ class Database(Gino):
             allowed_profession = Column(Integer, ForeignKey('professions.id', ondelete='SET NULL'))
             allowed_forms = Column(ARRAY(Integer), default=[])
             target_ids = Column(ARRAY(Integer), default=[])
-            strict = Column(Boolean, default=False)  # В строгом режиме сначала выполняются доп. цели
-            penalty = Column(JSON)
             reward = Column(JSON)
 
         self.Quest = Quest
@@ -306,6 +304,15 @@ class Database(Gino):
             daylic_id = Column(Integer, ForeignKey('daylics.id', ondelete='CASCADE'))
 
         self.DaylicHistory = DaylicHistory
+
+        class QuestHistory(self.Model):
+            __tablename__ = 'quest_history'
+
+            id = Column(Integer, primary_key=True)
+            form_id = Column(Integer, ForeignKey("forms.id", ondelete='CASCADE'))
+            quest_id = Column(Integer, ForeignKey('quests.id', ondelete='CASCADE'))
+
+        self.QuestHistory = QuestHistory
 
     async def connect(self):
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")

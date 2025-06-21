@@ -312,22 +312,15 @@ def parse_cooldown(cooldown: Optional[Union[int, float]]) -> Optional[str]:
             f"{f'{minutes} минут' if minutes > 0 else ''} {f'{seconds} секунд' if seconds > 0 else ''}")
 
 
-async def quest_over(seconds, form_id, quest_id, timer_id=None):
+async def quest_over(seconds, form_id, quest_id):
     if not seconds:
         return
     await asyncio.sleep(seconds)
     active_quest = await db.select([db.QuestToForm.quest_id]).where(db.QuestToForm.form_id == form_id).gino.scalar()
     if active_quest != quest_id:
         return
-    if timer_id is not None:  #  Квест еще живой
-        timer_id_db = await db.select([db.QuestToForm.timer_id]).where(
-            and_(db.QuestToForm.quest_id == quest_id, db.QuestToForm.form_id == form_id)
-        ).gino.scalar()
-        if timer_id_db != timer_id:
-            return
     user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
-    current_quest = await db.select([db.QuestToForm.active_quest]).where(db.QuestToForm.form_id == form_id).gino.first()
-    name = await db.select([db.Quest.name]).where(db.Quest.id == current_quest).gino.scalar()
+    name = await db.select([db.Quest.name]).where(db.Quest.id == quest_id).gino.scalar()
     await db.QuestToForm.delete.where(db.QuestToForm.form_id == form_id).gino.status()
     await bot.api.messages.send(peer_id=user_id, message=f"Время выполнения квеста «{name}» завершилось",
                                 is_notification=True)
@@ -857,6 +850,8 @@ async def serialize_target_reward(data):
     if not data:
         return 'не задано'
     reply = ""
+    if isinstance(data, str):
+        data = json.loads(data)
     for reward in data:
         if reward['type'] == 'fraction_bonus':
             fraction = await db.select([db.Fraction.name]).where(db.Fraction.id == reward['fraction_id']).gino.scalar()
@@ -929,8 +924,6 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field("Для профессии", Admin.QUEST_PROFESSION_ALLOWED, info_quest_profession_allowed, serialize_quest_profession_allowed),
             Field("Для игроков", Admin.QUEST_USERS_ALLOWED, info_quest_users_allowed, serialize_quest_users_allowed),
             Field('Доп. цели', Admin.QUEST_ADDITIONAL_TARGETS, info_quest_additional_targets, serialize_quest_additional_targets),
-            Field('Строгий режим', Admin.QUEST_STRICT_MODE, info_quest_strict_mode, serialize_strict_mode),
-            Field("Штраф", Admin.QUEST_PENALTY, info_target_reward, serialize_target_reward),
             Field("Награда", Admin.QUEST_REWARD, info_target_reward, serialize_target_reward)
         ],
         "name": "Квест"

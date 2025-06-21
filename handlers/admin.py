@@ -203,16 +203,19 @@ async def verify_quest(m: MessageEvent):
     user_name = f"{user.first_name} {user.last_name}"
     if m.payload['quest_ready']:
         await db.ReadyQuest.update.values(is_checked=True, is_claimed=True).where(db.ReadyQuest.id == request_id).gino.status()
-        reward, name, fraction_id, reputation = await db.select(
-            [db.Quest.reward, db.Quest.name, db.Quest.fraction_id, db.Quest.reputation]).where(
-            db.Quest.id == quest_id).gino.first()
-        await db.Form.update.values(balance=db.Form.balance + reward).gino.status()
-        reply = (f"Вам успешно приняли выполнение квеста «{name}»\n"
-                 f"Получена награда:\n{'+' if reward >= 0 else ''}{reward} валюты")
-        if fraction_id:
-            await db.change_reputation(user_id, fraction_id, reputation)
-            fraction_name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
-            reply += f", {'+' if reputation >= 0 else ''}{reputation} к репутации во фракции «{fraction_name}»"
+        reward, name = await db.select([db.Quest.reward, db.Quest.name]).where(db.Quest.id == quest_id).gino.first()
+        reply = f'Поздравляем с выполнением квеста «{name}»\nВам начислена награда:\n'
+        for r in reward:
+            if r['type'] == 'fraction_bonus':
+                fraction_id = r['fraction_id']
+                reputation_bonus = r['reputation_bonus']
+                await db.change_reputation(user_id, fraction_id, reputation_bonus)
+                fraction_name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+                reply += f"{'+' if reputation_bonus >= 0 else '-'}{reputation_bonus} к репутации во фракции «{fraction_name}»\n"
+            elif r['type'] == 'value_bonus':
+                bonus = r['bonus']
+                await db.Form.update.values(balance=db.Form.balance + bonus).gino.status()
+                reply += f"{'+' if bonus >= 0 else '-'}{bonus} валюты\n"
         if await check_quest_completed(form_id):
             await db.QuestToForm.delete.where(db.QuestToForm.form_id == form_id).gino.status()
         await bot.api.messages.send(peer_id=m.user_id, message=reply, is_notification=True)
@@ -243,16 +246,17 @@ async def verify_target(m: MessageEvent):
         reward = json.loads(reward)
         reply = (f"Вам успешно приняли выполнение квеста «{name}»\n"
                  f"Получена награда:\n")
-        if reward['type'] == 'fraction_bonus':
-            fraction_id = reward['fraction_id']
-            reputation_bonus = reward['reputation_bonus']
-            await db.change_reputation(user_id, fraction_id, reputation_bonus)
-            fraction_name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
-            reply += f"{'+' if reputation_bonus >= 0 else ''}{reputation_bonus} к репутации во фракции «{fraction_name}»"
-        elif reward['type'] == 'value_bonus':
-            bonus = reward['bonus']
-            await db.Form.update.values(balance=db.Form.balance + bonus).gino.status()
-            reply += f"{'+' if bonus >= 0 else ''}{bonus} валюты"
+        for r in reward:
+            if r['type'] == 'fraction_bonus':
+                fraction_id = r['fraction_id']
+                reputation_bonus = r['reputation_bonus']
+                await db.change_reputation(user_id, fraction_id, reputation_bonus)
+                fraction_name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+                reply += f"{'+' if reputation_bonus >= 0 else '-'}{reputation_bonus} к репутации во фракции «{fraction_name}»\n"
+            elif r['type'] == 'value_bonus':
+                bonus = r['bonus']
+                await db.Form.update.values(balance=db.Form.balance + bonus).gino.status()
+                reply += f"{'+' if bonus >= 0 else '-'}{bonus} валюты\n"
         await db.ReadyTarget.update.values(is_checked=True, is_claimed=True).where(db.ReadyTarget.id == request_id).gino.status()
         if await check_quest_completed(form_id):
             await db.QuestToForm.delete.where(db.QuestToForm.form_id == form_id).gino.status()
@@ -513,8 +517,17 @@ async def delete_reputation(m: Message, value: int):
 
     fraction_joined = await db.select([db.Form.fraction_id]).where(db.Form.user_id == user_id).gino.scalar()
     if fraction_joined == fraction_id:
-        await m.answer("Нельзя удалить репутацию во фракции которой человек состоит. "
+        await m.answer("⚠️ Нельзя удалить репутацию во фракции которой человек состоит. "
                        "Переведите сначала его во фракцию «Без фракции»")
+        return
+
+    fraction_leader = await db.select([db.Fraction.leader_id]).where(db.Fraction.id == fraction_id).gino.scalar()
+    if fraction_leader == user_id:
+        await m.answer('⚠️ Нельзя удалить репутацию во фракции которой, пользователь является лидером')
+        return
+
+    if fraction_id == 1:
+        await m.answer('⚠️ Нельзя удалить репутацию во фракции «Без фракции»')
         return
 
     await db.UserToFraction.delete.where(

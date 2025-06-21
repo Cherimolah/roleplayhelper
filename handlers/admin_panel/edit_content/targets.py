@@ -49,7 +49,7 @@ async def fraction_reputation(m: Message):
     status = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
     if not status:
         fractions = [x[0] for x in await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()]
-        reply = ("Имя для доп. цели установлено. Если хотите чтобы доп. цель выдавалась с определенного уровня "
+        reply = ("Если хотите чтобы доп. цель выдавалась с определенного уровня "
                  "репутации, укажите сначала необходимую фракцию\n\n")
         for i, name in enumerate(fractions):
             reply += f"{i + 1}. {name}\n"
@@ -130,7 +130,7 @@ async def target_without_fractions(m: Message):
     status = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
     if not status:
         professions = [x[0] for x in await db.select([db.Profession.name]).order_by(db.Profession.id.asc()).gino.all()]
-        reply = "Укажите для какой фракции будет доступна доп. цель\n\n"
+        reply = "Укажите для какой профессии будет доступна доп. цель\n\n"
         for i, name in enumerate(professions):
             reply += f"{i + 1}. {name}\n"
         keyboard = Keyboard().add(
@@ -152,7 +152,7 @@ async def target_fraction(m: Message, value: int):
     status = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
     if not status:
         professions = [x[0] for x in await db.select([db.Profession.name]).order_by(db.Profession.id.asc()).gino.all()]
-        reply = "Укажите для какой фракции будет доступна доп. цель\n\n"
+        reply = "Укажите для какой профессии будет доступна доп. цель\n\n"
         for i, name in enumerate(professions):
             reply += f"{i + 1}. {name}\n"
         keyboard = Keyboard().add(
@@ -176,7 +176,7 @@ async def target_without_profession(m: Message):
 @allow_edit_content('AdditionalTarget', state=Admin.TARGET_DAUGHTER_PARAMS,
                     text='Укажите значения для необходимых параметров дочери.\n{Либидо} {и/или} {Подчинение}\n'
                          'Примеры:\n\n'
-                         '10 и 15\n10 или 5\n\n',
+                         '10 и 15\n10 или 5\n\n❗️ Можноуказать только один фильтр',
                     keyboard=Keyboard().add(Text('Без выдачи по параметрам', {"target_params": False})))
 async def target_profession(m: Message, value: int = None):
     target_id = int(states.get(m.peer_id).split("*")[1])
@@ -199,7 +199,7 @@ async def target_daughter_params(m: Message):
         return
     match = re.fullmatch(daughter_params_regex, m.text.lower())
     if not match:
-        raise FormatDataException('Неправильный формат')
+        raise FormatDataException('Неправильный формат данных. Можно указать только один фильтр')
     libido = int(match.group('libido'))
     word = int(match.group('word') == 'или')
     subordination = int(match.group('subordination'))
@@ -215,7 +215,7 @@ async def target_without_forms(m: Message):
     await db.AdditionalTarget.update.values(forms=[]).where(db.AdditionalTarget.id == target_id).gino.status()
     editing_content = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
     if not editing_content:
-        await m.answer((await info_target_reward())[0])
+        await m.answer((await info_target_reward())[0], keyboard=Keyboard())
 
 
 @bot.on.private_message(StateRule(Admin.TARGET_FORMS), AdminRule())
@@ -259,15 +259,14 @@ async def select_delete_quest(m: Message):
 async def delete_quest(m: Message, value: int):
     target_id = await db.select([db.AdditionalTarget.id]).order_by(db.AdditionalTarget.id.asc()).offset(value - 1).limit(1).gino.scalar()
     await db.AdditionalTarget.delete.where(db.AdditionalTarget.id == target_id).gino.status()
-    # TODO: переделать
-    # response = await db.select([db.Quest.id, db.Quest.target_ids]).where(db.Quest.target_ids.op("@>")([target_id])).gino.all()
-    # for quest_id, target_ids in response:
-    #     target_ids.remove(target_id)
-    #     await db.Quest.update.values(target_ids=target_ids).where(db.Quest.id == quest_id).gino.status()
-    # response = await db.select([db.Form.id, db.Form.active_targets]).where(db.Form.active_targets.op("@>")([target_id])).gino.all()
-    # for form_id, active_targets in response:
-    #     active_targets.remove(active_targets)
-    #     await db.Form.update.values(active_targets=active_targets).where(db.Form.id == form_id).gino.status()
+    data = await db.select([db.Quest.id, db.Quest.target_ids]).where(db.Quest.target_ids.op('@>')([target_id])).gino.all()
+    for quest_id, target_ids in data:
+        target_ids.remove(target_id)
+        await db.Quest.update.values(target_ids=target_ids).where(db.Quest.id == quest_id).gino.status()
+    data = await db.select([db.QuestToForm.id, db.QuestToForm.active_targets]).where(db.QuestToForm.active_targets.op('@>')([target_id])).gino.all()
+    for id_, target_ids in data:
+        target_ids.remove(target_id)
+        await db.QuestToForm.update.values(active_targets=target_ids).where(db.QuestToForm.id == id_).gino.status()
     states.set(m.peer_id, f"{Admin.SELECT_ACTION}_AdditionalTarget")
     await m.answer("Дополнительная цель успешно удалена", keyboard=keyboards.gen_type_change_content("AdditionalTarget"))
     await send_content_page(m, "AdditionalTarget", 1)

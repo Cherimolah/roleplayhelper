@@ -70,9 +70,9 @@ async def set_fraction_multiplier(m: Message):
         raise FormatDataException('Не стоит ломать работу с числами')
     fraction_id = int(states.get(m.from_id).split("*")[1])
     await db.Fraction.update.values(daughter_multiplier=value).where(db.Fraction.id == fraction_id).gino.status()
-    user_ids = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
-    for user_id in user_ids:
-        await db.UserToFraction.create(user_id=user_id, fraction_id=fraction_id)
+    leader_id = await db.select([db.Fraction.leader_id]).where(db.Fraction.id == fraction_id).gino.scalar()
+    await db.UserToFraction.create(fraction_id=fraction_id, user_id=leader_id, reputation=100)
+    await db.Form.update.values(fraction_id=fraction_id).where(db.Form.user_id == leader_id).gino.status()
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Fraction"), PayloadRule({"Fraction": "delete"}), AdminRule())
@@ -93,6 +93,8 @@ async def delete_poduct(m: Message, value: int):
     if not fraction_id:
         await m.answer("Указан неверный номер фракции")
         return
+    user_ids = [x[0] for x in await db.select([db.Form.user_id]).where(db.Form.fraction_id == fraction_id).gino.all()]
+    await db.Form.update.values(fraction_id=1).where(db.Form.id.in_(user_ids)).gino.status()
     await db.Fraction.delete.where(db.Fraction.id == fraction_id).gino.status()
     states.set(m.from_id, f"{Admin.SELECT_ACTION}_Fraction")
     await m.answer("Фракция успешно удалена", keyboard=gen_type_change_content("Fraction"))

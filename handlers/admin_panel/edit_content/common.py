@@ -29,18 +29,13 @@ async def select_edit_content(m: Message):
 
 @bot.on.private_message(StateRule(Admin.SELECT_EDIT_CONTENT), PayloadMapRule({"edit_content": str}), AdminRule())
 @bot.on.private_message(PayloadMapRule({"edit_content": str}), AdminRule())
-async def select_action_with_cabins(m: Message | MessageEvent, content_type=None):
+async def select_action_with_cabins(m: Message):
     await db.User.update.values(editing_content=False).where(db.User.user_id == m.from_id).gino.status()
-    if isinstance(m, Message):
-        table_name = m.payload['edit_content']
-        states.set(m.from_id, f"{Admin.SELECT_ACTION}_{table_name}")
-        reply, keyboard = await page_content(table_name, page=1)
-        await m.answer(messages.select_action, keyboard=keyboards.gen_type_change_content(table_name))
-        await m.answer(reply, keyboard=keyboard)
-    else:
-        reply, keyboard = await page_content(content_type, page=1)
-        await bot.api.messages.send(message=messages.select_action, keyboard=keyboards.gen_type_change_content(content_type))
-        await bot.api.messages.send(message=reply, keyboard=keyboard)
+    table_name = m.payload['edit_content']
+    states.set(m.from_id, f"{Admin.SELECT_ACTION}_{table_name}")
+    reply, keyboard = await page_content(table_name, page=1)
+    await m.answer(messages.select_action, keyboard=keyboards.gen_type_change_content(table_name))
+    await m.answer(reply, keyboard=keyboard)
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"content_page": int, "content": str}), AdminRule())
@@ -75,9 +70,23 @@ async def select_cabin(m: Message, value: int, content_type: str, table):
 async def delete_cabin_message_event(m: MessageEvent, content_type: str, table):
     item_id = m.payload["item_id"]
     item_name = await db.select([table.name]).where(table.id == item_id).gino.scalar()
+    if table.__tablename__ == 'fractions':
+        user_ids = [x[0] for x in
+                    await db.select([db.Form.user_id]).where(db.Form.fraction_id == item_id).gino.all()]
+        await db.Form.update.values(fraction_id=1).where(db.Form.user_id.in_(user_ids)).gino.status()
+    if table.__tablename__ == 'additional_target':
+        data = await db.select([db.Quest.id, db.Quest.target_ids]).where(
+            db.Quest.target_ids.op('@>')([item_id])).gino.all()
+        for quest_id, target_ids in data:
+            target_ids.remove(item_id)
+            await db.Quest.update.values(target_ids=target_ids).where(db.Quest.id == quest_id).gino.status()
+        data = await db.select([db.QuestToForm.id, db.QuestToForm.active_targets]).where(
+            db.QuestToForm.active_targets.op('@>')([item_id])).gino.all()
+        for id_, target_ids in data:
+            target_ids.remove(item_id)
+            await db.QuestToForm.update.values(active_targets=target_ids).where(db.QuestToForm.id == id_).gino.status()
     await table.delete.where(table.id == item_id).gino.status()
     await m.edit_message(f"{fields_content[content_type]['name']} {item_name} успешно удалён")
-    await select_action_with_cabins(m, content_type)
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, SelectContent(),

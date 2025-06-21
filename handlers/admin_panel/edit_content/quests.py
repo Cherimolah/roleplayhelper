@@ -118,7 +118,7 @@ async def quest_expiration_time(m: Message):
     if not seconds:
         raise FormatDataException("Формат периода неверный")
     start_at, end_at = await db.select([db.Quest.start_at, db.Quest.closed_at]).where(db.Quest.id == quest_id).gino.first()
-    if seconds > (end_at - start_at).total_seconds():
+    if end_at and seconds > (end_at - start_at).total_seconds():
         raise FormatDataException("Время на выполнение квеста больше, чем время жизни квеста")
     await db.Quest.update.values(execution_time=seconds).where(db.Quest.id == quest_id).gino.scalar()
 
@@ -247,20 +247,14 @@ async def quest_allow_professions(m: Message, value: int):
 
 
 @bot.on.private_message(StateRule(Admin.QUEST_ADDITIONAL_TARGETS), PayloadRule({"quest_without_targets": True}), AdminRule())
-@allow_edit_content('Quest', text='Укажите режим квеста\nВ строгом режиме отчет по основному квесту можно '
-                                  'будет выполнить толко после принятия всех отчётов по доп. целям',
-                    state=Admin.QUEST_STRICT_MODE,
-                    keyboard=Keyboard().add(Text('Строгий', {"quest_strict": True})).add(Text('Не строгий', {"quest_strict": True})))
+@allow_edit_content('Quest', end=True, text='Квест успешно создан')
 async def quest_without_targets(m: Message):
     quest_id = int(states.get(m.from_id).split("*")[-1])
     await db.Quest.update.values(target_ids=[]).where(db.Quest.id == quest_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.QUEST_ADDITIONAL_TARGETS), AdminRule())
-@allow_edit_content('Quest', text='Укажите режим квеста\nВ строгом режиме отчет по основному квесту можно '
-                                  'будет выполнить толко после принятия всех отчётов по доп. целям',
-                    state=Admin.QUEST_STRICT_MODE,
-                    keyboard=Keyboard().add(Text('Строгий', {"quest_strict": True})).add(Text('Не строгий', {"quest_strict": True})))
+@allow_edit_content('Quest', end=True, text='Квест успешно создан')
 async def quest_additional_targets(m: Message):
     try:
         numbers = list(set(map(int, m.text.replace(' ', '').split(','))))
@@ -270,25 +264,6 @@ async def quest_additional_targets(m: Message):
     numbers = list(map(lambda x: target_ids[x - 1], numbers))
     quest_id = int(states.get(m.from_id).split("*")[-1])
     await db.Quest.update.values(target_ids=numbers).where(db.Quest.id == quest_id).gino.status()
-
-
-@bot.on.private_message(StateRule(Admin.QUEST_STRICT_MODE), PayloadMapRule({"quest_strict": bool}), AdminRule())
-@allow_edit_content('Quest', state=Admin.QUEST_PENALTY)
-async def strict_mode(m: Message):
-    quest_id = int(states.get(m.from_id).split("*")[-1])
-    use_strict = m.payload['quest_strict']
-    await db.Quest.update.values(strict=use_strict).where(db.Quest.id == quest_id).gino.status()
-    editing_content = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
-    if not editing_content:
-        await m.answer((await info_target_reward())[0], keyboard=Keyboard())
-
-
-@bot.on.private_message(StateRule(Admin.QUEST_PENALTY), AdminRule())
-@allow_edit_content('Quest', end=True, text='Квест успешно создан')
-async def quest_penalty(m: Message):
-    quest_id = int(states.get(m.from_id).split("*")[-1])
-    data = await parse_reward(m.text.lower())
-    await db.Quest.update.values(penalty=data).where(db.Quest.id == quest_id).gino.status()
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Quest"), PayloadRule({"Quest": "delete"}), AdminRule())
