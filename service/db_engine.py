@@ -265,6 +265,8 @@ class Database(Gino):
 
         self.Decor = Decor
 
+        # TODO: Тут я дурачек зачем-то фракции, декор привзяал к user_id, а не к form_id. Переделывать не хочется. Пока и так рабоатет
+
         class UserDecor(self.Model):
             __tablename__ = "user_decors"
 
@@ -296,7 +298,14 @@ class Database(Gino):
 
         self.UserToFraction = UserToFraction
 
-        # TODO: Тут я дурачек зачем-то фракции, декор привзяал к user_id, а не к form_id. Переделывать не хочется. Пока и так рабоатет
+        class DaylicHistory(self.Model):
+            __tablename__ = 'daylic_history'
+
+            id = Column(Integer, primary_key=True)
+            form_id = Column(Integer, ForeignKey("forms.id", ondelete='CASCADE'))
+            daylic_id = Column(Integer, ForeignKey('daylics.id', ondelete='CASCADE'))
+
+        self.DaylicHistory = DaylicHistory
 
     async def connect(self):
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")

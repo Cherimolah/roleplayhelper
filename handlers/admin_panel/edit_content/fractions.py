@@ -70,6 +70,9 @@ async def set_fraction_multiplier(m: Message):
         raise FormatDataException('Не стоит ломать работу с числами')
     fraction_id = int(states.get(m.from_id).split("*")[1])
     await db.Fraction.update.values(daughter_multiplier=value).where(db.Fraction.id == fraction_id).gino.status()
+    user_ids = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
+    for user_id in user_ids:
+        await db.UserToFraction.create(user_id=user_id, fraction_id=fraction_id)
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Fraction"), PayloadRule({"Fraction": "delete"}), AdminRule())

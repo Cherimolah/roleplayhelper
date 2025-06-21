@@ -8,7 +8,7 @@ from loader import bot
 from service.custom_rules import AdminRule, StateRule, SelectContent, NumericRule, EditContent
 from service.middleware import states
 from service.states import Admin
-from service.utils import send_content_page, send_edit_item, fields_content
+from service.utils import page_content, send_edit_item, fields_content
 from service.db_engine import db
 
 
@@ -29,19 +29,26 @@ async def select_edit_content(m: Message):
 
 @bot.on.private_message(StateRule(Admin.SELECT_EDIT_CONTENT), PayloadMapRule({"edit_content": str}), AdminRule())
 @bot.on.private_message(PayloadMapRule({"edit_content": str}), AdminRule())
-async def select_action_with_cabins(m: Message):
-    table_name = m.payload['edit_content']
-    states.set(m.from_id, f"{Admin.SELECT_ACTION}_{table_name}")
+async def select_action_with_cabins(m: Message | MessageEvent, content_type=None):
     await db.User.update.values(editing_content=False).where(db.User.user_id == m.from_id).gino.status()
-    await send_content_page(m, table_name, 1)
+    if isinstance(m, Message):
+        table_name = m.payload['edit_content']
+        states.set(m.from_id, f"{Admin.SELECT_ACTION}_{table_name}")
+        reply, keyboard = await page_content(table_name, page=1)
+        await m.answer(messages.select_action, keyboard=keyboards.gen_type_change_content(table_name))
+        await m.answer(reply, keyboard=keyboard)
+    else:
+        reply, keyboard = await page_content(content_type, page=1)
+        await bot.api.messages.send(message=messages.select_action, keyboard=keyboards.gen_type_change_content(content_type))
+        await bot.api.messages.send(message=reply, keyboard=keyboard)
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"content_page": int, "content": str}), AdminRule())
 async def show_page_content(m: MessageEvent):
     page = m.payload['content_page']
     content = m.payload['content']
-    await bot.api.messages.delete(cmids=[m.conversation_message_id], delete_for_all=True, peer_id=m.peer_id)
-    await send_content_page(m, content, page)
+    reply, keyboard = await page_content(content, page)
+    await m.edit_message(message=reply, keyboard=keyboard)
 
 
 @bot.on.private_message(SelectContent(), NumericRule(), AdminRule())
@@ -70,7 +77,7 @@ async def delete_cabin_message_event(m: MessageEvent, content_type: str, table):
     item_name = await db.select([table.name]).where(table.id == item_id).gino.scalar()
     await table.delete.where(table.id == item_id).gino.status()
     await m.edit_message(f"{fields_content[content_type]['name']} {item_name} успешно удалён")
-    await send_content_page(m, content_type, 1)
+    await select_action_with_cabins(m, content_type)
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, SelectContent(),

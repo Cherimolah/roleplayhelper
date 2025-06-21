@@ -390,9 +390,14 @@ async def send_daylics():
             db.Form.deactivated_daylic < datetime.datetime.now()).gino.all()
         for form_id, user_id in data:
             profession_id = await db.select([db.Form.profession]).where(db.Form.id == form_id).gino.scalar()
-            daylic = await db.select([db.Daylic.id]).where(db.Daylic.profession_id == profession_id).order_by(
+            daylic_used = [x[0] for x in await db.select([db.DaylicHistory.daylic_id]).where(db.DaylicHistory.form_id == form_id).gino.all()]
+            daylic = await db.select([db.Daylic.id]).where(and_(db.Daylic.profession_id == profession_id, db.Daylic.id.notin_(daylic_used))).order_by(
                 func.random()).gino.scalar()
+            if not daylic:  # all daylics used, try clean pool
+                await db.DaylicHistory.delete.where(db.DaylicHistory.form_id == form_id).gino.status()
+                daylic = await db.select([db.Daylic.id]).where(db.Daylic.profession_id == profession_id).order_by(func.random()).gino.scalar()
             if daylic:
+                await db.DaylicHistory.create(form_id=form_id, daylic_id=daylic)
                 await db.Form.update.values(activated_daylic=daylic).where(db.Form.id == form_id).gino.status()
                 await bot.api.messages.send(peer_id=user_id, message="Вам доступно новое ежедневное задание!",
                                             is_notification=True)
@@ -447,7 +452,7 @@ async def send_content_page(m: Union[Message, MessageEvent], table_name: str, pa
         await m.answer(messages.select_action, keyboard=keyboards.gen_type_change_content(table_name))
         await m.answer(reply, keyboard=keyboard)
     else:
-        await m.send_message(messages.select_action, keyboard=keyboards.gen_type_change_content(table_name))
+        m
         await m.send_message(reply, keyboard=keyboard)
 
 
