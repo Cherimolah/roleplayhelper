@@ -160,6 +160,7 @@ class Database(Gino):
             allowed_forms = Column(ARRAY(Integer), default=[])
             target_ids = Column(ARRAY(Integer), default=[])
             reward = Column(JSON)
+            penalty = Column(JSON)
 
         self.Quest = Quest
 

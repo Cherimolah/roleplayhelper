@@ -320,10 +320,13 @@ async def quest_over(seconds, form_id, quest_id):
     if active_quest != quest_id:
         return
     user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
-    name = await db.select([db.Quest.name]).where(db.Quest.id == quest_id).gino.scalar()
+    name, penalty = await db.select([db.Quest.name, db.Quest.penalty]).where(db.Quest.id == quest_id).gino.first()
     await db.QuestToForm.delete.where(db.QuestToForm.form_id == form_id).gino.status()
-    await bot.api.messages.send(peer_id=user_id, message=f"Время выполнения квеста «{name}» завершилось",
-                                is_notification=True)
+    reply = f"Время выполнения квеста «{name}» завершилось"
+    if penalty:
+        reply += "\nВам выписан штраф:\n\n"
+        reply += await apply_reward(user_id, penalty)
+    await bot.api.messages.send(peer_id=user_id, message=reply, is_notification=True)
 
 
 def calculate_time(quest: db.Quest, starts_at: datetime.datetime) -> int | None:
@@ -807,11 +810,27 @@ async def info_target_reward():
     fractions = [x[0] for x in await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()]
     for i, fraction in enumerate(fractions):
         reply += f"{i + 1}. {fraction}\n"
-    reply += ("\nЧтобы указать награду в виде бонуса к фракциям необходимо написать команду «РЕП {номер фракции} "
+    reply += ("\nЧтобы указать награду в виде бонуса к репутации необходимо написать команду «РЕП {номер фракции} "
               "{бонус}». Например:\nРЕП 1 10\n\n"
               "Чтобы указать награду в виде валюты необходимо написать команду «ВАЛ {бонус}». Например:\n"
               "ВАЛ 100\n\n❗️ Можно указать оба варианта через новую строку")
     return reply, None
+
+
+async def info_quest_penalty():
+    reply = ('Возможные варианты штрафа:\n'
+             'I. Бонус к репутациям\n'
+             'II. Награда валютой\n\n'
+             'Список фракций:\n')
+    fractions = [x[0] for x in await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()]
+    for i, fraction in enumerate(fractions):
+        reply += f"{i + 1}. {fraction}\n"
+    reply += ("\nЧтобы указать штраф в виде уменьшения репутации необходимо написать команду «РЕП {номер фракции} "
+              "{бонус}». Например:\nРЕП 1 -10\n\n"
+              "Чтобы указать награду в виде валюты необходимо написать команду «ВАЛ {бонус}». Например:\n"
+              "ВАЛ -100\n\n❗️ Можно указать оба варианта через новую строку")
+    keyboard = Keyboard().add(Text('Без штрафа', {"without_penalty": True}), KeyboardButtonColor.SECONDARY)
+    return reply, keyboard
 
 
 async def parse_reward(text: str) -> List[Dict]:
@@ -844,6 +863,22 @@ async def parse_reward(text: str) -> List[Dict]:
         else:
             raise FormatDataException('Недоступный вариант награды')
     return data
+
+
+async def apply_reward(user_id: int, data: dict) -> str:
+    reply = ''
+    for reward in data:
+        if reward['type'] == 'fraction_bonus':
+            fraction_id = reward['fraction_id']
+            reputation_bonus = reward['reputation_bonus']
+            await db.change_reputation(user_id, fraction_id, reputation_bonus)
+            fraction_name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+            reply += f"{'+' if reputation_bonus >= 0 else ''}{reputation_bonus} к репутации во фракции «{fraction_name}»\n"
+        elif reward['type'] == 'value_bonus':
+            bonus = reward['bonus']
+            await db.Form.update.values(balance=db.Form.balance + bonus).gino.status()
+            reply += f"{'+' if bonus >= 0 else ''}{bonus} валюты\n"
+    return reply
 
 
 async def serialize_target_reward(data):
@@ -924,7 +959,8 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field("Для профессии", Admin.QUEST_PROFESSION_ALLOWED, info_quest_profession_allowed, serialize_quest_profession_allowed),
             Field("Для игроков", Admin.QUEST_USERS_ALLOWED, info_quest_users_allowed, serialize_quest_users_allowed),
             Field('Доп. цели', Admin.QUEST_ADDITIONAL_TARGETS, info_quest_additional_targets, serialize_quest_additional_targets),
-            Field("Награда", Admin.QUEST_REWARD, info_target_reward, serialize_target_reward)
+            Field("Награда", Admin.QUEST_REWARD, info_target_reward, serialize_target_reward),
+            Field('Штраф', Admin.QUEST_PENALTY, info_quest_penalty, serialize_target_reward)
         ],
         "name": "Квест"
     },

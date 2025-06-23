@@ -10,7 +10,7 @@ from service.custom_rules import AdminRule, StateRule, NumericRule
 from service.middleware import states
 from service.states import Admin
 from service.db_engine import db
-from service.utils import parse_period, send_content_page, allow_edit_content, FormatDataException, parse_ids, info_target_reward, parse_reward
+from service.utils import parse_period, send_content_page, allow_edit_content, FormatDataException, parse_ids, info_quest_penalty, parse_reward, info_target_reward
 from config import DATETIME_FORMAT
 
 
@@ -36,7 +36,7 @@ async def description_quest(m: Message):
     await db.Quest.update.values(description=m.text).where(db.Quest.id == quest_id).gino.status()
     editing_content = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
     if not editing_content:
-        await m.answer((await info_target_reward())[0])
+        await m.answer("Укажите награду для квеста\n\n" + (await info_target_reward())[0])
 
 
 @bot.on.private_message(StateRule(Admin.QUEST_REWARD), AdminRule())
@@ -247,14 +247,18 @@ async def quest_allow_professions(m: Message, value: int):
 
 
 @bot.on.private_message(StateRule(Admin.QUEST_ADDITIONAL_TARGETS), PayloadRule({"quest_without_targets": True}), AdminRule())
-@allow_edit_content('Quest', end=True, text='Квест успешно создан')
+@allow_edit_content('Quest', state=Admin.QUEST_PENALTY)
 async def quest_without_targets(m: Message):
     quest_id = int(states.get(m.from_id).split("*")[-1])
     await db.Quest.update.values(target_ids=[]).where(db.Quest.id == quest_id).gino.status()
+    editing_content = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
+    if not editing_content:
+        reply, keyboard = await info_quest_penalty()
+        await m.answer("Укажите штраф для квеста\n\n" + reply, keyboard=keyboard)
 
 
 @bot.on.private_message(StateRule(Admin.QUEST_ADDITIONAL_TARGETS), AdminRule())
-@allow_edit_content('Quest', end=True, text='Квест успешно создан')
+@allow_edit_content('Quest', state=Admin.QUEST_PENALTY)
 async def quest_additional_targets(m: Message):
     try:
         numbers = list(set(map(int, m.text.replace(' ', '').split(','))))
@@ -264,6 +268,25 @@ async def quest_additional_targets(m: Message):
     numbers = list(map(lambda x: target_ids[x - 1], numbers))
     quest_id = int(states.get(m.from_id).split("*")[-1])
     await db.Quest.update.values(target_ids=numbers).where(db.Quest.id == quest_id).gino.status()
+    editing_content = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
+    if not editing_content:
+        reply, keyboard = await info_quest_penalty()
+        await m.answer("Укажите штраф для квеста\n\n" + reply, keyboard=keyboard)
+
+
+@bot.on.private_message(StateRule(Admin.QUEST_PENALTY), PayloadRule({"without_penalty": True}), AdminRule())
+@allow_edit_content('Quest', end=True, text='Квест успешно создан')
+async def quest_without_penalty(m: Message):
+    quest_id = int(states.get(m.from_id).split("*")[-1])
+    await db.Quest.update.values(penalty=None).where(db.Quest.id == quest_id).gino.status()
+
+
+@bot.on.private_message(StateRule(Admin.QUEST_PENALTY), AdminRule())
+@allow_edit_content('Quest', end=True, text='Квест успешно создан')
+async def quest_without_penalty(m: Message):
+    quest_id = int(states.get(m.peer_id).split("*")[1])
+    data = await parse_reward(m.text.lower())
+    await db.Quest.update.values(penalty=data).where(db.Quest.id == quest_id).gino.status()
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Quest"), PayloadRule({"Quest": "delete"}), AdminRule())

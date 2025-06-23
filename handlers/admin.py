@@ -16,7 +16,7 @@ from service import keyboards
 from service.states import Menu, Admin
 from service.middleware import states
 from service.custom_rules import StateRule, NumericRule, AdminRule
-from service.utils import take_off_payments, parse_cooldown, parse_reputation, create_mention, check_quest_completed
+from service.utils import take_off_payments, parse_cooldown, parse_reputation, create_mention, check_quest_completed, apply_reward
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_accept": int}), AdminRule())
@@ -195,6 +195,7 @@ async def verify_quest(m: MessageEvent):
     request_id = m.payload['request_id']
     checked = await db.select([db.ReadyQuest.is_checked]).where(db.ReadyQuest.id == request_id).gino.scalar()
     if checked:
+
         await m.edit_message("Другой администратор уже проверил этот запрос")
         return
     form_id, quest_id = await db.select([db.ReadyQuest.form_id, db.ReadyQuest.quest_id]).where(db.ReadyQuest.id == request_id).gino.first()
@@ -205,17 +206,7 @@ async def verify_quest(m: MessageEvent):
         await db.ReadyQuest.update.values(is_checked=True, is_claimed=True).where(db.ReadyQuest.id == request_id).gino.status()
         reward, name = await db.select([db.Quest.reward, db.Quest.name]).where(db.Quest.id == quest_id).gino.first()
         reply = f'Поздравляем с выполнением квеста «{name}»\nВам начислена награда:\n'
-        for r in reward:
-            if r['type'] == 'fraction_bonus':
-                fraction_id = r['fraction_id']
-                reputation_bonus = r['reputation_bonus']
-                await db.change_reputation(user_id, fraction_id, reputation_bonus)
-                fraction_name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
-                reply += f"{'+' if reputation_bonus >= 0 else '-'}{reputation_bonus} к репутации во фракции «{fraction_name}»\n"
-            elif r['type'] == 'value_bonus':
-                bonus = r['bonus']
-                await db.Form.update.values(balance=db.Form.balance + bonus).gino.status()
-                reply += f"{'+' if bonus >= 0 else '-'}{bonus} валюты\n"
+        reply += await apply_reward(user_id, reward)
         if await check_quest_completed(form_id):
             await db.QuestToForm.delete.where(db.QuestToForm.form_id == form_id).gino.status()
         await bot.api.messages.send(peer_id=m.user_id, message=reply, is_notification=True)
@@ -246,17 +237,7 @@ async def verify_target(m: MessageEvent):
         reward = json.loads(reward)
         reply = (f"Вам успешно приняли выполнение квеста «{name}»\n"
                  f"Получена награда:\n")
-        for r in reward:
-            if r['type'] == 'fraction_bonus':
-                fraction_id = r['fraction_id']
-                reputation_bonus = r['reputation_bonus']
-                await db.change_reputation(user_id, fraction_id, reputation_bonus)
-                fraction_name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
-                reply += f"{'+' if reputation_bonus >= 0 else '-'}{reputation_bonus} к репутации во фракции «{fraction_name}»\n"
-            elif r['type'] == 'value_bonus':
-                bonus = r['bonus']
-                await db.Form.update.values(balance=db.Form.balance + bonus).gino.status()
-                reply += f"{'+' if bonus >= 0 else '-'}{bonus} валюты\n"
+        reply += await apply_reward(user_id, reward)
         await db.ReadyTarget.update.values(is_checked=True, is_claimed=True).where(db.ReadyTarget.id == request_id).gino.status()
         if await check_quest_completed(form_id):
             await db.QuestToForm.delete.where(db.QuestToForm.form_id == form_id).gino.status()
