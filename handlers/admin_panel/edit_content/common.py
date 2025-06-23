@@ -85,6 +85,9 @@ async def delete_cabin_message_event(m: MessageEvent, content_type: str, table):
         for id_, target_ids in data:
             target_ids.remove(item_id)
             await db.QuestToForm.update.values(active_targets=target_ids).where(db.QuestToForm.id == id_).gino.status()
+    if table.__tablename__ == 'quests':
+        await db.QuestToForm.delete.where(db.QuestToForm.quest_id == item_id).gino.status()
+        await db.QuestHistory.delete.where(db.QuestHistory.quest_id == item_id).gino.status()
     await table.delete.where(table.id == item_id).gino.status()
     await m.edit_message(f"{fields_content[content_type]['name']} {item_name} успешно удалён")
 

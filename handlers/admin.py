@@ -195,7 +195,6 @@ async def verify_quest(m: MessageEvent):
     request_id = m.payload['request_id']
     checked = await db.select([db.ReadyQuest.is_checked]).where(db.ReadyQuest.id == request_id).gino.scalar()
     if checked:
-
         await m.edit_message("Другой администратор уже проверил этот запрос")
         return
     form_id, quest_id = await db.select([db.ReadyQuest.form_id, db.ReadyQuest.quest_id]).where(db.ReadyQuest.id == request_id).gino.first()

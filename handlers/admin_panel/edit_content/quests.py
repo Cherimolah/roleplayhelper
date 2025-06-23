@@ -305,6 +305,8 @@ async def select_delete_quest(m: Message):
 async def delete_quest(m: Message, value: int):
     quest_id = await db.select([db.Quest.id]).order_by(db.Quest.id.asc()).offset(value - 1).limit(1).gino.scalar()
     await db.ReadyQuest.delete.where(db.ReadyQuest.quest_id == quest_id).gino.status()
+    await db.QuestToForm.delete.where(db.QuestToForm.quest_id == quest_id).gino.status()
+    await db.QuestHistory.delete.where(db.QuestHistory.quest_id == quest_id).gino.status()
     await db.Quest.delete.where(db.Quest.id == quest_id).gino.status()
     states.set(m.peer_id, f"{Admin.SELECT_ACTION}_Quest")
     await m.answer("Квест успешно удалён", keyboard=keyboards.gen_type_change_content("Quest"))
