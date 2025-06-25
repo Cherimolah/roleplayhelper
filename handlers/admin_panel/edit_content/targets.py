@@ -11,10 +11,7 @@ from service.custom_rules import AdminRule, StateRule, NumericRule
 from service.middleware import states
 from service.states import Admin
 from service.db_engine import db
-from service.utils import send_content_page, allow_edit_content, FormatDataException, parse_ids, info_target_reward, parse_reward
-
-
-daughter_params_regex = re.compile(r'^(?P<libido>\d+)\s*(?P<word>(или|и))\s*(?P<subordination>\d+)$')
+from service.utils import send_content_page, allow_edit_content, FormatDataException, parse_ids, info_target_reward, parse_reward, parse_daughter_params
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_AdditionalTarget"), PayloadRule({"AdditionalTarget": "add"}), AdminRule())
@@ -197,15 +194,8 @@ async def target_daughter_params(m: Message):
     if m.payload:
         await db.AdditionalTarget.update.values(daughter_params=[]).where(db.AdditionalTarget.id == target_id).gino.status()
         return
-    match = re.fullmatch(daughter_params_regex, m.text.lower())
-    if not match:
-        raise FormatDataException('Неправильный формат данных. Можно указать только один фильтр')
-    libido = int(match.group('libido'))
-    word = int(match.group('word') == 'или')
-    subordination = int(match.group('subordination'))
-    if not 0 <= libido <= 100 or not 0 <= subordination <= 100:
-        raise FormatDataException('Либидо и подчинение должны находиться в диапазоне [0; 100]')
-    await db.AdditionalTarget.update.values(daughter_params=[libido, subordination, word]).where(db.AdditionalTarget.id == target_id).gino.status()
+    libido, word, subordination = parse_daughter_params(m.text.lower())
+    await db.AdditionalTarget.update.values(daughter_params=[libido, word, subordination]).where(db.AdditionalTarget.id == target_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.TARGET_FORMS), PayloadRule({"target_forms": False}), AdminRule())

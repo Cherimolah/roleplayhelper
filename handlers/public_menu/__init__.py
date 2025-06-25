@@ -5,3 +5,4 @@ from . import shop
 from . import quests
 from . import daylics
 from . import settings
+from . import daughter_quests

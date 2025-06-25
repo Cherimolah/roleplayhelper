@@ -66,14 +66,17 @@ async def save_petition(m: Message):
 @bot.on.private_message(PayloadRule({"menu": "quests and daylics"}), StateRule(Menu.DAYLICS))
 async def quests_or_daylics(m: Message):
     states.set(m.peer_id, Menu.MAIN)
-    keyboard = Keyboard().add(
+    keyboard = (Keyboard().add(
         Text("Квесты", {"menu": "quests"}), KeyboardButtonColor.PRIMARY
     ).add(
         Text("Ежедневное задание", {"menu": "daylics"}), KeyboardButtonColor.PRIMARY
-    ).row().add(
+    ))
+    status = await db.select([db.Form.status]).where(db.Form.user_id == m.from_id).gino.scalar()
+    if status == 2:
+        keyboard.row().add(Text('Квест для дочерей', {"menu": 'daughter_quests'}), KeyboardButtonColor.PRIMARY)
+    keyboard.row().add(
         Text("Назад", {"menu": "home"}), KeyboardButtonColor.NEGATIVE
     )
-
     await m.answer("Выберите необходимый раздел", keyboard=keyboard)
 
 

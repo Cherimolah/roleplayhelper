@@ -22,6 +22,7 @@ from config import DATETIME_FORMAT, OWNER
 
 mention_regex = re.compile(r"\[(?P<type>id|club|public)(?P<id>\d*)\|(?P<text>.+)\]")
 link_regex = re.compile(r"https:/(?P<type>/|/m.)vk.com/(?P<screen_name>\w*)")
+daughter_params_regex = re.compile(r'^(?P<libido>\d+)\s*(?P<word>(или|и))\s*(?P<subordination>\d+)$')
 
 client = AioHTTPClientExtended()
 
@@ -166,6 +167,18 @@ async def reload_image(attachment, name: str, delete: bool = False):
     return photo
 
 
+def parse_daughter_params(text: str) -> tuple[int, int, int]:
+    match = re.fullmatch(daughter_params_regex, text.lower())
+    if not match:
+        raise FormatDataException('Неправильный формат данных. Можно указать только один фильтр')
+    libido = int(match.group('libido'))
+    word = int(match.group('word') == 'или')
+    subordination = int(match.group('subordination'))
+    if not 0 <= libido <= 100 or not 0 <= subordination <= 100:
+        raise FormatDataException('Либидо и подчинение должны находиться в диапазоне [0; 100]')
+    return libido, word, subordination
+
+
 async def send_mailing(sleep, message_id, mailing_id):
     await asyncio.sleep(sleep)
     user_ids = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
@@ -303,7 +316,7 @@ def parse_period(text: str) -> Optional[int]:
 
 def parse_cooldown(cooldown: Optional[Union[int, float]]) -> Optional[str]:
     if not cooldown:
-        return
+        return 'не установлено'
     days = int(cooldown // 86400)
     hours = int((cooldown - days * 86400) // 3600)
     minutes = int((cooldown - days * 86400 - hours * 3600) // 60)
@@ -765,7 +778,7 @@ async def info_target_daughter_params():
 async def serialize_target_daughter_params(params: List[int]):
     if not params:
         return 'не установлено'
-    return f"{params[0]} {'или' if params[1] else 'и'} {params[2]}"
+    return f"либидо {params[0]} {'или' if params[1] else 'и'} подчинение {params[2]}"
 
 
 async def info_target_users_allowed():
@@ -804,8 +817,9 @@ async def serialize_quest_additional_targets(target_ids: List[int]) -> str:
 
 async def info_target_reward():
     reply = ('Возможные варианты награды:\n'
-             'I. Бонус к репутациям\n'
-             'II. Награда валютой\n\n'
+             'I. Бонус к репутации\n'
+             'II. Награда валютой\n'
+             'III. Изменение параметров\n\n'
              'Список фракций:\n')
     fractions = [x[0] for x in await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()]
     for i, fraction in enumerate(fractions):
@@ -813,22 +827,27 @@ async def info_target_reward():
     reply += ("\nЧтобы указать награду в виде бонуса к репутации необходимо написать команду «РЕП {номер фракции} "
               "{бонус}». Например:\nРЕП 1 10\n\n"
               "Чтобы указать награду в виде валюты необходимо написать команду «ВАЛ {бонус}». Например:\n"
-              "ВАЛ 100\n\n❗️ Можно указать оба варианта через новую строку")
+              "ВАЛ 100\n\n"
+              "Чтобы указать награду в виде изменения параметра необходимо написать команду «ПАР {либидо} {подчинение}». "
+              "Например:\n ПАР -10 30\n\n❗️ Можно указать несколько вариантов через новую строку")
     return reply, None
 
 
 async def info_quest_penalty():
     reply = ('Возможные варианты штрафа:\n'
-             'I. Бонус к репутациям\n'
-             'II. Награда валютой\n\n'
+             'I. Бонус к репутации\n'
+             'II. Награда валютой\n'
+             'III. Изменение параметров\n\n'
              'Список фракций:\n')
     fractions = [x[0] for x in await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()]
     for i, fraction in enumerate(fractions):
         reply += f"{i + 1}. {fraction}\n"
     reply += ("\nЧтобы указать штраф в виде уменьшения репутации необходимо написать команду «РЕП {номер фракции} "
               "{бонус}». Например:\nРЕП 1 -10\n\n"
-              "Чтобы указать награду в виде валюты необходимо написать команду «ВАЛ {бонус}». Например:\n"
-              "ВАЛ -100\n\n❗️ Можно указать оба варианта через новую строку")
+              "Чтобы указать штраф в виде валюты необходимо написать команду «ВАЛ {бонус}». Например:\n"
+              "ВАЛ -100\n\n"
+              "Чтобы указать штраф в виде изменения параметра необходимо написать команду «ПАР {либидо} {подчинение}». "
+              "Например:\nПАР -10 30\n\n❗️ Можно указать несколько вариантов через новую строку")
     keyboard = Keyboard().add(Text('Без штрафа', {"without_penalty": True}), KeyboardButtonColor.SECONDARY)
     return reply, keyboard
 
@@ -836,10 +855,11 @@ async def info_quest_penalty():
 async def parse_reward(text: str) -> List[Dict]:
     data = []
     for line in text.split("\n"):
+        line = line.lower()
         if line.startswith('реп'):
             try:
                 fraction_id, reputation_bonus = map(int, line.split()[1:])
-            except ValueError:
+            except:
                 raise FormatDataException('Неверно указаны параметры')
             fraction_id = await db.select([db.Fraction.id]).order_by(db.Fraction.id.asc()).offset(
                 fraction_id - 1).limit(1).gino.scalar()
@@ -854,11 +874,23 @@ async def parse_reward(text: str) -> List[Dict]:
             try:
                 _, bonus = line.split()
                 bonus = int(bonus)
-            except ValueError:
+            except:
                 raise FormatDataException('Неверно указаны параметры')
             data.append({
                 'type': 'value_bonus',
                 'bonus': bonus
+            })
+        elif line.startswith('пар'):
+            try:
+                _, libido, subordination = line.split()
+                libido = int(libido)
+                subordination = int(subordination)
+            except:
+                raise FormatDataException('Неверно указаны параметры')
+            data.append({
+                'type': 'daughter_params',
+                'libido': libido,
+                'subordination': subordination
             })
         else:
             raise FormatDataException('Недоступный вариант награды')
@@ -866,6 +898,8 @@ async def parse_reward(text: str) -> List[Dict]:
 
 
 async def apply_reward(user_id: int, data: dict) -> str:
+    if not data:
+        return 'без награды/штрафа'
     reply = ''
     for reward in data:
         if reward['type'] == 'fraction_bonus':
@@ -878,6 +912,9 @@ async def apply_reward(user_id: int, data: dict) -> str:
             bonus = reward['bonus']
             await db.Form.update.values(balance=db.Form.balance + bonus).gino.status()
             reply += f"{'+' if bonus >= 0 else ''}{bonus} валюты\n"
+        elif reward['type'] == 'daughter_params':
+            await db.Form.update.values(libido_level=db.Form.libido_level + reward['libido']).where(db.Form.user_id == user_id).gino.status()
+            await db.Form.update.values(subordination_level=db.Form.subordination_level + reward['subordination']).where(db.Form.user_id == user_id).gino.status()
     return reply
 
 
@@ -894,6 +931,8 @@ async def serialize_target_reward(data):
             reply += f'Бонус к репутации {bonus} во фракции «{fraction}»'
         elif reward['type'] == 'value_bonus':
             reply += str(reward['bonus']) + ' валюты'
+        elif reward['type'] == 'daughter_params':
+            reply += f'Изменение либидо на {"+" if reward["libido"] > 0 else ""}{reward["libido"]}, изменение подчинение на {"+" if reward["subordination"] > 0 else ""}{reward["subordination"]}'
         reply += ", "
     return reply[:-2]
 
@@ -916,6 +955,62 @@ async def info_quest_strict_mode():
 
 async def serialize_strict_mode(strict: bool):
     return 'да' if strict else 'нет'
+
+
+async def info_daughter_quest_form_id():
+    data = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.status == 2).order_by(
+        db.Form.id.asc()).limit(15).gino.all()
+    user_ids = [x[0] for x in data]
+    users = await bot.api.users.get(user_ids=user_ids)
+    user_names = [f'{x.first_name} {x.last_name}' for x in users]
+    reply = ('Укажите дочь для которой будет установлен квест\n'
+             'Можно прислать ссылку, пересланное сообщение или номер по порядку отсюда\n\n'
+             'Список дочерей:\n\n')
+    for i in range(len(data)):
+        reply += f'{i + 1}. [id{users[i].id}|{data[i][1]} / {user_names[i]}]\n'
+    count = await db.select([func.count(db.Form.id)]).where(db.Form.status == 2).gino.scalar()
+    keyboard = Keyboard(inline=True)
+    if count > 15:
+        keyboard.add(Callback("->", {"daughters_page": 2}), KeyboardButtonColor.PRIMARY).row()
+    keyboard.add(Text('Не выдавать дочери', {"daughter_quest_for_none": True}), KeyboardButtonColor.SECONDARY)
+    return reply, keyboard
+
+
+async def serialize_daughter_quest_form_id(form_id: int):
+    if not form_id:
+        return 'Ни для кого'
+    name, user_id = await db.select([db.Form.name, db.Form.user_id]).where(db.Form.id == form_id).gino.first()
+    user = (await bot.api.users.get(user_ids=user_id))[0]
+    return f'[id{user_id}|{name} / {user.first_name} {user.last_name}]'
+
+
+async def info_daughter_target_ids():
+    data = await db.select([db.DaughterTarget.name, db.DaughterTarget.params]).order_by(
+        db.DaughterTarget.id.asc()).limit(15).gino.all()
+    if not data:
+        reply = 'На данный момент не создано доп. целей'
+        return reply, None
+    reply = '{номер}. {название} / {либидо} {правило} {подчинение}\n\n'
+    count = await db.select([func.count(db.DaughterTarget.id)]).gino.scalar()
+    for i in range(len(data)):
+        name, params = data[i]
+        reply += f'{i + 1}. {name} / {params[0]} {"и" if params[1] == 0 else "или"} {params[2]}\n'
+    keyboard = Keyboard(inline=True)
+    if count > 15:
+        keyboard.add(Callback("->", {"daughter_targets": 2}), KeyboardButtonColor.PRIMARY)
+        keyboard.row()
+    keyboard.add(Text('Без доп. целей', {"without_targets": True}), KeyboardButtonColor.SECONDARY)
+    return reply, keyboard
+
+
+async def serialize_daughter_target_ids(target_ids: list[int]):
+    if not target_ids:
+        return 'Без доп. целей'
+    reply = "\n"
+    for i, target_id in enumerate(target_ids):
+        name, params = await db.select([db.DaughterTarget.name, db.DaughterTarget.params]).where(db.DaughterTarget.id == target_id).gino.first()
+        reply += f'{i + 1}. {name} / {params[0]} {"и" if params[1] == 0 else "или"} {params[1]}\n'
+    return reply
 
 
 fields_content: Dict[str, Dict[str, List[Field]]] = {
@@ -1014,6 +1109,26 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field('Для всех пользователей', Admin.TARGET_FOR_ALL_USERS, info_target_for_all_users, serialize_target_for_all_users)
         ],
         "name": "Доп. цель"
+    },
+    'DaughterQuest': {
+        'name': 'Квесты для дочерей',
+        'fields': [
+            Field('Название', Admin.DAUGHTER_QUEST_NAME),
+            Field('Описание', Admin.DAUGHTER_QUEST_DESCRIPTION),
+            Field('Для кого', Admin.DAUGHTER_QUEST_FORM_ID, info_daughter_quest_form_id, serialize_daughter_quest_form_id),
+            Field('Награда', Admin.DAUGHTER_QUEST_REWARD, info_target_reward, serialize_target_reward),
+            Field('Штраф', Admin.DAUGHTER_QUEST_PENALTY, info_quest_penalty, serialize_target_reward),
+            Field('Доп. цели', Admin.DAUGHTER_QUEST_TARGET_IDS, info_daughter_target_ids, serialize_daughter_target_ids)
+        ]
+    },
+    'DaughterTarget': {
+        'name': 'Доп. цели для дочерей',
+        'fields': [
+            Field('Название', Admin.DAUGHTER_TARGET_NAME),
+            Field('Описание', Admin.DAUGHTER_TARGET_DESCRIPTION),
+            Field('Награда', Admin.DAUGHTER_TARGET_REWARD, info_target_reward, serialize_target_reward),
+            Field('Параметры дочери', Admin.DAUGHTER_TARGET_PARAMS, info_target_daughter_params, serialize_target_daughter_params)
+        ]
     }
 }
 

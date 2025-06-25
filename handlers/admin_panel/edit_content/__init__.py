@@ -8,4 +8,6 @@ from . import shop
 from . import decor
 from . import fractions
 from . import targets
+from . import daughter_quests
+from . import daughter_targets
 from . import common

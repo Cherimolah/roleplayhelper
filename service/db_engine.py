@@ -2,7 +2,7 @@ import datetime
 from typing import List, Tuple
 
 from gino import Gino
-from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, Boolean, TIMESTAMP, func, and_, Float, ARRAY, JSON
+from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, Boolean, TIMESTAMP, func, and_, Float, ARRAY, JSON, Date
 
 from config import USER, PASSWORD, HOST, DATABASE
 
@@ -314,6 +314,52 @@ class Database(Gino):
             quest_id = Column(Integer, ForeignKey('quests.id', ondelete='CASCADE'))
 
         self.QuestHistory = QuestHistory
+
+        class DaughterQuest(self.Model):
+            __tablename__ = 'daughter_quests'
+
+            id = Column(Integer, primary_key=True)
+            name = Column(Text)
+            description = Column(Text)
+            to_form_id = Column(Integer, ForeignKey('forms.id', ondelete='SET NULL'))
+            reward = Column(JSON)
+            penalty = Column(JSON)
+            target_ids = Column(ARRAY(Integer))
+
+        self.DaughterQuest = DaughterQuest
+
+        class DaughterTarget(self.Model):
+            __tablename__ = 'daughter_targets'
+
+            id = Column(Integer, primary_key=True)
+            name = Column(Text)
+            description = Column(Text)
+            reward = Column(JSON)
+            params = Column(ARRAY(Integer), default=[])
+
+        self.DaughterTarget = DaughterTarget
+
+        class DaughterTargetRequest(self.Model):
+            __tablename__ = 'daughter_target_request'
+
+            id = Column(Integer, primary_key=True)
+            target_id = Column(Integer, ForeignKey('daughter_targets.id', ondelete='CASCADE'))
+            form_id = Column(Integer, ForeignKey('forms.id', ondelete='CASCADE'))
+            confirmed = Column(Boolean, default=False)
+            created_at = Column(Date, default=datetime.date.today)
+
+        self.DaughterTargetRequest = DaughterTargetRequest
+
+        class DaughterQuestRequest(self.Model):
+            __tablename__ = 'daughter_quest_request'
+
+            id = Column(Integer, primary_key=True)
+            quest_id = Column(Integer, ForeignKey('daughter_quests.id', ondelete='CASCADE'))
+            form_id = Column(Integer, ForeignKey('forms.id', ondelete='CASCADE'))
+            confirmed = Column(Boolean, default=False)
+            created_at = Column(Date, default=datetime.date.today)
+
+        self.DaughterQuestRequest = DaughterQuestRequest
 
     async def connect(self):
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")

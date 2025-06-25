@@ -97,6 +97,10 @@ manage_content = Keyboard().add(
 ).row().add(
     Text("Доп. цели к квестам", {"edit_content": "AdditionalTarget"}), KeyboardButtonColor.PRIMARY
 ).row().add(
+    Text('Квесты для дочерей', {"edit_content": "DaughterQuest"}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Доп. цели для дочерей', {"edit_content": 'DaughterTarget'}), KeyboardButtonColor.PRIMARY
+).row().add(
     Text("Назад", {"edit_content": "back"}), KeyboardButtonColor.NEGATIVE
 )
 

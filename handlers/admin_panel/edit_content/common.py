@@ -13,6 +13,7 @@ from service.db_engine import db
 
 
 @bot.on.private_message(StateRule(Admin.MENU), PayloadRule({"admin_menu": "edit_content"}), AdminRule())
+@bot.on.private_message(AdminRule(), text='/content')
 @bot.on.private_message(PayloadRule({"Cabins": "back"}), AdminRule())
 @bot.on.private_message(PayloadRule({"Profession": "back"}), AdminRule())
 @bot.on.private_message(PayloadRule({"Shop": "back"}), AdminRule())
@@ -22,6 +23,8 @@ from service.db_engine import db
 @bot.on.private_message(PayloadRule({"Decor": "back"}), AdminRule())
 @bot.on.private_message(PayloadRule({"Fraction": "back"}), AdminRule())
 @bot.on.private_message(PayloadRule({"AdditionalTarget": "back"}), AdminRule())
+@bot.on.private_message(PayloadRule({"DaughterQuest": "back"}), AdminRule())
+@bot.on.private_message(PayloadRule({"DaughterTarget": "back"}), AdminRule())
 async def select_edit_content(m: Message):
     states.set(m.from_id, Admin.SELECT_EDIT_CONTENT)
     await m.answer(messages.content, keyboard=keyboards.manage_content)
@@ -88,6 +91,13 @@ async def delete_cabin_message_event(m: MessageEvent, content_type: str, table):
     if table.__tablename__ == 'quests':
         await db.QuestToForm.delete.where(db.QuestToForm.quest_id == item_id).gino.status()
         await db.QuestHistory.delete.where(db.QuestHistory.quest_id == item_id).gino.status()
+    if table.__tablename__ == 'daughter_targets':
+        data = await db.select([db.DaughterQuest.id, db.DaughterQuest.target_ids]).where(
+            db.DaughterQuest.target_ids.op('@>')([item_id])).gino.all()
+        for quest_id, target_ids in data:
+            target_ids.remove(item_id)
+            await db.DaughterQuest.update.values(target_ids=target_ids).where(
+                db.DaughterQuest.id == quest_id).gino.status()
     await table.delete.where(table.id == item_id).gino.status()
     await m.edit_message(f"{fields_content[content_type]['name']} {item_name} успешно удалён")
 

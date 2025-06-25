@@ -161,3 +161,15 @@ class Admin:
     TARGET_DAUGHTER_PARAMS = 'target_daughter_params'
     TARGET_FORMS = "target_forms"
     TARGET_REWARD = "target_reward"
+    DAUGHTER_QUEST_NAME = 'daughter_quest_name'
+    DAUGHTER_QUEST_DESCRIPTION = 'daughter_quest_description'
+    DAUGHTER_QUEST_FORM_ID = 'daughter_quest_form_id'
+    DAUGHTER_QUEST_REWARD = 'daughter_quest_reward'
+    DAUGHTER_QUEST_PENALTY = 'daughter_quest_penalty'
+    DAUGHTER_QUEST_TARGET_IDS = 'daughter_quest_target_ids'
+    DAUGHTER_QUEST_DELETE = 'daughter_quest_delete'
+    DAUGHTER_TARGET_NAME = 'daughter_target_name'
+    DAUGHTER_TARGET_DESCRIPTION = 'daughter_target_description'
+    DAUGHTER_TARGET_REWARD = 'daughter_target_reward'
+    DAUGHTER_TARGET_PARAMS = 'daughter_target_params'
+    DAUGHTER_TARGET_DELETE = 'daughter_target_delete'

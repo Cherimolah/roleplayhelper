@@ -3,6 +3,7 @@ from typing import Union, Optional
 
 from vkbottle.dispatch.rules import ABCRule
 from vkbottle.bot import Message, MessageEvent
+from vkbottle.dispatch.rules.abc import T_contra
 
 from loader import states
 from service.db_engine import db
@@ -196,3 +197,9 @@ class ChatAction(ABCRule[Message], ABC):
     async def check(self, m: Message):
         if m.chat_id in CHAT_IDS and f"{{{self.command}}}" in m.text.lower():
             return True
+
+
+class DaughterRule(ABCRule[Message], ABC):
+    async def check(self, event: Message):
+        status = await db.select([db.Form.status]).where(db.Form.user_id == event.from_id).gino.scalar()
+        return status == 2
