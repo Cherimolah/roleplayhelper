@@ -65,13 +65,14 @@ async def select_delete_quest(m: Message):
     await m.answer(reply, keyboard=Keyboard())
 
 
-@bot.on.private_message(StateRule(Admin.DAUGHTER_QUEST_DELETE), NumericRule(), AdminRule())
+@bot.on.private_message(StateRule(Admin.DAUGHTER_TARGET_DELETE), NumericRule(), AdminRule())
 async def delete_quest(m: Message, value: int):
     quest_id = await db.select([db.DaughterTarget.id]).order_by(db.DaughterTarget.id.asc()).offset(value - 1).limit(1).gino.scalar()
     await db.DaughterTarget.delete.where(db.DaughterTarget.id == quest_id).gino.status()
     data = await db.select([db.DaughterQuest.id, db.DaughterQuest.target_ids]).where(db.DaughterQuest.target_ids.op('@>')([quest_id])).gino.all()
     for quest_id, target_ids in data:
-        target_ids.remove(quest_id)
+        if quest_id in target_ids:
+            target_ids.remove(quest_id)
         await db.DaughterQuest.update.values(target_ids=target_ids).where(db.DaughterQuest.id == quest_id).gino.status()
     states.set(m.peer_id, f"{Admin.SELECT_ACTION}_DaughterTarget")
     await m.answer("Доп. цель успешно удалена", keyboard=keyboards.gen_type_change_content("DaughterTarget"))

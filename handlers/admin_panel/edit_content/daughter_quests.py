@@ -143,7 +143,7 @@ async def daughter_penalty(m: Message):
     if not editing_content:
         reply = ('Укажите доп. цели, через запятую, которые будут появляться по мере нарастания параметров.\n\n'
                  'Например: 1, 2, 3')
-        await m.answer(reply, keyboard=Keyboard().add(Text('Без доп. целей', {"without_targets": True}), KeyboardButtonColor.SECONDARY))
+        await m.answer(reply, keyboard=Keyboard())
         reply, keyboard = await show_daughter_target_page(1)
         await m.answer(reply, keyboard=keyboard)
 

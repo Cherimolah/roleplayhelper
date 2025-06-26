@@ -57,6 +57,7 @@ class Menu:
     DELETE_FORM_REQUEST = "delete_form_request"
     SHOP_CABINS = "shop_cabins"
     CABINS_MENU = "cabins_menu"
+    DAUGHTER_QUEST_MENU = 'daughter_quest_menu'
 
 
 class Admin:

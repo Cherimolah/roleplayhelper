@@ -338,7 +338,8 @@ async def quest_over(seconds, form_id, quest_id):
     reply = f"Время выполнения квеста «{name}» завершилось"
     if penalty:
         reply += "\nВам выписан штраф:\n\n"
-        reply += await apply_reward(user_id, penalty)
+        await apply_reward(user_id, penalty)
+        reply += await serialize_target_reward(penalty)
     await bot.api.messages.send(peer_id=user_id, message=reply, is_notification=True)
 
 
@@ -897,25 +898,23 @@ async def parse_reward(text: str) -> List[Dict]:
     return data
 
 
-async def apply_reward(user_id: int, data: dict) -> str:
+async def apply_reward(user_id: int, data: dict):
     if not data:
-        return 'без награды/штрафа'
-    reply = ''
+        return
     for reward in data:
         if reward['type'] == 'fraction_bonus':
             fraction_id = reward['fraction_id']
             reputation_bonus = reward['reputation_bonus']
             await db.change_reputation(user_id, fraction_id, reputation_bonus)
-            fraction_name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
-            reply += f"{'+' if reputation_bonus >= 0 else ''}{reputation_bonus} к репутации во фракции «{fraction_name}»\n"
         elif reward['type'] == 'value_bonus':
             bonus = reward['bonus']
             await db.Form.update.values(balance=db.Form.balance + bonus).gino.status()
-            reply += f"{'+' if bonus >= 0 else ''}{bonus} валюты\n"
         elif reward['type'] == 'daughter_params':
-            await db.Form.update.values(libido_level=db.Form.libido_level + reward['libido']).where(db.Form.user_id == user_id).gino.status()
-            await db.Form.update.values(subordination_level=db.Form.subordination_level + reward['subordination']).where(db.Form.user_id == user_id).gino.status()
-    return reply
+            libido, subordination = await db.select([db.Form.libido_level, db.Form.subordination_level]).where(db.Form.user_id == user_id).gino.first()
+            sub_level = min(100, max(0, subordination + reward['subordination']))
+            lib_level = min(100, max(0, libido + reward['libido']))
+            await db.Form.update.values(libido_level=lib_level).where(db.Form.user_id == user_id).gino.status()
+            await db.Form.update.values(subordination_level=sub_level).where(db.Form.user_id == user_id).gino.status()
 
 
 async def serialize_target_reward(data):
@@ -1009,7 +1008,7 @@ async def serialize_daughter_target_ids(target_ids: list[int]):
     reply = "\n"
     for i, target_id in enumerate(target_ids):
         name, params = await db.select([db.DaughterTarget.name, db.DaughterTarget.params]).where(db.DaughterTarget.id == target_id).gino.first()
-        reply += f'{i + 1}. {name} / {params[0]} {"и" if params[1] == 0 else "или"} {params[1]}\n'
+        reply += f'{i + 1}. {name} / {params[0]} {"и" if params[1] == 0 else "или"} {params[2]}\n'
     return reply
 
 
@@ -1209,7 +1208,19 @@ async def update_daughter_levels(user_id: int):
         now = datetime.datetime.now()
         tomorrow = now + datetime.timedelta(days=1)
         tomorrow = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0)
-        await asyncio.sleep((tomorrow - now).total_seconds())
+        await asyncio.sleep((tomorrow - now).total_seconds() - 2)
+        form_id = await get_current_form_id(user_id)
+        quest = await db.select([*db.DaughterQuest]).where(db.DaughterQuest.to_form_id == form_id).gino.first()
+        if quest:
+            confirmed = await db.select([db.DaughterQuestRequest.confirmed]).where(
+                and_(db.DaughterQuestRequest.quest_id == quest.id, db.DaughterQuestRequest.form_id == form_id,
+                     db.DaughterQuestRequest.created_at == datetime.date.today())
+            ).gino.scalar()
+            if confirmed is None:
+                await apply_reward(user_id, quest.penalty)
+                reply = f' ❌ Вам выписан штраф за невыполнение квеста  «{quest.name}»:\n'
+                reply += await serialize_target_reward(quest.penalty)
+                await bot.api.messages.send(peer_id=user_id, message=reply, is_notification=True)
         bonus, sub_level, lib_level, fraction_id = await db.select(
             [db.Form.daughter_bonus, db.Form.subordination_level, db.Form.libido_level, db.Form.fraction_id]).where(
             db.Form.user_id == user_id).gino.first()

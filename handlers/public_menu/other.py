@@ -64,6 +64,7 @@ async def save_petition(m: Message):
 @bot.on.private_message(PayloadRule({"menu": "quests and daylics"}), StateRule(Menu.MAIN))
 @bot.on.private_message(PayloadRule({"menu": "quests and daylics"}), StateRule(Menu.SHOW_QUESTS))
 @bot.on.private_message(PayloadRule({"menu": "quests and daylics"}), StateRule(Menu.DAYLICS))
+@bot.on.private_message(PayloadRule({"daughter_quests": "back"}), StateRule(Menu.DAUGHTER_QUEST_MENU))
 async def quests_or_daylics(m: Message):
     states.set(m.peer_id, Menu.MAIN)
     keyboard = (Keyboard().add(

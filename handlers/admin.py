@@ -16,7 +16,7 @@ from service import keyboards
 from service.states import Menu, Admin
 from service.middleware import states
 from service.custom_rules import StateRule, NumericRule, AdminRule
-from service.utils import take_off_payments, parse_cooldown, parse_reputation, create_mention, check_quest_completed, apply_reward
+from service.utils import take_off_payments, parse_cooldown, parse_reputation, create_mention, check_quest_completed, apply_reward, serialize_target_reward
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_accept": int}), AdminRule())
@@ -205,7 +205,8 @@ async def verify_quest(m: MessageEvent):
         await db.ReadyQuest.update.values(is_checked=True, is_claimed=True).where(db.ReadyQuest.id == request_id).gino.status()
         reward, name = await db.select([db.Quest.reward, db.Quest.name]).where(db.Quest.id == quest_id).gino.first()
         reply = f'Поздравляем с выполнением квеста «{name}»\nВам начислена награда:\n'
-        reply += await apply_reward(user_id, reward)
+        await apply_reward(user_id, reward)
+        reply += await serialize_target_reward(reward)
         if await check_quest_completed(form_id):
             await db.QuestToForm.delete.where(db.QuestToForm.form_id == form_id).gino.status()
         await bot.api.messages.send(peer_id=m.user_id, message=reply, is_notification=True)
@@ -236,7 +237,8 @@ async def verify_target(m: MessageEvent):
         reward = json.loads(reward)
         reply = (f"Вам успешно приняли выполнение квеста «{name}»\n"
                  f"Получена награда:\n")
-        reply += await apply_reward(user_id, reward)
+        await apply_reward(user_id, reward)
+        reply += await serialize_target_reward(reward)
         await db.ReadyTarget.update.values(is_checked=True, is_claimed=True).where(db.ReadyTarget.id == request_id).gino.status()
         if await check_quest_completed(form_id):
             await db.QuestToForm.delete.where(db.QuestToForm.form_id == form_id).gino.status()
@@ -516,3 +518,98 @@ async def delete_reputation(m: Message, value: int):
     name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
     await m.answer(f"Репутация во фракции {name} удалена у пользователя {await create_mention(user_id)}")
     await form_reputation_all(m)
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'confirm_daughter_target_request': int}), AdminRule())
+async def confirm_daughter_target_request(m: MessageEvent):
+    request_id = int(m.payload['confirm_daughter_target_request'])
+    data = await db.select([db.DaughterTargetRequest.target_id, db.DaughterTargetRequest.form_id, db.DaughterTargetRequest.confirmed]).where(db.DaughterTargetRequest.id == request_id).gino.first()
+    if not data or data[2]:
+        await m.edit_message('Данный запрос уже обработал другой администратор')
+        return
+    target_id, form_id, confirmed = data
+    reward = await db.select([db.DaughterTarget.reward]).where(db.DaughterTarget.id == target_id).gino.scalar()
+    user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
+    await apply_reward(user_id, reward)
+    reward_text = await serialize_target_reward(reward)
+    await db.DaughterTargetRequest.update.values(confirmed=True).where(db.DaughterTargetRequest.id == request_id).gino.status()
+    target_name = await db.select([db.DaughterTarget.name]).where(db.DaughterTarget.id == target_id).gino.scalar()
+    name = await db.select([db.Form.name]).where(db.Form.id == form_id).gino.scalar()
+    user = (await bot.api.users.get(user_ids=user_id))[0]
+    await m.edit_message(f'✅ Вы приняли отчёт дочери [id{user_id}|{name} / {user.first_name} {user.last_name}] о '
+                         f'выполнении доп. цели «{target_name}»')
+    await bot.api.messages.send(peer_id=user_id,
+                                message=f'✅ Ваш отчёт о выполнении доп. цели «{target_name}» принят администрацией.\n'
+                                        f'Получена награда: {reward_text}',
+                                is_notification=True)
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'decline_daughter_target_request': int}), AdminRule())
+async def decline_daughter_target(m: MessageEvent):
+    request_id = int(m.payload['decline_daughter_target_request'])
+    data = await db.select([db.DaughterTargetRequest.target_id, db.DaughterTargetRequest.form_id,
+                            db.DaughterTargetRequest.confirmed]).where(
+        db.DaughterTargetRequest.id == request_id).gino.first()
+    if not data or data[2]:
+        await m.edit_message('Данный запрос уже обработал другой администратор')
+        return
+    target_id, form_id, confirmed = data
+    user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
+    target_name = await db.select([db.DaughterTarget.name]).where(db.DaughterTarget.id == target_id).gino.scalar()
+    name = await db.select([db.Form.name]).where(db.Form.id == form_id).gino.scalar()
+    user = (await bot.api.users.get(user_ids=user_id))[0]
+    await db.DaughterTargetRequest.delete.where(db.DaughterTargetRequest.id == request_id).gino.status()
+    await m.edit_message(f'❌ Вы отклонили отчёт дочери [id{user_id}|{name} / {user.first_name} {user.last_name}] о '
+                         f'выполнении доп. цели «{target_name}»')
+    await bot.api.messages.send(peer_id=user_id,
+                                message=f'❌ Ваш отчёт о выполнении доп. цели «{target_name}» был отклонен администрацией\n',
+                                is_notification=True)
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'confirm_daughter_quest_request': int}), AdminRule())
+async def confirm_daughter_target_request(m: MessageEvent):
+    request_id = int(m.payload['confirm_daughter_quest_request'])
+    data = await db.select([db.DaughterQuestRequest.quest_id, db.DaughterQuestRequest.form_id, db.DaughterQuestRequest.confirmed]).where(db.DaughterQuestRequest.id == request_id).gino.first()
+    if not data or data[2]:
+        await m.edit_message('Данный запрос уже обработал другой администратор')
+        return
+    quest_id, form_id, confirmed = data
+    reward = await db.select([db.DaughterQuest.reward]).where(db.DaughterQuest.id == quest_id).gino.scalar()
+    user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
+    await apply_reward(user_id, reward)
+    reward_text = await serialize_target_reward(reward)
+    await db.DaughterQuestRequest.update.values(confirmed=True).where(db.DaughterQuestRequest.id == request_id).gino.status()
+    quest_name = await db.select([db.DaughterQuest.name]).where(db.DaughterQuest.id == quest_id).gino.scalar()
+    name = await db.select([db.Form.name]).where(db.Form.id == form_id).gino.scalar()
+    user = (await bot.api.users.get(user_ids=user_id))[0]
+    await m.edit_message(f'✅ Вы приняли отчёт дочери [id{user_id}|{name} / {user.first_name} {user.last_name}] о '
+                         f'выполнении квеста «{quest_name}»')
+    await bot.api.messages.send(peer_id=user_id,
+                                message=f'✅ Ваш отчёт о выполнении квеста «{quest_name}» принят администрацией.\n'
+                                        f'Получена награда: {reward_text}',
+                                is_notification=True)
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'decline_daughter_quest_request': int}), AdminRule())
+async def decline_daughter_target(m: MessageEvent):
+    request_id = int(m.payload['decline_daughter_quest_request'])
+    request = await db.DaughterQuestRequest.get(request_id)
+    if not request or request.confirmed:
+        await m.edit_message('Данный запрос уже обработал другой администратор')
+        return
+    user_id = await db.select([db.Form.user_id]).where(db.Form.id == request.form_id).gino.scalar()
+    quest_name = await db.select([db.DaughterQuest.name]).where(db.DaughterQuest.id == request.quest_id).gino.scalar()
+    name = await db.select([db.Form.name]).where(db.Form.id == request.form_id).gino.scalar()
+    user = (await bot.api.users.get(user_ids=user_id))[0]
+    await db.DaughterQuestRequest.delete.where(db.DaughterQuestRequest.id == request_id).gino.status()
+    await m.edit_message(f'❌ Вы отклонили отчёт дочери [id{user_id}|{name} / {user.first_name} {user.last_name}] о '
+                         f'выполнении квеста «{quest_name}»')
+    await bot.api.messages.send(peer_id=user_id,
+                                message=f'❌ Ваш отчёт о выполнении квеста «{quest_name}» был отклонен администрацией\n',
+                                is_notification=True)
+    if datetime.date.today() > request.created_at:
+        name, penalty = await db.select([db.DaughterQuest.name, db.DaughterQuest.penalty]).where(db.DaughterQuest.id == request.quest_id).gino.first()
+        await apply_reward(user_id, penalty)
+        reply = f' ❌ Вам выписан штраф за невыполнение квеста «{name}»:\n'
+        reply += await serialize_target_reward(penalty)
+        await bot.api.messages.send(peer_id=user_id, message=reply, is_notification=True)
+
