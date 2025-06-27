@@ -3,7 +3,8 @@ from vkbottle.dispatch.rules.base import PayloadRule
 from vkbottle import Keyboard
 
 from loader import bot
-from service.utils import allow_edit_content, send_content_page, info_target_reward, parse_reward, parse_daughter_params
+from service.utils import allow_edit_content, send_content_page, parse_daughter_params
+from service.serializers import info_target_reward, parse_reward
 from service.middleware import states
 from service.db_engine import db
 from service.custom_rules import StateRule, AdminRule, NumericRule
@@ -20,17 +21,14 @@ async def create_quest(m: Message):
 
 @bot.on.private_message(StateRule(Admin.DAUGHTER_TARGET_NAME), AdminRule())
 @allow_edit_content('DaughterTarget', state=Admin.DAUGHTER_TARGET_DESCRIPTION, text='Укажите описание доп. цели')
-async def daughter_target_name(m: Message):
-    target_id = int(states.get(m.from_id).split("*")[-1])
-    await db.DaughterTarget.update.values(name=m.text).where(db.DaughterTarget.id == target_id).gino.status()
+async def daughter_target_name(m: Message, item_id: int, editing_content: bool):
+    await db.DaughterTarget.update.values(name=m.text).where(db.DaughterTarget.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.DAUGHTER_TARGET_DESCRIPTION), AdminRule())
 @allow_edit_content('DaughterTarget', state=Admin.DAUGHTER_TARGET_REWARD)
-async def daughter_target_description(m: Message):
-    target_id = int(states.get(m.from_id).split("*")[-1])
-    await db.DaughterTarget.update.values(description=m.text).where(db.DaughterTarget.id == target_id).gino.status()
-    editing_content = await db.select([db.User.editing_content]).where(db.User.user_id == m.from_id).gino.scalar()
+async def daughter_target_description(m: Message, item_id: int, editing_content: bool):
+    await db.DaughterTarget.update.values(description=m.text).where(db.DaughterTarget.id == item_id).gino.status()
     if not editing_content:
         await m.answer((await info_target_reward())[0])
 
@@ -39,18 +37,16 @@ async def daughter_target_description(m: Message):
 @allow_edit_content('DaughterTarget', state=Admin.DAUGHTER_TARGET_PARAMS,
                     text='Укажите параметры либидо и подчинения, которые будут необходимы для выдачи доп. цели\n\n'
                          'Например:\n«10 и 15»\n«10 или 15»', keyboard=Keyboard())
-async def daughter_target_reward(m: Message):
+async def daughter_target_reward(m: Message, item_id: int, editing_content: bool):
     data = await parse_reward(m.text)
-    target_id = int(states.get(m.from_id).split("*")[-1])
-    await db.DaughterTarget.update.values(reward=data).where(db.DaughterTarget.id == target_id).gino.status()
+    await db.DaughterTarget.update.values(reward=data).where(db.DaughterTarget.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.DAUGHTER_TARGET_PARAMS), AdminRule())
 @allow_edit_content('DaughterTarget', end=True, text='Доп. цель успешно создана')
-async def aughter_target_params(m: Message):
+async def aughter_target_params(m: Message, item_id: int, editing_content: bool):
     libido, word, subordination = parse_daughter_params(m.text.lower())
-    target_id = int(states.get(m.from_id).split("*")[-1])
-    await db.DaughterTarget.update.values(params=[libido, word, subordination]).where(db.DaughterTarget.id == target_id).gino.status()
+    await db.DaughterTarget.update.values(params=[libido, word, subordination]).where(db.DaughterTarget.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_DaughterTarget"), PayloadRule({"DaughterTarget": "delete"}), AdminRule())

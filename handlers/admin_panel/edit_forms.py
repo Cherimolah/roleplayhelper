@@ -8,7 +8,7 @@ from vkbottle import Keyboard, Text, KeyboardButtonColor
 import messages
 import service.keyboards as keyboards
 from loader import bot
-from loader import fields_admin as fields
+from service.serializers import fields_admin as fields
 from service.custom_rules import AdminRule, StateRule, NumericRule, UserSpecified
 from service.middleware import states
 from service.states import Admin

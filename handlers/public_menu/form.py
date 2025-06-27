@@ -6,7 +6,8 @@ from vkbottle import Keyboard, Callback, KeyboardButtonColor, GroupEventType, Te
 from sqlalchemy import and_, func
 
 import messages
-from loader import bot, fields
+from loader import bot
+from service.serializers import fields
 from service.custom_rules import StateRule, NumericRule
 from service.states import Menu
 from service.utils import (loads_form, get_mention_from_message, show_fields_edit, soft_divide, page_fractions,

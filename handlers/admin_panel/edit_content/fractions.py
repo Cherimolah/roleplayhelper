@@ -24,55 +24,50 @@ async def add_fraction(m: Message):
 @bot.on.private_message(StateRule(Admin.NAME_FRACTION), AdminRule())
 @allow_edit_content("Fraction", state=Admin.DESCRIPTION_FRACTION,
                     text="Название установлено. Теперь напишите описание фракции")
-async def set_name_fraction(m: Message):
-    fraction_id = int(states.get(m.from_id).split("*")[1])
-    await db.Fraction.update.values(name=m.text).where(db.Fraction.id == fraction_id).gino.status()
+async def set_name_fraction(m: Message, item_id: int, editing_content: bool):
+    await db.Fraction.update.values(name=m.text).where(db.Fraction.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.DESCRIPTION_FRACTION), AdminRule())
 @allow_edit_content("Fraction", state=Admin.LEADER_FRACTION,
                     text="Описание фракции установлено. Теперь пришлите ссылку или перешлите сообщение на лидера фракции")
-async def set_description_fraction(m: Message):
-    fraction_id = int(states.get(m.from_id).split("*")[1])
-    await db.Fraction.update.values(description=m.text).where(db.Fraction.id == fraction_id).gino.status()
+async def set_description_fraction(m: Message, item_id: int, editing_content: bool):
+    await db.Fraction.update.values(description=m.text).where(db.Fraction.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.LEADER_FRACTION), AdminRule(), UserSpecified())
 @allow_edit_content("Fraction", state=Admin.PHOTO_FRACTION,
                     text="Лидер фракции установлен. Теперь пришлите фотографию фракции")
-async def set_leader_fraction(m: Message, form: Tuple[int, int]):
-    fraction_id = int(states.get(m.from_id).split("*")[1])
-    await db.Fraction.update.values(leader_id=form[1]).where(db.Fraction.id == fraction_id).gino.status()
+async def set_leader_fraction(m: Message, form: Tuple[int, int], item_id: int, editing_content: bool):
+    await db.Fraction.update.values(leader_id=form[1]).where(db.Fraction.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.PHOTO_FRACTION), AdminRule(), AttachmentTypeRule("photo"))
 @allow_edit_content("Fraction", state=Admin.FRACTION_MULTIPLIER,
                     text="Фото фракции успешно установлено. "
                          "Пришлите мультипликатор для дочерей (дробную часть стоит отделять точкой)")
-async def set_photo_fraction(m: Message):
-    fraction_id = int(states.get(m.from_id).split("*")[1])
+async def set_photo_fraction(m: Message, item_id: int, editing_content: bool):
     if not m.attachments or m.attachments[0].type != m.attachments[0].type.PHOTO:
         await m.answer(messages.need_photo)
         return
     photo = await reload_image(m.attachments[0], f"data/photo{m.from_id}.jpg")
-    await db.Fraction.update.values(photo=photo).where(db.Fraction.id == fraction_id).gino.status()
+    await db.Fraction.update.values(photo=photo).where(db.Fraction.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.FRACTION_MULTIPLIER), AdminRule())
 @allow_edit_content("Fraction", state=f"{Admin.SELECT_ACTION}_Fraction", end=True,
                     text='Фракция успешно создана', keyboard=gen_type_change_content("Fraction"))
-async def set_fraction_multiplier(m: Message):
+async def set_fraction_multiplier(m: Message, item_id: int, editing_content: bool):
     try:
         value = float(m.text)
     except ValueError:
         raise FormatDataException('Неправильный формат мультипликатора')
     if value in (float('inf'), float('-inf'), float('nan')):
         raise FormatDataException('Не стоит ломать работу с числами')
-    fraction_id = int(states.get(m.from_id).split("*")[1])
-    await db.Fraction.update.values(daughter_multiplier=value).where(db.Fraction.id == fraction_id).gino.status()
-    leader_id = await db.select([db.Fraction.leader_id]).where(db.Fraction.id == fraction_id).gino.scalar()
-    await db.UserToFraction.create(fraction_id=fraction_id, user_id=leader_id, reputation=100)
-    await db.Form.update.values(fraction_id=fraction_id).where(db.Form.user_id == leader_id).gino.status()
+    await db.Fraction.update.values(daughter_multiplier=value).where(db.Fraction.id == item_id).gino.status()
+    leader_id = await db.select([db.Fraction.leader_id]).where(db.Fraction.id == item_id).gino.scalar()
+    await db.UserToFraction.create(fraction_id=item_id, user_id=leader_id, reputation=100)
+    await db.Form.update.values(fraction_id=item_id).where(db.Form.user_id == leader_id).gino.status()
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Fraction"), PayloadRule({"Fraction": "delete"}), AdminRule())

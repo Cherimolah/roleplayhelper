@@ -21,47 +21,42 @@ async def add_decor(m: Message):
 
 @bot.on.private_message(StateRule(Admin.NAME_DECOR), AdminRule())
 @allow_edit_content("Decor", state=Admin.PRICE_DECOR, text="Название успешно установлено, теперь укажите цену")
-async def name_decor(m: Message):
-    decor_id = int(states.get(m.from_id).split("*")[1])
-    await db.Decor.update.values(name=m.text).where(db.Decor.id == decor_id).gino.status()
+async def name_decor(m: Message, item_id: int, editing_content: bool):
+    await db.Decor.update.values(name=m.text).where(db.Decor.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.PRICE_DECOR), AdminRule(), NumericRule())
 @allow_edit_content("Decor", state=Admin.DESCRIPTION_DECOR, text="Цена успешно установлена. Напишите описание товара")
-async def price_decor(m: Message, value: int):
-    decor_id = int(states.get(m.from_id).split("*")[1])
-    await db.Decor.update.values(price=value).where(db.Decor.id == decor_id).gino.status()
+async def price_decor(m: Message, value: int, item_id: int, editing_content: bool):
+    await db.Decor.update.values(price=value).where(db.Decor.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.DESCRIPTION_DECOR), AdminRule())
 @allow_edit_content("Decor", state=Admin.IS_FUNC_DECOR, text="Описание успешно установлено. Выберите тип товара:",
                     keyboard=decor_vars)
-async def description_decor(m: Message):
-    decor_id = int(states.get(m.from_id).split("*")[1])
-    await db.Decor.update.values(description=m.text).where(db.Decor.id == decor_id).gino.status()
+async def description_decor(m: Message, item_id: int, editing_content: bool):
+    await db.Decor.update.values(description=m.text).where(db.Decor.id == item_id).gino.status()
 
 
 @bot.on.private_message(PayloadMapRule({"is_functional_product": bool}), StateRule(Admin.IS_FUNC_DECOR), AdminRule())
 @allow_edit_content("Decor", state=Admin.PHOTO_DECOR,
                     text="Тип товара установлен. Теперь пришлите фотографию товара", keyboard=Keyboard())
-async def is_functional_decor(m: Message):
-    decor_id = int(states.get(m.from_id).split("*")[1])
+async def is_functional_decor(m: Message, item_id: int, editing_content: bool):
     is_func = m.payload["is_functional_product"]
-    await db.Decor.update.values(is_func=is_func).where(db.Decor.id == decor_id).gino.status()
+    await db.Decor.update.values(is_func=is_func).where(db.Decor.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.PHOTO_DECOR), AdminRule())
 @allow_edit_content("Decor", text="Товар успешно добавлен",
                     keyboard=gen_type_change_content("Decor"), end=True)
-async def photo_decor(m: Message):
-    decor_id = int(states.get(m.from_id).split("*")[1])
+async def photo_decor(m: Message, item_id: int, editing_content: bool):
     message = await m.get_full_message()
     if not message.attachments or message.attachments[0].type != attach_type.PHOTO:
         await m.answer("Нужно прислать одно фото")
         return
-    name = await db.select([db.Decor.name]).where(db.Decor.id == decor_id).gino.scalar()
+    name = await db.select([db.Decor.name]).where(db.Decor.id == item_id).gino.scalar()
     photo = await reload_image(message.attachments[0], f"data/decors/{name}.jpg")
-    await db.Decor.update.values(photo=photo).where(db.Decor.id == decor_id).gino.status()
+    await db.Decor.update.values(photo=photo).where(db.Decor.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Decor"), PayloadRule({"Decor": "delete"}), AdminRule())

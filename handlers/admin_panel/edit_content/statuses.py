@@ -21,9 +21,8 @@ async def start_create_new_atatus(m: Message):
 @bot.on.private_message(StateRule(Admin.ENTER_NAME_STATUS), AdminRule())
 @allow_edit_content("Status", state=f"{Admin.SELECT_ACTION}_Status", text="Статус успешно создан",
                     keyboard=keyboards.gen_type_change_content("Status"), end=True)
-async def new_status(m: Message):
-    status_id = int(states.get(m.from_id).split("*")[1])
-    await db.Status.update.values(name=m.text).where(db.Status.id == status_id).gino.status()
+async def new_status(m: Message, item_id: int, editing_content: bool):
+    await db.Status.update.values(name=m.text).where(db.Status.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Status"), PayloadRule({"Status": "delete"}), AdminRule())

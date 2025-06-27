@@ -3,8 +3,6 @@ from datetime import datetime, timedelta, timezone
 from vkbottle.bot import Message
 from vkbottle.dispatch.rules.base import PayloadRule
 from vkbottle import Keyboard, Text, KeyboardButtonColor
-from sqlalchemy import and_
-
 
 import messages
 from loader import bot

@@ -21,27 +21,24 @@ async def select_action_profession(m: Message):
 
 @bot.on.private_message(StateRule(Admin.NAME_PROFESSION), AdminRule())
 @allow_edit_content("Profession", text=messages.profession_salary, state=Admin.SALARY_PROFESSION)
-async def set_name_profession(m: Message):
-    profession_id = int(states.get(m.from_id).split("*")[1])
-    await db.Profession.update.values(name=m.text).where(db.Profession.id == profession_id).gino.status()
+async def set_name_profession(m: Message, item_id: int, editing_content: bool):
+    await db.Profession.update.values(name=m.text).where(db.Profession.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.SALARY_PROFESSION), NumericRule(), AdminRule())
 @allow_edit_content("Profession", text=messages.profession_special,
                     keyboard=keyboards.select_type_profession, state=Admin.HIDDEN_PROFESSION)
-async def set_salary_profession(m: Message, value: int = None):
-    profession_id = int(states.get(m.from_id).split("*")[1])
-    await db.Profession.update.values(salary=value).where(db.Profession.id == profession_id).gino.status()
+async def set_salary_profession(m: Message, value: int, item_id: int, editing_content: bool):
+    await db.Profession.update.values(salary=value).where(db.Profession.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.HIDDEN_PROFESSION), PayloadMapRule({"service_profession": bool}), AdminRule())
 @allow_edit_content("Profession", text=messages.proffesion_added,
                     keyboard=keyboards.gen_type_change_content("Profession"), state=f"{Admin.SELECT_ACTION}_Profession",
                     end=True)
-async def set_special_profession(m: Message):
-    profession_id = int(states.get(m.from_id).split("*")[1])
+async def set_special_profession(m: Message, item_id: int, editing_content: bool):
     await db.Profession.update.values(special=m.payload['service_profession']).where(
-        db.Profession.id == profession_id).gino.status()
+        db.Profession.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Profession"), PayloadRule({"Profession": "delete"}),

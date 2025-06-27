@@ -3,7 +3,6 @@ from typing import Union, Optional
 
 from vkbottle.dispatch.rules import ABCRule
 from vkbottle.bot import Message, MessageEvent
-from vkbottle.dispatch.rules.abc import T_contra
 
 from loader import states
 from service.db_engine import db
