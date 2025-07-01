@@ -273,3 +273,27 @@ decor_vars = Keyboard().add(
 without_fraction_bonus = Keyboard().add(
     Text("Без бонуса к репутации", {"withot_fraction_bonus": True}), KeyboardButtonColor.NEGATIVE
 )
+
+
+def gen_profession_bonus(profession_id: int, attribute_id: int):
+    keyboard = Keyboard(inline=True).add(
+        Callback('-10',
+                 {"profession_id": profession_id, 'attribute_id': attribute_id, 'add': -10}),
+        KeyboardButtonColor.PRIMARY
+    ).add(
+        Callback('-5',
+                 {"profession_id": profession_id, 'attribute_id': attribute_id, 'add': -5}),
+        KeyboardButtonColor.PRIMARY
+    ).add(
+        Callback('+5',
+                 {"profession_id": profession_id, 'attribute_id': attribute_id, 'add': +5}),
+        KeyboardButtonColor.PRIMARY
+    ).add(
+        Callback('+10',
+                 {"profession_id": profession_id, 'attribute_id': attribute_id, 'add': +10}),
+        KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Callback('Назад', {"profession_id": profession_id, 'action': 'back'}),
+        KeyboardButtonColor.NEGATIVE
+    )
+    return keyboard

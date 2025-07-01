@@ -1,6 +1,7 @@
-from vkbottle.bot import Message
+from vkbottle.bot import Message, MessageEvent
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
-from vkbottle import Keyboard
+from vkbottle import Keyboard, GroupEventType, Callback, KeyboardButtonColor
+from sqlalchemy import and_
 
 import messages
 import service.keyboards as keyboards
@@ -10,6 +11,7 @@ from service.middleware import states
 from service.states import Admin
 from service.db_engine import db
 from service.utils import send_content_page, allow_edit_content
+from service.serializers import info_profession_bonus
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Profession"), PayloadRule({"Profession": "add"}), AdminRule())
@@ -33,12 +35,68 @@ async def set_salary_profession(m: Message, value: int, item_id: int, editing_co
 
 
 @bot.on.private_message(StateRule(Admin.HIDDEN_PROFESSION), PayloadMapRule({"service_profession": bool}), AdminRule())
-@allow_edit_content("Profession", text=messages.proffesion_added,
-                    keyboard=keyboards.gen_type_change_content("Profession"), state=f"{Admin.SELECT_ACTION}_Profession",
-                    end=True)
+@allow_edit_content("Profession", state=Admin.PROFESSION_BONUS)
 async def set_special_profession(m: Message, item_id: int, editing_content: bool):
     await db.Profession.update.values(special=m.payload['service_profession']).where(
         db.Profession.id == item_id).gino.status()
+    if not editing_content:
+        await m.answer('Укажите бонусы к характеристикам в карте экспедитора', keyboard=Keyboard())
+        reply, keyboard = await info_profession_bonus(item_id)
+        await m.answer(reply, keyboard=keyboard)
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.PROFESSION_BONUS), PayloadMapRule({'profession_id': int, 'attribute_id': int, 'action': 'select'}), AdminRule())
+async def select_bonus_profession(m: MessageEvent):
+    attribute = await db.select([db.Attribute.name]).where(db.Attribute.id == m.payload['attribute_id']).gino.scalar()
+    bonus = await db.select([db.ProfessionBonus.bonus]).where(
+        and_(db.ProfessionBonus.profession_id == m.payload['profession_id'], db.ProfessionBonus.attribute_id == m.payload['attribute_id'])
+    ).gino.scalar()
+    if not bonus:
+        bonus = 0
+    reply = f'Текущий уровень бонуса к «{attribute}»: {"+" if bonus >= 0 else ""}{bonus}'
+    keyboard = keyboards.gen_profession_bonus(m.payload['profession_id'], m.payload['attribute_id'])
+    await m.edit_message(reply, keyboard=keyboard.get_json())
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.PROFESSION_BONUS), PayloadMapRule({"profession_id": int, 'attribute_id': int, 'add': int}), AdminRule())
+async def change_profession_bonus(m: MessageEvent):
+    exist = await db.select([db.ProfessionBonus.id]).where(
+        and_(db.ProfessionBonus.profession_id == m.payload['profession_id'], db.ProfessionBonus.attribute_id == m.payload['attribute_id'])
+    ).gino.scalar()
+    if not exist:
+        current = 0
+        await db.ProfessionBonus.create(profession_id=m.payload['profession_id'], attribute_id=m.payload['attribute_id'], bonus=m.payload['add'])
+    else:
+        current = await db.select([db.ProfessionBonus.bonus]).where(
+            and_(db.ProfessionBonus.profession_id == m.payload['profession_id'],
+                 db.ProfessionBonus.attribute_id == m.payload['attribute_id'])
+        ).gino.scalar()
+        if current + m.payload['add'] == 0:
+            await db.ProfessionBonus.delete.where(
+                and_(db.ProfessionBonus.profession_id == m.payload['profession_id'],
+                     db.ProfessionBonus.attribute_id == m.payload['attribute_id'])
+            ).gino.status()
+        else:
+            await db.ProfessionBonus.update.values(bonus=db.ProfessionBonus.bonus + m.payload['add']).where(
+                and_(db.ProfessionBonus.profession_id == m.payload['profession_id'],
+                     db.ProfessionBonus.attribute_id == m.payload['attribute_id'])
+            ).gino.status()
+    attribute = await db.select([db.Attribute.name]).where(db.Attribute.id == m.payload['attribute_id']).gino.scalar()
+    reply = f'Текущий уровень бонуса к «{attribute}»: {"+" if current + m.payload['add'] >= 0 else ""}{current + m.payload['add']}'
+    keyboard = keyboards.gen_profession_bonus(m.payload['profession_id'], m.payload['attribute_id'])
+    await m.edit_message(reply, keyboard=keyboard.get_json())
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.PROFESSION_BONUS), PayloadMapRule({"profession_id": int, 'action': 'back'}), AdminRule())
+async def back_profession_bonuses(m: MessageEvent):
+    reply, keyboard = await info_profession_bonus(m.payload['profession_id'])
+    await m.edit_message(reply, keyboard=keyboard)
+
+
+@bot.on.private_message(StateRule(Admin.PROFESSION_BONUS), PayloadMapRule({"profession_id": int, 'action': 'save'}), AdminRule())
+@allow_edit_content('Profession', end=True, text='Профессия успешно создана')
+async def save_profession_bonus(m: Message, item_id: int, editing_content: bool):
+    pass
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Profession"), PayloadRule({"Profession": "delete"}),

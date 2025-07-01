@@ -1,3 +1,5 @@
+import inspect
+
 from vkbottle.bot import Message, MessageEvent
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
 from vkbottle import GroupEventType, Keyboard
@@ -8,7 +10,7 @@ from loader import bot
 from service.custom_rules import AdminRule, StateRule, SelectContent, NumericRule, EditContent
 from service.middleware import states
 from service.states import Admin
-from service.utils import page_content, send_edit_item, fields_content
+from service.utils import page_content, send_edit_item, fields_content, Field, RelatedTable
 from service.db_engine import db
 
 
@@ -57,13 +59,18 @@ async def select_cabin(m: Message, value: int, content_type: str, table):
     reply = ""
     attachment = None
     for i, data in enumerate(fields_content[content_type]['fields']):
-        if data.name == "Фото":
-            attachment = item[i+1]
-            continue
-        if not data.serialize_func:
-            reply += f"{data.name}: {item[i + 1]}\n"
-        else:
-            reply += f"{data.name}: {await data.serialize_func(item[i + 1])}\n"
+        if isinstance(data, RelatedTable):
+            if not data.serialize_func:
+                reply += f"{i + 1}. {data.name}: {item[i + 1]}\n"
+            else:
+                reply += f"{i + 1}. {data.name}: {await data.serialize_func(item.id)}\n"
+        elif isinstance(data, Field):
+            if data.name == "Фото":
+                attachment = item[i + 1]
+            if not data.serialize_func:
+                reply += f"{i + 1}. {data.name}: {item[i + 1]}\n"
+            else:
+                reply += f"{i + 1}. {data.name}: {await data.serialize_func(item[i + 1])}\n"
     keyboard = keyboards.manage_item(content_type, item.id)
     await m.answer(reply, keyboard=keyboard, attachment=attachment)
 
@@ -109,12 +116,18 @@ async def edit_cabin_message_event(m: MessageEvent, content_type: str, table):
     reply = ""
     attachment = None
     for i, data in enumerate(fields_content[content_type]['fields']):
-        if data.name == "Фото":
-            attachment = item[i+1]
-        if not data.serialize_func:
-            reply += f"{data.name}: {item[i + 1]}\n"
-        else:
-            reply += f"{data.name}: {await data.serialize_func(item[i + 1])}\n"
+        if isinstance(data, RelatedTable):
+            if not data.serialize_func:
+                reply += f"{i + 1}. {data.name}: {item[i + 1]}\n"
+            else:
+                reply += f"{i + 1}. {data.name}: {await data.serialize_func(item.id)}\n"
+        elif isinstance(data, Field):
+            if data.name == "Фото":
+                attachment = item[i + 1]
+            if not data.serialize_func:
+                reply += f"{i + 1}. {data.name}: {item[i + 1]}\n"
+            else:
+                reply += f"{i + 1}. {data.name}: {await data.serialize_func(item[i + 1])}\n"
     await m.edit_message(reply, attachment=attachment)
     await send_edit_item(m.user_id, m.payload["item_id"], content_type)
 
@@ -123,10 +136,13 @@ async def edit_cabin_message_event(m: MessageEvent, content_type: str, table):
 async def select_field_to_edit(m: Message, value: int, content_type: str):
     if value > len(fields_content[content_type]['fields']):
         return "Слишком большое число"
-    item_id = states.get(m.from_id).split("*")[1]
+    item_id = int(states.get(m.from_id).split("*")[1])
     states.set(m.from_id, f"{fields_content[content_type]['fields'][value - 1].state}*{item_id}")
     await m.answer(f"Введите новое значение для поля {fields_content[content_type]['fields'][value - 1].name}:",
                    keyboard=Keyboard())
     if fields_content[content_type]['fields'][value - 1].info_func:
-        text, keyboard = await fields_content[content_type]['fields'][value - 1].info_func()
+        if len(inspect.signature(fields_content[content_type]['fields'][value - 1].info_func).parameters) == 0:
+            text, keyboard = await fields_content[content_type]['fields'][value - 1].info_func()
+        else:
+            text, keyboard = await fields_content[content_type]['fields'][value - 1].info_func(item_id)
         await m.answer(text, keyboard=keyboard)

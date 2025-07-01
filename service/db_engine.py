@@ -1,10 +1,21 @@
 import datetime
+import enum
 from typing import List, Tuple
 
 from gino import Gino
 from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, Boolean, TIMESTAMP, func, and_, Float, ARRAY, JSON, Date
 
 from config import USER, PASSWORD, HOST, DATABASE
+
+
+class Attribute(enum.IntEnum):
+    POWER = 1  # Сила
+    SPEED = 2  # Скорость
+    ENDURANCE = 3  # Выносливость
+    DEXTERITY = 4  # Ловкость
+    PERCEPTION = 5  # Восприятие
+    REACTION = 6  # Реакция
+    STRESS_RESISTANCE = 7  # Стрессоустойчивость
 
 
 class Database(Gino):
@@ -361,6 +372,24 @@ class Database(Gino):
 
         self.DaughterQuestRequest = DaughterQuestRequest
 
+        class Attribute(self.Model):
+            __tablename__ = 'attributes'
+
+            id = Column(Integer, primary_key=True)
+            name = Column(Text)
+
+        self.Attribute = Attribute
+
+        class ProfessionBonus(self.Model):
+            __tablename__ = 'profession_bonus'
+
+            id = Column(Integer, primary_key=True)
+            attribute_id = Column(Integer, ForeignKey('attributes.id', ondelete='CASCADE'))
+            profession_id = Column(Integer, ForeignKey('professions.id', ondelete='CASCADE'))
+            bonus = Column(Integer, default=0)
+
+        self.ProfessionBonus = ProfessionBonus
+
     async def connect(self):
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")
         await self.gino.create_all()
@@ -390,6 +419,10 @@ class Database(Gino):
             await self.Shop.create(name='Коктейль в баре', price=10, service=False)
             await self.Shop.create(name='Премиальный коктейль в баре', price=50, service=False)
             await self.Shop.create(name='Бутылка дорогого алкоголя', price=100, service=False)
+        attributes = await self.select([func.count(db.Attribute.id)]).gino.scalar()
+        if attributes == 0:
+            for name in ('Сила', "Скорость", "Выносливость", "Ловкость", "Восприятие", "Реакция", "Стрессоустойчивость"):
+                await self.Attribute.create(name=name)
 
     async def change_reputation(self, user_id: int, fraction_id: int, delta: int):
         id = await self.select([self.UserToFraction.id]).where(

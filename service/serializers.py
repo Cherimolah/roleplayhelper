@@ -3,9 +3,9 @@ import datetime
 import json
 
 from vkbottle import Keyboard, Text, KeyboardButtonColor, Callback
-from sqlalchemy import func
+from sqlalchemy import func, and_
 
-from service.db_engine import db
+from service.db_engine import db, Attribute
 from service import keyboards
 from config import DATETIME_FORMAT
 from loader import bot
@@ -21,11 +21,15 @@ class Field:
         self.serialize_func = serialize_func
 
 
+class RelatedTable(Field):
+    pass
+
+
 fields = (Field("Имя", Registration.PERSONAL_NAME), Field("Должность", Registration.PROFESSION),
           Field("Биологический возраст", Registration.AGE), Field("Рост", Registration.HEIGHT),
           Field("Вес", Registration.WEIGHT), Field("Физиологические особенности", Registration.FEATURES),
           Field("Биография", Registration.BIO), Field("Характер", Registration.CHARACTER),
-          Field("Мотиы нахождения на Space-station", Registration.MOTIVES),
+          Field("Мотивы нахождения на Space-station", Registration.MOTIVES),
           Field("Сексуальная ориентация", Registration.ORIENTATION),
           Field("Фетиши", Registration.FETISHES), Field("Табу", Registration.TABOO),
           Field("Визуальный портрет", Registration.PHOTO), Field("Фракция", Registration.FRACTION))
@@ -34,7 +38,7 @@ fields_admin = (Field("Имя", Registration.PERSONAL_NAME), Field("Должно
                 Field("Биологический возраст", Registration.AGE), Field("Рост", Registration.HEIGHT),
                 Field("Вес", Registration.WEIGHT), Field("Физиологические особенности", Registration.FEATURES),
                 Field("Биография", Registration.BIO), Field("Характер", Registration.CHARACTER),
-                Field("Мотиы нахождения на Space-station", Registration.MOTIVES),
+                Field("Мотивы нахождения на Space-station", Registration.MOTIVES),
                 Field("Сексуальная ориентация", Registration.ORIENTATION),
                 Field("Фетиши", Registration.FETISHES), Field("Табу", Registration.TABOO),
                 Field("Визуальный портрет", Registration.PHOTO), Field("Каюта", Admin.EDIT_CABIN),
@@ -159,6 +163,7 @@ async def info_service_type():
     ).row().add(
         Text("Товар", {"service": False}), KeyboardButtonColor.PRIMARY
     )
+
 async def info_is_func_decor():
     return "Выберите тип товара", keyboards.decor_vars
 
@@ -507,6 +512,38 @@ async def serialize_daughter_target_ids(target_ids: list[int]):
     return reply
 
 
+async def info_profession_bonus(profession_id: int):
+    reply = 'Установленные бонусы сейчас:\n'
+    attributes = await db.select([*db.Attribute]).gino.all()
+    keyboard = Keyboard(inline=True)
+    for i, attribute in enumerate(attributes):
+        bonus = await db.select([db.ProfessionBonus.bonus]).where(
+            and_(db.ProfessionBonus.profession_id == profession_id, db.ProfessionBonus.attribute_id == attribute.id)).gino.scalar()
+        if not bonus:
+            reply += f'{i + 1}. {attribute.name} +0\n'
+        else:
+            reply += f'{i + 1}. {attribute.name} {"+" if bonus >= 0 else ""}{bonus}\n'
+        keyboard.add(Callback(attribute.name, {'profession_id': profession_id, 'attribute_id': attribute.id, 'action': 'select'}), KeyboardButtonColor.PRIMARY)
+        if i % 2 == 1:
+            keyboard.row()
+    if len(keyboard.buttons[-1]) > 0:
+        keyboard.row()
+    keyboard.add(Text('Сохранить', {"profession_id": profession_id, 'action': 'save'}), KeyboardButtonColor.POSITIVE)
+    return reply, keyboard
+
+
+async def serialize_profession_bonus(profession_id: int):
+    raw = await db.select([db.ProfessionBonus.attribute_id, db.ProfessionBonus.bonus]).where(db.ProfessionBonus.profession_id == profession_id).gino.all()
+    if not raw:
+        return 'Без бонусов'
+    reply = '\n\n'
+    for i, data in enumerate(raw):
+        attribute_id, bonus = data
+        attribute = await db.select([db.Attribute.name]).where(db.Attribute.id == attribute_id).gino.scalar()
+        reply += f'{i + 1}. {attribute}: {"+" if bonus > 0 else ""}{bonus}\n'
+    return reply
+
+
 fields_content: Dict[str, Dict[str, List[Field]]] = {
     "Cabins": {
         "fields": [
@@ -534,6 +571,7 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field("Название", Admin.NAME_PROFESSION),
             Field("Тип профессии", Admin.HIDDEN_PROFESSION, type_professions, serialize_type_profession),
             Field("Зарплата", Admin.SALARY_PROFESSION),
+            RelatedTable('Бонусы к характеристикам', Admin.PROFESSION_BONUS, info_profession_bonus, serialize_profession_bonus)
         ],
         "name": "Профессия"
     },

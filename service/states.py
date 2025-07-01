@@ -92,6 +92,7 @@ class Admin:
     NAME_PROFESSION = "name_profession"
     SALARY_PROFESSION = "salary_profession"
     HIDDEN_PROFESSION = "hidden_profession"
+    PROFESSION_BONUS = "profession_bonus"
     ID_PROFESSION = "id_profession"
     WRITE_MAILING = "write_mailing"
     TIME_MAILING = "time_mailing"

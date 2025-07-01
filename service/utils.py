@@ -12,7 +12,7 @@ from vkbottle import Keyboard, Callback, KeyboardButtonColor
 
 from service.db_engine import db
 from loader import bot, photo_message_uploader, states
-from service.serializers import fields
+from service.serializers import fields, Field, RelatedTable
 import messages
 from bot_extended import AioHTTPClientExtended
 import service.states
@@ -513,12 +513,18 @@ async def send_edit_item(user_id: int, item_id: int, item_type: str):
     reply = "Выберите поле для редактирования\n\n"
     attachment = None
     for i, data in enumerate(fields_content[item_type]['fields']):
-        if data.name == "Фото":
-            attachment = item[i + 1]
-        if not data.serialize_func:
-            reply += f"{i + 1}. {data.name}: {item[i + 1]}\n"
-        else:
-            reply += f"{i + 1}. {data.name}: {await data.serialize_func(item[i + 1])}\n"
+        if isinstance(data, RelatedTable):
+            if not data.serialize_func:
+                reply += f"{i + 1}. {data.name}: {item[i + 1]}\n"
+            else:
+                reply += f"{i + 1}. {data.name}: {await data.serialize_func(item.id)}\n"
+        elif isinstance(data, Field):
+            if data.name == "Фото":
+                attachment = item[i + 1]
+            if not data.serialize_func:
+                reply += f"{i + 1}. {data.name}: {item[i + 1]}\n"
+            else:
+                reply += f"{i + 1}. {data.name}: {await data.serialize_func(item[i + 1])}\n"
     keyboard = keyboards.get_edit_content(item_type)
     await db.User.update.values(state=f"{service.states.Admin.EDIT_CONTENT}_{item_type}*{item.id}").where(
         db.User.user_id == user_id).gino.status()
