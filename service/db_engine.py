@@ -434,6 +434,7 @@ class Database(Gino):
             type_id = Column(Integer, ForeignKey('item_types.id', ondelete='SET NULL'))
             count_use = Column(Integer, default=1)
             available_for_sale = Column(Boolean, default=True)
+            price = Column(Integer, default=0)
             fraction_id = Column(Integer, ForeignKey('fractions.id', ondelete='SET NULL'))
             reputation = Column(Integer, default=0)
             photo = Column(Text)

@@ -71,13 +71,21 @@ async def item_available_for_sale(m: Message, item_id: int, editing_content: boo
     await db.Item.update.values(available_for_sale=m.payload['item_type']).where(db.Item.id == item_id).gino.status()
     if not editing_content:
         if m.payload['item_type'] == 1:  # Доступно в магазине
-            states.set(m.from_id, f'{Admin.ITEM_FRACTION_ID}*{item_id}')
-            reply, keyboard = await info_item_fraction()
-            await m.answer(reply, keyboard=keyboard)
+            states.set(m.from_id, f'{Admin.ITEM_PRICE}*{item_id}')
+            await m.answer('Укажите цену предмета в магазине', keyboard=Keyboard())
         else:
             states.set(m.from_id, f'{Admin.ITEM_PHOTO}*{item_id}')
             reply, keyboard = await info_item_photo()
             await m.answer(reply, keyboard=keyboard)
+
+
+@bot.on.private_message(StateRule(Admin.ITEM_PRICE), NumericRule(), AdminRule())
+@allow_edit_content('Item', state=Admin.ITEM_FRACTION_ID)
+async def item_price(m: Message, item_id: int, editing_content: bool, value: int):
+    await db.Item.update.values(price=value).where(db.Item.id == item_id).gino.status()
+    if not editing_content:
+        reply, keyboard = await info_item_fraction()
+        await m.answer(reply, keyboard=keyboard)
 
 
 @bot.on.private_message(StateRule(Admin.ITEM_FRACTION_ID), PayloadRule({"item_for_all_fractions": True}), AdminRule())

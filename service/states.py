@@ -181,6 +181,7 @@ class Admin:
     ITEM_TYPE = 'item_type'
     ITEM_COUNT_USE = 'item_count_use'
     ITEM_AVAILABLE_FOR_SALE = 'item_available_for_sale'
+    ITEM_PRICE = 'item_price'
     ITEM_FRACTION_ID = 'item_fraction_id'
     ITEM_REPUTATION = 'item_reputation'
     ITEM_PHOTO = 'item_photo'

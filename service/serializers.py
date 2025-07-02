@@ -825,6 +825,7 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field('Тип', Admin.ITEM_TYPE, info_item_type, serialize_item_type),
             Field('Количество использований', Admin.ITEM_COUNT_USE),
             Field('Доступно для продажи', Admin.ITEM_AVAILABLE_FOR_SALE, info_item_available_for_sale, serialize_item_available_for_sale),
+            Field('Цена', Admin.ITEM_PRICE),
             Field('Для фракции', Admin.ITEM_FRACTION_ID, info_item_fraction, serialize_target_fraction),
             Field('Необходимый уровень репутации', Admin.ITEM_REPUTATION),
             Field('Фото', Admin.ITEM_PHOTO, info_item_photo),
