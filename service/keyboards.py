@@ -98,8 +98,12 @@ manage_content = Keyboard().add(
     Text("Доп. цели к квестам", {"edit_content": "AdditionalTarget"}), KeyboardButtonColor.PRIMARY
 ).row().add(
     Text('Квесты для дочерей', {"edit_content": "DaughterQuest"}), KeyboardButtonColor.PRIMARY
-).row().add(
+).add(
     Text('Доп. цели для дочерей', {"edit_content": 'DaughterTarget'}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Предметы для карты экспедитора', {"edit_content": 'Item'}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Дебафы состояния', {'edit_content': 'StateDebuff'}), KeyboardButtonColor.PRIMARY
 ).row().add(
     Text("Назад", {"edit_content": "back"}), KeyboardButtonColor.NEGATIVE
 )
@@ -277,23 +281,35 @@ without_fraction_bonus = Keyboard().add(
 
 def gen_profession_bonus(profession_id: int, attribute_id: int):
     keyboard = Keyboard(inline=True).add(
-        Callback('-10',
-                 {"profession_id": profession_id, 'attribute_id': attribute_id, 'add': -10}),
-        KeyboardButtonColor.PRIMARY
-    ).add(
         Callback('-5',
                  {"profession_id": profession_id, 'attribute_id': attribute_id, 'add': -5}),
+        KeyboardButtonColor.PRIMARY
+    ).add(
+        Callback('-1',
+                 {"profession_id": profession_id, 'attribute_id': attribute_id, 'add': -1}),
+        KeyboardButtonColor.PRIMARY
+    ).add(
+        Callback('+1',
+                 {"profession_id": profession_id, 'attribute_id': attribute_id, 'add': +1}),
         KeyboardButtonColor.PRIMARY
     ).add(
         Callback('+5',
                  {"profession_id": profession_id, 'attribute_id': attribute_id, 'add': +5}),
         KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Callback('-10', {"profession_id": profession_id, 'attribute_id': attribute_id, 'add': -10}), KeyboardButtonColor.PRIMARY
     ).add(
-        Callback('+10',
-                 {"profession_id": profession_id, 'attribute_id': attribute_id, 'add': +10}),
+        Callback('+10', {"profession_id": profession_id, 'attribute_id': attribute_id, 'add': +10}),
         KeyboardButtonColor.PRIMARY
     ).row().add(
         Callback('Назад', {"profession_id": profession_id, 'action': 'back'}),
         KeyboardButtonColor.NEGATIVE
     )
     return keyboard
+
+
+item_type = Keyboard().add(
+    Text('Доступно в магазине', {"item_type": 1}), KeyboardButtonColor.POSITIVE
+).row().add(
+    Text('Только в виде награды', {"item_type": 0}), KeyboardButtonColor.NEGATIVE
+)

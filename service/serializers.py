@@ -544,6 +544,151 @@ async def serialize_profession_bonus(profession_id: int):
     return reply
 
 
+async def info_item_group():
+    item_groups = await db.select([*db.ItemGroup]).gino.all()
+    reply = 'Выберите группу предмета:\n'
+    keyboard = Keyboard()
+    for item_group in item_groups:
+        keyboard.add(Text(item_group.name, {"item_group": item_group.id}), KeyboardButtonColor.PRIMARY).row()
+    keyboard.buttons.pop(-1)
+    return reply, keyboard
+
+
+async def serialize_item_group(item_id: int):
+    name = await db.select([db.ItemGroup.name]).where(db.ItemGroup.id == item_id).gino.scalar()
+    return name
+
+
+async def info_item_type():
+    item_types = await db.select([*db.ItemType]).gino.all()
+    reply = 'Выберите тип предмета'
+    keyboard = Keyboard()
+    for item_type in item_types:
+        keyboard.add(Text(item_type.name, {"item_type": item_type.id}), KeyboardButtonColor.PRIMARY).row()
+    keyboard.buttons.pop(-1)
+    return reply, keyboard
+
+
+async def serialize_item_type(item_id: int):
+    name = await db.select([db.ItemType.name]).where(db.ItemType.id == item_id).gino.scalar()
+    return name
+
+
+async def info_item_bonus(item_id: int):
+    item_bonus = await db.select([db.Item.bonus]).where(db.Item.id == item_id).gino.scalar()
+    reply = 'Текущий бонус предмета:\n'
+    reply += await serialize_item_bonus(item_bonus)
+    keyboard = Keyboard(inline=True).add(
+        Callback('Добавить бонус', {"item_id": item_id, "action": "add_bonus"}), KeyboardButtonColor.POSITIVE
+    ).add(
+        Callback('Удалить бонус', {"item_id": item_id, "action": "delete_bonus"}), KeyboardButtonColor.NEGATIVE
+    ).row().add(
+        Text('Сохранить', {"item_id": item_id, "action": "save_bonus"}), KeyboardButtonColor.POSITIVE
+    )
+    return reply, keyboard
+
+
+async def serialize_item_bonus(data: list):
+    if not data:
+        return 'Без эффектов'
+    reply = '\n\n'
+    for i, bonus in enumerate(data):
+        if bonus.get('type') == 'attribute':
+            name = await db.select([db.Attribute.name]).where(db.Attribute.id == bonus['attribute_id']).gino.scalar()
+            upgrade = bonus['bonus']
+            reply += f'{i + 1}. Изменение характеристики «{name}» на {"+" if upgrade >= 0 else ""}{upgrade}\n'
+        elif bonus.get('type') == 'state':
+            if bonus.get('action') == 'add':
+                debuff = await db.StateDebuff.get(bonus['debuff_id'])
+                type_name = await db.select([db.DebuffType.name]).where(db.DebuffType.id == debuff.type_id).gino.scalar()
+                attribute_name = await db.select([db.Attribute.name]).where(db.Attribute.id == debuff.attribute_id).gino.scalar()
+                reply += (f'{i+1}. Добавление {type_name} «{debuff.name}» ({attribute_name} '
+                          f'{"+" if debuff.penalty >= 0 else ""}{debuff.penalty})\n')
+            elif bonus.get('action') == 'delete':
+                debuff = await db.StateDebuff.get(bonus['debuff_id'])
+                type_name = await db.select([db.DebuffType.name]).where(
+                    db.DebuffType.id == debuff.type_id).gino.scalar()
+                attribute_name = await db.select([db.Attribute.name]).where(
+                    db.Attribute.id == debuff.attribute_id).gino.scalar()
+                reply += (f'{i+1}. Удаление {type_name} «{debuff.name}» ({attribute_name} '
+                          f'{"+" if debuff.penalty >= 0 else ""}{debuff.penalty})\n')
+            elif bonus.get('action') == 'delete_type':
+                type_name = await db.select([db.DebuffType.name]).where(db.DebuffType.id == bonus['type_id']).gino.scalar()
+                reply += f'{i+1}. Удаление всех дебафов типа {type_name}\n'
+            elif bonus.get('action') == 'delete_all':
+                reply += f'{i+1}. Удаление всех дебафов\n'
+        elif bonus.get('type') == 'sex_state':
+            if bonus.get('attribute') == 'subordination':
+                upgrade = bonus['bonus']
+                reply += f'{i+1}. Изменение Подчинение на {"+" if upgrade >= 0 else ""}{upgrade}\n'
+            elif bonus.get('attribute') == 'libido':
+                upgrade = bonus['bonus']
+                reply += f'{i+1}. Изменение Либидо на {"+" if upgrade >= 0 else ""}{upgrade}\n'
+            elif bonus.get('action') == 'set_pregnant':
+                reply += f'{i+1}. Установить статус Оплодотворение ({bonus["text"]})\n'
+            elif bonus.get('action') == 'delete_pregnant':
+                reply += f'{i+1}. Удалить статус оплодотворение\n'
+    return reply
+
+
+async def info_debuff_type():
+    types = await db.select([*db.DebuffType]).order_by(db.DebuffType.id.asc()).gino.all()
+    reply = 'Укажите тип дебафа:\n'
+    keyboard = Keyboard()
+    for i, types in enumerate(types):
+        reply += f'{i + 1}. {types.name}\n'
+        keyboard.add(Text(types.name, {"debuff_type_id": types.id}), KeyboardButtonColor.PRIMARY).row()
+    keyboard.buttons.pop(-1)
+    return reply, keyboard
+
+
+async def serialize_debuff_type(type_id: int):
+    name = await db.select([db.DebuffType.name]).where(db.DebuffType.id == type_id).gino.scalar()
+    return name
+
+
+async def info_debuff_attribute():
+    attributes = await db.select([*db.Attribute]).order_by(db.Attribute.id.asc()).gino.all()
+    reply = 'Укажите характеристику дебафа:\n'
+    keyboard = Keyboard()
+    for i, attribute in enumerate(attributes):
+        reply += f'{i + 1}. {attribute.name}\n'
+        keyboard.add(Text(attribute.name, {"debuff_attribute_id": attribute.id}), KeyboardButtonColor.PRIMARY).row()
+    keyboard.buttons.pop(-1)
+    return reply, keyboard
+
+
+async def serialize_debuff_attribute(attribute_id: int):
+    name = await db.select([db.Attribute.name]).where(db.Attribute.id == attribute_id).gino.scalar()
+    return name
+
+
+async def info_item_available_for_sale():
+    reply = 'Выберите будет ли доступен предмет для продажи в магазине'
+    return reply, keyboards.item_type
+
+
+async def serialize_item_available_for_sale(type_id: int):
+    if type_id == 0:
+        return 'Нет'
+    elif type_id == 1:
+        return 'Да'
+
+
+async def info_item_fraction():
+    reply = 'Укажите для какой фракции будет доступен предмет для покупки\n\nСписок фракций:\n'
+    fractions = [x[0] for x in await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()]
+    for i, fraction in enumerate(fractions):
+        reply += f'{i + 1}. {fraction}\n'
+    keyboard = Keyboard().add(Text('Для всех фракций', {"item_for_all_fractions": True}), KeyboardButtonColor.SECONDARY)
+    return reply, keyboard
+
+
+async def info_item_photo():
+    reply = 'Отправьте изображение для предмета'
+    keyboard = Keyboard().add(Text('Без фото', {"item_without_photo": True}), KeyboardButtonColor.SECONDARY)
+    return reply, keyboard
+
 fields_content: Dict[str, Dict[str, List[Field]]] = {
     "Cabins": {
         "fields": [
@@ -660,6 +805,30 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field('Описание', Admin.DAUGHTER_TARGET_DESCRIPTION),
             Field('Награда', Admin.DAUGHTER_TARGET_REWARD, info_target_reward, serialize_target_reward),
             Field('Параметры дочери', Admin.DAUGHTER_TARGET_PARAMS, info_target_daughter_params, serialize_target_daughter_params)
+        ]
+    },
+    'StateDebuff': {
+        'name': "Дебафы",
+        'fields': [
+            Field('Название', Admin.DEBUFF_NAME),
+            Field('Тип', Admin.DEBUFF_TYPE, info_debuff_type, serialize_debuff_type),
+            Field('Характеристика', Admin.DEBUFF_ATTRIBUTE, info_debuff_attribute, serialize_debuff_attribute),
+            Field('Штраф', Admin.DEBUFF_PENALTY)
+        ]
+    },
+    'Item': {
+        'name': 'Предметы для карты экспедитора',
+        'fields': [
+            Field('Название', Admin.ITEM_NAME),
+            Field('Описание', Admin.ITEM_DESCRIPTION),
+            Field('Группа', Admin.ITEM_GROUP, info_item_group, serialize_item_group),
+            Field('Тип', Admin.ITEM_TYPE, info_item_type, serialize_item_type),
+            Field('Количество использований', Admin.ITEM_COUNT_USE),
+            Field('Доступно для продажи', Admin.ITEM_AVAILABLE_FOR_SALE, info_item_available_for_sale, serialize_item_available_for_sale),
+            Field('Для фракции', Admin.ITEM_FRACTION_ID, info_item_fraction, serialize_target_fraction),
+            Field('Необходимый уровень репутации', Admin.ITEM_REPUTATION),
+            Field('Фото', Admin.ITEM_PHOTO, info_item_photo),
+            Field('Бонус', Admin.ITEM_BONUS, info_item_bonus, serialize_item_bonus)
         ]
     }
 }

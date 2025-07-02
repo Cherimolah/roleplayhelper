@@ -47,7 +47,12 @@ class NumericRule(ABCRule[Message], ABC):
             self.max_number = max_number
 
     async def check(self, event: Message):
-        if event.text.isdigit() and self.min_number <= int(event.text) <= self.max_number:
+        try:
+            int(event.text)
+        except:
+            await event.answer('Не удаётся преобразовать в целое число')
+            return False
+        if self.min_number <= int(event.text) <= self.max_number:
             return {"value": int(event.text)}
         await event.answer(f"Необходимо ввести целое число от {self.min_number} до "
                            f"{self.max_number if self.max_number != float('inf') else 'бесконечности'}")

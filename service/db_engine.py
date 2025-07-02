@@ -18,6 +18,24 @@ class Attribute(enum.IntEnum):
     STRESS_RESISTANCE = 7  # Стрессоустойчивость
 
 
+class GroupItem(enum.IntEnum):
+    EQUIPMENT = 1  # Экипировка
+    ARMAMENT = 2  # Вооружение
+    SUPPLIES = 3  # Расходные материалы
+    TOOLS = 4  # Инструменты
+
+
+class TypeItem(enum.IntEnum):
+    ONE_TIME = 1  # Одноразовый
+    REUSABLE = 2  # Многоразовый
+    CONSTANT = 3  # Постоянный
+
+
+class StateType(enum.IntEnum):
+    injuries = 1  # Травмы
+    madness = 2  # Безумие
+
+
 class Database(Gino):
     _instance = None
 
@@ -390,6 +408,58 @@ class Database(Gino):
 
         self.ProfessionBonus = ProfessionBonus
 
+        class ItemGroup(self.Model):
+            __tablename__ = 'item_groups'
+
+            id = Column(Integer, primary_key=True)
+            name = Column(Text)
+
+        self.ItemGroup = ItemGroup
+
+        class ItemType(self.Model):
+            __tablename__ = 'item_types'
+
+            id = Column(Integer, primary_key=True)
+            name = Column(Text)
+
+        self.ItemType = ItemType
+
+        class Item(self.Model):
+            __tablename__ = 'items'
+
+            id = Column(Integer, primary_key=True)
+            name = Column(Text)
+            description = Column(Text)
+            group_id = Column(Integer, ForeignKey('item_groups.id', ondelete='SET NULL'))
+            type_id = Column(Integer, ForeignKey('item_types.id', ondelete='SET NULL'))
+            count_use = Column(Integer, default=1)
+            available_for_sale = Column(Boolean, default=True)
+            fraction_id = Column(Integer, ForeignKey('fractions.id', ondelete='SET NULL'))
+            reputation = Column(Integer, default=0)
+            photo = Column(Text)
+            bonus = Column(JSON, default=[])
+
+        self.Item = Item
+
+        class DebuffType(self.Model):
+            __tablename__ = 'debuff_types'
+
+            id = Column(Integer, primary_key=True)
+            name = Column(Text)
+
+        self.DebuffType = DebuffType
+
+        class StateDebuff(self.Model):
+            __tablename__ = 'state_debuffs'
+
+            id = Column(Integer, primary_key=True)
+            name = Column(Text)
+            type_id = Column(Integer, ForeignKey('debuff_types.id', ondelete='SET NULL'))
+            attribute_id = Column(Integer, ForeignKey('attributes.id', ondelete='SET NULL'))
+            penalty = Column(Integer, default=0)
+
+        self.StateDebuff = StateDebuff
+
     async def connect(self):
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")
         await self.gino.create_all()
@@ -423,6 +493,18 @@ class Database(Gino):
         if attributes == 0:
             for name in ('Сила', "Скорость", "Выносливость", "Ловкость", "Восприятие", "Реакция", "Стрессоустойчивость"):
                 await self.Attribute.create(name=name)
+        item_groups = await self.select([func.count(db.ItemGroup.id)]).gino.scalar()
+        if item_groups == 0:
+            for name in ("Экипировка", "Вооружение", "Расходные материалы", "Инструменты"):
+                await self.ItemGroup.create(name=name)
+        item_types = await self.select([func.count(db.ItemType.id)]).gino.scalar()
+        if item_types == 0:
+            for name in ('Одноразовый', 'Многоразовый', 'Постоянный'):
+                await self.ItemType.create(name=name)
+        state_types = await self.select([func.count(db.DebuffType.id)]).gino.scalar()
+        if state_types == 0:
+            for name in ('Травмы', 'Безумие'):
+                await self.DebuffType.create(name=name)
 
     async def change_reputation(self, user_id: int, fraction_id: int, delta: int):
         id = await self.select([self.UserToFraction.id]).where(
