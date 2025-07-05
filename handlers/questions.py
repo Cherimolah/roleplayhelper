@@ -380,13 +380,13 @@ async def q2(m: Message, value: int = None):
     ).row().add(
         Text('2) Нет. У меня нет врождённых особенностей'[:40], {'q': 2, 'a': 2}), KeyboardButtonColor.SECONDARY
     ).row().add(
-        Text('3) Да Она/они помогают себя контролировать'[:40], {'q': 2, 'a': 3}),
+        Text('3)  Да. Она/они усиливают моё половое влечение.'[:40], {'q': 2, 'a': 3}),
         KeyboardButtonColor.SECONDARY
     )
     await m.answer('У вас есть врождённые особенности, оказывающее вторичное влияние на вашу половую систему?\n\n'
                    '1) Да. Она/они помогают себя контролировать\n'
                    '2) Нет. У меня нет врождённых особенностей\n'
-                   '3) Да Она/они помогают себя контролировать', keyboard=keyboard)
+                   '3) Да. Она/они усиливают моё половое влечение.', keyboard=keyboard)
 
 
 @bot.on.private_message(StateRule(DaughterQuestions.Q2), NumericRule(max_number=3))
