@@ -75,27 +75,30 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
             f"Баланс: {form.balance}\n" \
             f"Статус: {status}\n" \
             f"Фракция: {fraction or 'не установлена'}\n" \
-            f"Репутация: {reputation} ({rep_fraction})"
+            f"Репутация: {reputation} ({rep_fraction})\n"
     if form.status == 2:
         subordination, libido = await db.select([db.Form.subordination_level, db.Form.libido_level]).where(
             db.Form.id == form.id
         ).gino.first()
         if not absolute_params:
             if 1 <= subordination <= 33:
-                reply += '\nУровень подчинения: Низкий'
+                reply += 'Уровень подчинения: Низкий\n'
             elif 34 <= subordination <= 66:
-                reply += '\nУровень подчинения: Средний'
+                reply += 'Уровень подчинения: Средний\n'
             elif 67 <= subordination <= 100:
-                reply += '\nУровень подчинения: Высокий'
+                reply += 'Уровень подчинения: Высокий\n'
             if 1 <= libido <= 33:
-                reply += '\nУровень либидо: Низкий'
+                reply += 'Уровень либидо: Низкий\n'
             elif 34 <= libido <= 66:
-                reply += '\nУровень либидо: Средний'
+                reply += 'Уровень либидо: Средний\n'
             elif 67 <= libido <= 100:
-                reply += '\nУровень либидо: Высокий'
+                reply += 'Уровень либидо: Высокий\n'
         else:
-            reply += (f'\nУровень подчинения: {subordination}\n'
-                      f'Уровень либидо: {libido}')
+            reply += (f'Уровень подчинения: {subordination}\n'
+                      f'Уровень либидо: {libido}\n')
+        admin_request = await db.select([db.User.admin]).where(db.User.user_id == from_user_id).gino.scalar()
+        if admin_request:
+            reply += f'Базовое либидо: {form.libido_bonus}\nБазовое подчинение: {form.subordination_bonus}'
     return reply, form.photo
 
 
