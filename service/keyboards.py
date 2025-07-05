@@ -119,17 +119,26 @@ def gen_type_change_content(item):
     )
 
 
-form_activity = Keyboard().add(
-    Text("Поиск анкеты пользователя", {"form": "search"}), KeyboardButtonColor.SECONDARY
-).row().add(
-    Text("Редактировать анкету", {"form": "edit"}), KeyboardButtonColor.PRIMARY
-).row().add(
-    Text("Каюта", {"form": "cabins"}), KeyboardButtonColor.PRIMARY
-).row().add(
-    Text("Репутация", {"form": "reputation"}), KeyboardButtonColor.PRIMARY
-).row().add(
-    Text("Назад", {"menu": "home"}), KeyboardButtonColor.NEGATIVE
-)
+async def generate_form_activity(user_id):
+    form_activity = Keyboard().add(
+        Text("Поиск анкеты пользователя", {"form": "search"}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text("Редактировать анкету", {"form": "edit"}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text("Каюта", {"form": "cabins"}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text("Репутация", {"form": "reputation"}), KeyboardButtonColor.PRIMARY
+    ).row()
+    status = await db.select([db.Form.status]).where(db.Form.user_id == user_id).gino.scalar()
+    if status == 2:
+        form_activity.add(
+            Text('Перезаполнить вопросы дочерей',
+                 {'form': 'clear_daughter_params'}), KeyboardButtonColor.PRIMARY
+        )
+    form_activity.row().add(
+        Text("Назад", {"menu": "home"}), KeyboardButtonColor.NEGATIVE
+    )
+    return form_activity
 
 form_search = Keyboard().add(
     Text("Назад", {"form_search": "back"}), KeyboardButtonColor.NEGATIVE

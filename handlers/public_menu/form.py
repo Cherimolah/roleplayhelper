@@ -15,6 +15,7 @@ from service.utils import (loads_form, get_mention_from_message, show_fields_edi
 import service.keyboards as keyboards
 from service.middleware import states
 from service.db_engine import db
+from handlers.questions import q1
 
 
 async def load_forms_page(page) -> Tuple[str, Keyboard]:
@@ -56,7 +57,31 @@ async def load_forms_page(page) -> Tuple[str, Keyboard]:
 async def send_form(m: Message):
     form, photo = await loads_form(m.from_id, m.from_id)
     states.set(m.from_id, Menu.SHOW_FORM)
-    await m.answer(f"Ваша анкета:\n\n{form}", attachment=photo, keyboard=keyboards.form_activity)
+    await m.answer(f"Ваша анкета:\n\n{form}", attachment=photo, keyboard=await keyboards.generate_form_activity(m.from_id))
+
+
+@bot.on.private_message(PayloadRule({'form': 'clear_daughter_params'}), StateRule(Menu.SHOW_FORM))
+async def ask_clear_daughter(m: Message):
+    reply = 'Вы действительно хотите перезаполнить вопросы для дочерей?'
+    keyboard = Keyboard(inline=True).add(
+        Callback('Подтвердить', {'form': 'renew_daughter'}), KeyboardButtonColor.POSITIVE
+    ).row().add(
+        Callback('Отклонить', {'form': 'decline_renew_daughter'}), KeyboardButtonColor.NEGATIVE
+    )
+    await m.answer(reply, keyboard=keyboard)
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadRule({'form': 'renew_daughter'}))
+async def confirm_renew_daughter(m: MessageEvent):
+    await db.Form.update.values(is_request=True, libido_bonus=0, subordination_bonus=0).where(db.Form.user_id == m.user_id).gino.status()
+    await db.User.update.values(creating_form=True).where(db.Form.user_id == m.user_id).gino.status()
+    await m.edit_message('Заполняются заново вопросы', keyboard=Keyboard().get_json())
+    await q1(m)
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadRule({'form': 'decline_renew_daughter'}))
+async def decline_renew_daughter(m: MessageEvent):
+    await m.edit_message('Отменено перезаполнение вопросов дочерей')
 
 
 @bot.on.private_message(PayloadRule({"form": "search"}), StateRule(Menu.SHOW_FORM))

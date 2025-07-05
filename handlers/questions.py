@@ -343,100 +343,210 @@ async def want_daughter(m: Message):
 
 
 @bot.on.private_message(StateRule(Registration.WANT_DAUGHTER), PayloadRule({"want_daughter": True}))
-async def q1(m: Message):
-    states.set(m.from_id, DaughterQuestions.Q1)
-    await db.Form.update.values(status=2).where(db.Form.user_id == m.from_id).gino.status()
-    await m.answer('Как вы родились?\n\n'
-                   '1) Родилась от матери - дочери\n'
-                   '2) Искусственным оплодотворением\n'
-                   '3) Клонированием или иным полностью искусственным способом\n\n'
-                   'В сообщении укажите номер варианта ответа', keyboard=Keyboard())
+async def q1(m: Message | MessageEvent):
+    reply = ('Как вы родились?\n\n'
+                       '1) Родилась от матери - дочери\n'
+                       '2) Искусственным оплодотворением\n'
+                       '3) Клонированием или иным полностью искусственным способом\n\n'
+                       'В сообщении укажите номер варианта ответа или нажмите кнопку')
+    keyboard = Keyboard().add(
+        Text('1) Родилась от матери - дочери'[:40], {'q': 1, 'a': 1}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('2) Искусственным оплодотворением'[:40], {'q': 1, 'a': 2}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('3) Клонированием или иным полностью искусственным способом'[:40], {'q': 1, 'a': 3}), KeyboardButtonColor.SECONDARY
+    )
+    if isinstance(m, Message):
+        states.set(m.from_id, DaughterQuestions.Q1)
+        await db.Form.update.values(status=2).where(db.Form.user_id == m.from_id).gino.status()
+        await m.answer(reply, keyboard=keyboard)
+    else:
+        await db.User.update.values(state=DaughterQuestions.Q1).where(db.User.user_id == m.user_id).gino.status()
+        await db.Form.update.values(status=2).where(db.Form.user_id == m.user_id).gino.status()
+        await bot.api.messages.send(message=reply, keyboard=keyboard, peer_id=m.user_id)
 
 
 @bot.on.private_message(StateRule(DaughterQuestions.Q1), NumericRule(max_number=3))
-async def q2(m: Message, value: int):
-    await db.Form.update.values(libido_bonus=db.Form.libido_bonus + value).where(db.Form.user_id == m.from_id).gino.scalar()
+@bot.on.private_message(StateRule(DaughterQuestions.Q1), PayloadMapRule({'q': 1, 'a': int}))
+async def q2(m: Message, value: int = None):
+    if not m.payload:
+        await db.Form.update.values(libido_bonus=db.Form.libido_bonus + value).where(db.Form.user_id == m.from_id).gino.scalar()
+    else:
+        await db.Form.update.values(libido_bonus=db.Form.libido_bonus + m.payload['a']).where(
+            db.Form.user_id == m.from_id).gino.scalar()
     states.set(m.from_id, DaughterQuestions.Q2)
+    keyboard = Keyboard().add(
+        Text('1) Да. Она/они помогают себя контролировать'[:40], {'q': 2, 'a': 1}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('2) Нет. У меня нет врождённых особенностей'[:40], {'q': 2, 'a': 2}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('3) Да Она/они помогают себя контролировать'[:40], {'q': 2, 'a': 3}),
+        KeyboardButtonColor.SECONDARY
+    )
     await m.answer('У вас есть врождённые особенности, оказывающее вторичное влияние на вашу половую систему?\n\n'
                    '1) Да. Она/они помогают себя контролировать\n'
                    '2) Нет. У меня нет врождённых особенностей\n'
-                   '3) Да Она/они помогают себя контролировать')
+                   '3) Да Она/они помогают себя контролировать', keyboard=keyboard)
 
 
 @bot.on.private_message(StateRule(DaughterQuestions.Q2), NumericRule(max_number=3))
-async def q3(m: Message, value: int):
-    await db.Form.update.values(libido_bonus=db.Form.libido_bonus + value).where(db.Form.user_id == m.from_id).gino.scalar()
+@bot.on.private_message(StateRule(DaughterQuestions.Q2), PayloadMapRule({'q': 2, 'a': int}))
+async def q3(m: Message, value: int = None):
+    if not m.payload:
+        await db.Form.update.values(libido_bonus=db.Form.libido_bonus + value).where(db.Form.user_id == m.from_id).gino.scalar()
+    else:
+        await db.Form.update.values(libido_bonus=db.Form.libido_bonus + m.payload['a']).where(
+            db.Form.user_id == m.from_id).gino.scalar()
     states.set(m.from_id, DaughterQuestions.Q3)
+    keyboard = Keyboard().add(
+        Text('1) Да. Она/они помогают себя контролировать'[:40], {'q': 3, 'a': 1}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('2) Нет. У меня нет каких-либо модификаций такого рода'[:40], {'q': 3, 'a': 2}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('3) Да. Она/они усиливают моё половое влечение'[:40], {'q': 3, 'a': 3}),
+        KeyboardButtonColor.SECONDARY
+    )
     await m.answer('Есть ли у вас приобретённые модификации (генетические или кибернетические), влияющие на контроль ваших физиологических потребностей? \n\n'
-                   '1) Да. Она/они помогают себя контролировать'
+                   '1) Да. Она/они помогают себя контролировать\n'
                    '2) Нет. У меня нет каких-либо модификаций такого рода\n'
-                   '3) Да. Она/они усиливают моё половое влечение\n')
+                   '3) Да. Она/они усиливают моё половое влечение\n', keyboard=keyboard)
 
 
 @bot.on.private_message(StateRule(DaughterQuestions.Q3), NumericRule(max_number=3))
-async def q4(m: Message, value: int):
-    await db.Form.update.values(libido_bonus=db.Form.libido_bonus + value).where(db.Form.user_id == m.from_id).gino.scalar()
+@bot.on.private_message(StateRule(DaughterQuestions.Q3), PayloadMapRule({'q': 3, 'a': int}))
+async def q4(m: Message, value: int = None):
+    if not m.payload:
+        await db.Form.update.values(libido_bonus=db.Form.libido_bonus + value).where(db.Form.user_id == m.from_id).gino.scalar()
+    else:
+        await db.Form.update.values(libido_bonus=db.Form.libido_bonus + m.payload['a']).where(
+            db.Form.user_id == m.from_id).gino.scalar()
     states.set(m.from_id, DaughterQuestions.Q4)
+    keyboard = Keyboard().add(
+        Text('1) Да. Она/они помогают сдерживаться какое-то время'[:40], {'q': 4, 'a': 1}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('2) Да. Она/они мне не помогают в полной мере'[:40], {'q': 4, 'a': 2}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('3) Нет. Я предпочитаю контролировать это естественным путём'[:40], {'q': 4, 'a': 3}),
+        KeyboardButtonColor.SECONDARY
+    )
     await m.answer('Используете ли вы какие-либо препараты или предметы для контроля ваших физиологических потребностей?\n\n'
                    '1) Да. Она/они помогают сдерживаться какое-то время\n'
                    '2) Да. Она/они мне не помогают в полной мере\n'
-                   '3) Нет. Я предпочитаю контролировать это естественным путём')
+                   '3) Нет. Я предпочитаю контролировать это естественным путём', keyboard=keyboard)
 
 
 @bot.on.private_message(StateRule(DaughterQuestions.Q4), NumericRule(max_number=3))
-async def q4(m: Message, value: int):
-    await db.Form.update.values(libido_bonus=db.Form.libido_bonus + value).where(
+@bot.on.private_message(StateRule(DaughterQuestions.Q4), PayloadMapRule({'q': 4, 'a': int}))
+async def q4(m: Message, value: int = None):
+    if not m.payload:
+        await db.Form.update.values(libido_bonus=db.Form.libido_bonus + value).where(
         db.Form.user_id == m.from_id).gino.scalar()
+    else:
+        await db.Form.update.values(libido_bonus=db.Form.libido_bonus + m.payload['a']).where(
+            db.Form.user_id == m.from_id).gino.scalar()
     states.set(m.from_id, DaughterQuestions.Q5)
+    keyboard = Keyboard().add(
+        Text('1) Сдерживала их любыми доступным способами'[:40], {'q': 5, 'a': 1}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('2) Действовала так, как скажут родители/учителя/учёные'[:40], {'q': 5, 'a': 2}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('3) Пустила всё на самотёк'[:40], {'q': 5, 'a': 3}),
+        KeyboardButtonColor.SECONDARY
+    )
     await m.answer(
         'Вам от 13 до 16 лет. Как вы справлялись с первичными проявлениями ваших генетических особенностей, как Дочери?\n\n'
         '1) Сдерживала их любыми доступным способами\n'
         '2) Действовала так, как скажут родители/учителя/учёные\n'
-        '3) Пустила всё на самотёк')
+        '3) Пустила всё на самотёк', keyboard=keyboard)
 
 
 @bot.on.private_message(StateRule(DaughterQuestions.Q5), NumericRule(max_number=3))
-async def q4(m: Message, value: int):
-    await db.Form.update.values(subordination_bonus=db.Form.subordination_bonus + value).where(
+@bot.on.private_message(StateRule(DaughterQuestions.Q5), PayloadMapRule({'q': 5, 'a': int}))
+async def q4(m: Message, value: int = None):
+    if not m.payload:
+        await db.Form.update.values(subordination_bonus=db.Form.subordination_bonus + value).where(
         db.Form.user_id == m.from_id).gino.scalar()
+    else:
+        await db.Form.update.values(subordination_bonus=db.Form.subordination_bonus + m.payload['a']).where(
+            db.Form.user_id == m.from_id).gino.scalar()
     states.set(m.from_id, DaughterQuestions.Q6)
+    keyboard = Keyboard().add(
+        Text('1) На боевую специальность'[:40], {'q': 6, 'a': 1}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('2) На сложную техническую/медицинскую специальность'[:40], {'q': 6, 'a': 2}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('3) На административную или иную специальность'[:40], {'q': 6, 'a': 3}),
+        KeyboardButtonColor.SECONDARY
+    )
     await m.answer(
         'Вы вступили в "высшие" заведения для вашей подготовки. На кого вас учат?\n\n'
         '1) На боевую специальность\n'
         '2) На сложную техническую/медицинскую специальность\n'
-        '3) На административную или иную специальность')
+        '3) На административную или иную специальность', keyboard=keyboard)
 
 
 @bot.on.private_message(StateRule(DaughterQuestions.Q6), NumericRule(max_number=3))
-async def q4(m: Message, value: int):
-    await db.Form.update.values(subordination_bonus=db.Form.subordination_bonus + value).where(
+@bot.on.private_message(StateRule(DaughterQuestions.Q6), PayloadMapRule({'q': 6, 'a': int}))
+async def q4(m: Message, value: int = None):
+    if not m.payload:
+        await db.Form.update.values(subordination_bonus=db.Form.subordination_bonus + value).where(
         db.Form.user_id == m.from_id).gino.scalar()
+    else:
+        await db.Form.update.values(subordination_bonus=db.Form.subordination_bonus + m.payload['a']).where(
+            db.Form.user_id == m.from_id).gino.scalar()
     states.set(m.from_id, DaughterQuestions.Q7)
+    keyboard = Keyboard().add(
+        Text('1) Рутинно. Удовольствие получу лишь в процессе соития, а до него только при настоящем сближении с целью'[:40], {'q': 7, 'a': 1}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('2) Не без удовольствия. Особенно если цель вам по нраву'[:40], {'q': 7, 'a': 2}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('3) С удовольствием. Ведь для вас это очередной повод чтобы «развлечься»'[:40], {'q': 7, 'a': 3}),
+        KeyboardButtonColor.SECONDARY
+    )
     await m.answer(
         'После обучения в спец. ВУЗе вас направили на «стажировку». Вы получаете своё первое задание, например, по соблазнению цели. Как вы отнесётесь к его выполнению?\n\n'
-        '1) Рутинно. Удовольствие получу лишь в процессе соития, а до него только при настоящем сближении с целью \n'
+        '1) Рутинно. Удовольствие получу лишь в процессе соития, а до него только при настоящем сближении с целью\n'
         '2) Не без удовольствия. Особенно если цель вам по нраву\n'
-        '3) С удовольствием. Ведь для вас это очередной повод чтобы «развлечься»')
+        '3) С удовольствием. Ведь для вас это очередной повод чтобы «развлечься»', keyboard=keyboard)
 
 
 @bot.on.private_message(StateRule(DaughterQuestions.Q7), NumericRule(max_number=3))
-async def q4(m: Message, value: int):
-    await db.Form.update.values(subordination_bonus=db.Form.subordination_bonus + value).where(
+@bot.on.private_message(StateRule(DaughterQuestions.Q7), PayloadMapRule({'q': 7, 'a': int}))
+async def q4(m: Message, value: int = None):
+    if not m.payload:
+        await db.Form.update.values(subordination_bonus=db.Form.subordination_bonus + value).where(
         db.Form.user_id == m.from_id).gino.scalar()
+    else:
+        await db.Form.update.values(subordination_bonus=db.Form.subordination_bonus + m.payload['a']).where(
+            db.Form.user_id == m.from_id).gino.scalar()
     states.set(m.from_id, DaughterQuestions.Q8)
+    keyboard = Keyboard().add(
+        Text('1) Трудиться ради блага Империи'[:40],
+             {'q': 8, 'a': 1}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('2) Служить во благо своей фракции'[:40], {'q': 8, 'a': 2}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('3) Жить ради себя и своих прихотей'[:40], {'q': 8, 'a': 3}),
+        KeyboardButtonColor.SECONDARY
+    )
     await m.answer(
         'После обучения в спец. ВУЗе вас направили на «стажировку». Вы получаете своё первое задание, например, по соблазнению цели. Как вы отнесётесь к его выполнению?\n\n'
         '1) Трудиться ради блага Империи\n'
         '2) Служить во благо своей фракции\n'
-        '3) Жить ради себя и своих прихотей')
+        '3) Жить ради себя и своих прихотей', keyboard=keyboard)
 
 
 @bot.on.private_message(StateRule(DaughterQuestions.Q8), NumericRule(max_number=3))
-async def q4(m: Message, value: int):
-    await db.Form.update.values(subordination_bonus=db.Form.subordination_bonus + value).where(
+@bot.on.private_message(StateRule(DaughterQuestions.Q8), PayloadMapRule({'q': 8, 'a': int}))
+async def q4(m: Message, value: int = None):
+    if not m.payload:
+        await db.Form.update.values(subordination_bonus=db.Form.subordination_bonus + value).where(
         db.Form.user_id == m.from_id).gino.scalar()
+    else:
+        await db.Form.update.values(subordination_bonus=db.Form.subordination_bonus + m.payload['a']).where(
+            db.Form.user_id == m.from_id).gino.scalar()
     fraction_id, l_bonus, s_bonus = await db.select([db.Form.fraction_id, db.Form.libido_bonus, db.Form.subordination_bonus]).where(db.Form.user_id == m.from_id).gino.first()
-    l_multiplier, s_multiplier = await db.select([db.Fraction.libido_koef, db.Fraction.subordination_koef]).where(db.Fraction.id == fraction_id).gino.scalar()
+    l_multiplier, s_multiplier = await db.select([db.Fraction.libido_koef, db.Fraction.subordination_koef]).where(db.Fraction.id == fraction_id).gino.first()
     l_level = min(100, max(0, int(2 + 2 * l_multiplier + l_bonus)))
     s_level = min(100, max(0, int(2 + 2 * s_multiplier + s_bonus)))
     await db.Form.update.values(subordination_level=s_level, libido_level=l_level).where(db.Form.user_id == m.from_id).gino.scalar()
