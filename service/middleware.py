@@ -2,7 +2,7 @@ import asyncio
 import datetime
 from abc import ABC
 
-from vkbottle import BaseMiddleware
+from vkbottle import BaseMiddleware, Keyboard
 from vkbottle.bot import Message
 
 from service.db_engine import db
@@ -27,6 +27,10 @@ class StateMiddleware(BaseMiddleware[Message], ABC):
 
     async def pre(self) -> None:
         state = await db.select([db.User.state]).where(db.User.user_id == self.event.from_id).gino.scalar()
+        if not state and self.event.text.lower() != 'начать':
+            await self.event.answer('Я забыл где ты находишься. Давай начнем сначала. Напиши «Начать»',
+                                    keyboard=Keyboard())
+            await self.stop()
         states.set(self.event.from_id, state or "")
 
     async def post(self) -> None:
