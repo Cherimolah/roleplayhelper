@@ -43,9 +43,9 @@ async def set_leader_fraction(m: Message, form: Tuple[int, int], item_id: int, e
 
 
 @bot.on.private_message(StateRule(Admin.PHOTO_FRACTION), AdminRule(), AttachmentTypeRule("photo"))
-@allow_edit_content("Fraction", state=Admin.FRACTION_MULTIPLIER,
+@allow_edit_content("Fraction", state=Admin.FRACTION_LIBIDO,
                     text="Фото фракции успешно установлено. "
-                         "Пришлите мультипликатор для дочерей (дробную часть стоит отделять точкой)")
+                         "Пришлите мультипликатор для ЛИБИДО дочерей (дробную часть стоит отделять точкой)")
 async def set_photo_fraction(m: Message, item_id: int, editing_content: bool):
     if not m.attachments or m.attachments[0].type != m.attachments[0].type.PHOTO:
         await m.answer(messages.need_photo)
@@ -54,7 +54,20 @@ async def set_photo_fraction(m: Message, item_id: int, editing_content: bool):
     await db.Fraction.update.values(photo=photo).where(db.Fraction.id == item_id).gino.status()
 
 
-@bot.on.private_message(StateRule(Admin.FRACTION_MULTIPLIER), AdminRule())
+@bot.on.private_message(StateRule(Admin.FRACTION_LIBIDO), AdminRule())
+@allow_edit_content('Fraction', state=Admin.FRACTION_SUBORDINATION,
+                    text='Пришлите мультипликатор для ПОДЧИНЕНИЯ дочерей (дробную часть стоит отделять точкой)')
+async def set_fraction_multiplier(m: Message, item_id: int, editing_content: bool):
+    try:
+        value = float(m.text)
+    except ValueError:
+        raise FormatDataException('Неправильный формат мультипликатора')
+    if value in (float('inf'), float('-inf'), float('nan')):
+        raise FormatDataException('Не стоит ломать работу с числами')
+    await db.Fraction.update.values(libido_koef=value).where(db.Fraction.id == item_id).gino.status()
+
+
+@bot.on.private_message(StateRule(Admin.FRACTION_SUBORDINATION), AdminRule())
 @allow_edit_content("Fraction", state=f"{Admin.SELECT_ACTION}_Fraction", end=True,
                     text='Фракция успешно создана', keyboard=gen_type_change_content("Fraction"))
 async def set_fraction_multiplier(m: Message, item_id: int, editing_content: bool):
@@ -64,7 +77,7 @@ async def set_fraction_multiplier(m: Message, item_id: int, editing_content: boo
         raise FormatDataException('Неправильный формат мультипликатора')
     if value in (float('inf'), float('-inf'), float('nan')):
         raise FormatDataException('Не стоит ломать работу с числами')
-    await db.Fraction.update.values(daughter_multiplier=value).where(db.Fraction.id == item_id).gino.status()
+    await db.Fraction.update.values(subordination_koef=value).where(db.Fraction.id == item_id).gino.status()
     leader_id = await db.select([db.Fraction.leader_id]).where(db.Fraction.id == item_id).gino.scalar()
     await db.UserToFraction.create(fraction_id=item_id, user_id=leader_id, reputation=100)
     await db.Form.update.values(fraction_id=item_id).where(db.Form.user_id == leader_id).gino.status()

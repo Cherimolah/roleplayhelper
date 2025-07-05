@@ -23,6 +23,10 @@ class DaughterQuestions:
     Q2 = "q2"
     Q3 = "q3"
     Q4 = "q4"
+    Q5 = "q5"
+    Q6 = "q6"
+    Q7 = "q7"
+    Q8 = "q8"
 
 
 class Menu:
@@ -149,7 +153,8 @@ class Admin:
     SELECT_USER_FRACTION = "select_user_fraction"
     SET_NEW_REPUTATION = "set_new_reputation"
     DELETE_USER_REPUTATION = "delete_user_reputation"
-    FRACTION_MULTIPLIER = "fraction_multiplier"
+    FRACTION_LIBIDO = "fraction_libido"
+    FRACTION_SUBORDINATION = "fraction_subordination"
     EDIT_LEVEL_SUBORDINATION = 'edit_level_subordination'
     EDIT_LEVEL_LIBIDO = 'edit_level_libido'
     TARGET_DELETE = "target_delete"

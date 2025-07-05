@@ -355,41 +355,89 @@ async def q1(m: Message):
 
 @bot.on.private_message(StateRule(DaughterQuestions.Q1), NumericRule(max_number=3))
 async def q2(m: Message, value: int):
-    await db.Form.update.values(daughter_bonus=db.Form.daughter_bonus + value).where(db.Form.user_id == m.from_id).gino.scalar()
+    await db.Form.update.values(libido_bonus=db.Form.libido_bonus + value).where(db.Form.user_id == m.from_id).gino.scalar()
     states.set(m.from_id, DaughterQuestions.Q2)
-    await m.answer('Вам от 13 до 16 лет. Как вы справлялись с первичными проявлениями ваших генетических особенностей, '
-                   'как Дочери?\n\n'
-                   '1) Сдерживала их любыми доступным способами\n'
-                   '2) Действовала так, как скажут родители/учителя/учёные\n'
-                   '3) Пустила всё на самотёк')
+    await m.answer('У вас есть врождённые особенности, оказывающее вторичное влияние на вашу половую систему?\n\n'
+                   '1) Да. Она/они помогают себя контролировать\n'
+                   '2) Нет. У меня нет врождённых особенностей\n'
+                   '3) Да Она/они помогают себя контролировать')
 
 
 @bot.on.private_message(StateRule(DaughterQuestions.Q2), NumericRule(max_number=3))
 async def q3(m: Message, value: int):
-    await db.Form.update.values(daughter_bonus=db.Form.daughter_bonus + value).where(db.Form.user_id == m.from_id).gino.scalar()
+    await db.Form.update.values(libido_bonus=db.Form.libido_bonus + value).where(db.Form.user_id == m.from_id).gino.scalar()
     states.set(m.from_id, DaughterQuestions.Q3)
-    await m.answer('Вы вступили в "высшие" заведения для вашей подготовки. На кого вас учат?\n\n'
-                   '1) На боевую специальность\n'
-                   '2) На сложную техническую/медицинскую специальность\n'
-                   '3) На административную или иную специальность\n')
+    await m.answer('Есть ли у вас приобретённые модификации (генетические или кибернетические), влияющие на контроль ваших физиологических потребностей? \n\n'
+                   '1) Да. Она/они помогают себя контролировать'
+                   '2) Нет. У меня нет каких-либо модификаций такого рода\n'
+                   '3) Да. Она/они усиливают моё половое влечение\n')
 
 
 @bot.on.private_message(StateRule(DaughterQuestions.Q3), NumericRule(max_number=3))
 async def q4(m: Message, value: int):
-    await db.Form.update.values(daughter_bonus=db.Form.daughter_bonus + value).where(db.Form.user_id == m.from_id).gino.scalar()
+    await db.Form.update.values(libido_bonus=db.Form.libido_bonus + value).where(db.Form.user_id == m.from_id).gino.scalar()
     states.set(m.from_id, DaughterQuestions.Q4)
-    await m.answer('Какова ваша цель, как Дочери?\n\n'
-                   '1) Служить во благо своей фракции\n'
-                   '2) Трудиться ради блага других\n'
-                   '3) Жить ради себя')
+    await m.answer('Используете ли вы какие-либо препараты или предметы для контроля ваших физиологических потребностей?\n\n'
+                   '1) Да. Она/они помогают сдерживаться какое-то время\n'
+                   '2) Да. Она/они мне не помогают в полной мере\n'
+                   '3) Нет. Я предпочитаю контролировать это естественным путём')
 
 
 @bot.on.private_message(StateRule(DaughterQuestions.Q4), NumericRule(max_number=3))
 async def q4(m: Message, value: int):
-    fraction_id, bonus = await db.select([db.Form.fraction_id, db.Form.daughter_bonus]).where(db.Form.user_id == m.from_id).gino.first()
-    fraction_multiplier = await db.select([db.Fraction.daughter_multiplier]).where(db.Fraction.id == fraction_id).gino.scalar()
-    bonus += value
-    level = min(100, max(0, int(2 + 2 * fraction_multiplier + bonus)))
-    await db.Form.update.values(daughter_bonus=bonus,
-                                subordination_level=level, libido_level=level).where(db.Form.user_id == m.from_id).gino.scalar()
+    await db.Form.update.values(libido_bonus=db.Form.libido_bonus + value).where(
+        db.Form.user_id == m.from_id).gino.scalar()
+    states.set(m.from_id, DaughterQuestions.Q5)
+    await m.answer(
+        'Вам от 13 до 16 лет. Как вы справлялись с первичными проявлениями ваших генетических особенностей, как Дочери?\n\n'
+        '1) Сдерживала их любыми доступным способами\n'
+        '2) Действовала так, как скажут родители/учителя/учёные\n'
+        '3) Пустила всё на самотёк')
+
+
+@bot.on.private_message(StateRule(DaughterQuestions.Q5), NumericRule(max_number=3))
+async def q4(m: Message, value: int):
+    await db.Form.update.values(subordination_bonus=db.Form.subordination_bonus + value).where(
+        db.Form.user_id == m.from_id).gino.scalar()
+    states.set(m.from_id, DaughterQuestions.Q6)
+    await m.answer(
+        'Вы вступили в "высшие" заведения для вашей подготовки. На кого вас учат?\n\n'
+        '1) На боевую специальность\n'
+        '2) На сложную техническую/медицинскую специальность\n'
+        '3) На административную или иную специальность')
+
+
+@bot.on.private_message(StateRule(DaughterQuestions.Q6), NumericRule(max_number=3))
+async def q4(m: Message, value: int):
+    await db.Form.update.values(subordination_bonus=db.Form.subordination_bonus + value).where(
+        db.Form.user_id == m.from_id).gino.scalar()
+    states.set(m.from_id, DaughterQuestions.Q7)
+    await m.answer(
+        'После обучения в спец. ВУЗе вас направили на «стажировку». Вы получаете своё первое задание, например, по соблазнению цели. Как вы отнесётесь к его выполнению?\n\n'
+        '1) Рутинно. Удовольствие получу лишь в процессе соития, а до него только при настоящем сближении с целью \n'
+        '2) Не без удовольствия. Особенно если цель вам по нраву\n'
+        '3) С удовольствием. Ведь для вас это очередной повод чтобы «развлечься»')
+
+
+@bot.on.private_message(StateRule(DaughterQuestions.Q7), NumericRule(max_number=3))
+async def q4(m: Message, value: int):
+    await db.Form.update.values(subordination_bonus=db.Form.subordination_bonus + value).where(
+        db.Form.user_id == m.from_id).gino.scalar()
+    states.set(m.from_id, DaughterQuestions.Q8)
+    await m.answer(
+        'После обучения в спец. ВУЗе вас направили на «стажировку». Вы получаете своё первое задание, например, по соблазнению цели. Как вы отнесётесь к его выполнению?\n\n'
+        '1) Трудиться ради блага Империи\n'
+        '2) Служить во благо своей фракции\n'
+        '3) Жить ради себя и своих прихотей')
+
+
+@bot.on.private_message(StateRule(DaughterQuestions.Q8), NumericRule(max_number=3))
+async def q4(m: Message, value: int):
+    await db.Form.update.values(subordination_bonus=db.Form.subordination_bonus + value).where(
+        db.Form.user_id == m.from_id).gino.scalar()
+    fraction_id, l_bonus, s_bonus = await db.select([db.Form.fraction_id, db.Form.libido_bonus, db.Form.subordination_bonus]).where(db.Form.user_id == m.from_id).gino.first()
+    l_multiplier, s_multiplier = await db.select([db.Fraction.libido_koef, db.Fraction.subordination_koef]).where(db.Fraction.id == fraction_id).gino.scalar()
+    l_level = min(100, max(0, int(2 + 2 * l_multiplier + l_bonus)))
+    s_level = min(100, max(0, int(2 + 2 * s_multiplier + s_bonus)))
+    await db.Form.update.values(subordination_level=s_level, libido_level=l_level).where(db.Form.user_id == m.from_id).gino.scalar()
     await want_daughter(m)

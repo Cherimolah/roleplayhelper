@@ -646,13 +646,15 @@ async def update_daughter_levels(user_id: int):
                 reply = f' ❌ Вам выписан штраф за невыполнение квеста  «{quest.name}»:\n'
                 reply += await serialize_target_reward(quest.penalty)
                 await bot.api.messages.send(peer_id=user_id, message=reply, is_notification=True)
-        bonus, sub_level, lib_level, fraction_id = await db.select(
-            [db.Form.daughter_bonus, db.Form.subordination_level, db.Form.libido_level, db.Form.fraction_id]).where(
+        sub_bonus, lib_bonus, sub_level, lib_level, fraction_id = await db.select(
+            [db.Form.subordination_bonus, db.Form.libido_bonus, db.Form.subordination_level, db.Form.libido_level, db.Form.fraction_id]).where(
             db.Form.user_id == user_id).gino.first()
-        multiplier = await db.select([db.Fraction.daughter_multiplier]).where(
+        libido_multiplier = await db.select([db.Fraction.libido_koef]).where(
             db.Fraction.id == fraction_id).gino.scalar()
-        sub_level = min(100, max(0, int(sub_level + 2 + 2 * multiplier + bonus)))
-        lib_level = min(100, max(0, int(lib_level + 2 + 2 * multiplier + bonus)))
+        sub_koef = await db.select([db.Fraction.subordination_koef]).where(
+            db.Fraction.id == fraction_id).gino.scalar()
+        sub_level = min(100, max(0, int(sub_level + 2 + 2 * sub_koef + sub_bonus)))
+        lib_level = min(100, max(0, int(lib_level + 2 + 2 * libido_multiplier + lib_bonus)))
         await db.Form.update.values(subordination_level=sub_level, libido_level=lib_level).where(
             db.Form.user_id == user_id).gino.status()
         await asyncio.sleep(15)

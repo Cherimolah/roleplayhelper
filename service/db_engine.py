@@ -110,7 +110,9 @@ class Database(Gino):
             delete_request = Column(Boolean, default=False)
             created_at = Column(TIMESTAMP, default=datetime.datetime.now)
             fraction_id = Column(Integer, ForeignKey("fractions.id", ondelete='SET NULL'))
-            daughter_bonus = Column(Integer, default=0)
+            # daughter_bonus = Column(Integer, default=0)
+            libido_bonus = Column(Integer, default=0)
+            subordination_bonus = Column(Integer, default=0)
             subordination_level = Column(Integer, default=0)
             libido_level = Column(Integer, default=0)
 
@@ -312,7 +314,9 @@ class Database(Gino):
             description = Column(Text)
             leader_id = Column(Integer, ForeignKey("users.user_id", ondelete='SET NULL'))
             photo = Column(Text)
-            daughter_multiplier = Column(Float, default=0)
+            # daughter_multiplier = Column(Float, default=0)
+            libido_koef = Column(Float, default=1)
+            subordination_koef = Column(Float, default=1)
 
         self.Fraction = Fraction
 
