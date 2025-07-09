@@ -26,6 +26,8 @@ class MaintainenceMiddleware(BaseMiddleware[Message], ABC):
 class StateMiddleware(BaseMiddleware[Message], ABC):
 
     async def pre(self) -> None:
+        if self.event.peer_id > 2000000000:
+            return
         state = await db.select([db.User.state]).where(db.User.user_id == self.event.from_id).gino.scalar()
         if not state and self.event.text.lower() != 'начать':
             await self.event.answer('Я забыл где ты находишься. Давай начнем сначала. Напиши «Начать»',
