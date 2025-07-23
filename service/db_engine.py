@@ -465,6 +465,24 @@ class Database(Gino):
 
         self.StateDebuff = StateDebuff
 
+        class Race(self.Model):
+            __tablename__ = 'races'
+
+            id = Column(Integer, primary_key=True)
+            name = Column(Text)
+
+        self.Race = Race
+
+        class RaceBonus(self.Model):
+            __tablename__ = 'race_bonus'
+
+            id = Column(Integer, primary_key=True)
+            attribute_id = Column(Integer, ForeignKey('attributes.id', ondelete='CASCADE'))
+            race_id = Column(Integer, ForeignKey('races.id', ondelete='CASCADE'))
+            bonus = Column(Integer, default=0)
+
+        self.RaceBonus = RaceBonus
+
     async def connect(self):
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")
         await self.gino.create_all()

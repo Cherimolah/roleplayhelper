@@ -197,3 +197,6 @@ class Admin:
     DEBUFF_ATTRIBUTE = 'debuff_attribute'
     DEBUFF_PENALTY = 'debuff_penalty'
     DEBUFF_DELETE = 'debuff_delete'
+    RACE_NAME = 'race_name'
+    RACE_BONUS = 'race_bonus'
+    RACE_DELETE = 'race_delete'

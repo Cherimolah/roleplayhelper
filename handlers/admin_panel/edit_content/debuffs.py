@@ -1,13 +1,13 @@
 from vkbottle.bot import Message
-from vkbottle import Keyboard, Text, KeyboardButtonColor
-from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule, AttachmentTypeRule
+from vkbottle import Keyboard
+from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
 
 from loader import bot, states
 from service.custom_rules import StateRule, AdminRule, NumericRule
 from service.states import Admin
 from service.db_engine import db
 from service import keyboards
-from service.utils import send_content_page, allow_edit_content, FormatDataException, reload_image
+from service.utils import send_content_page, allow_edit_content
 from service.serializers import info_debuff_type, info_debuff_attribute
 
 

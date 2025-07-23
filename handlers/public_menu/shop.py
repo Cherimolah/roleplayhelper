@@ -274,3 +274,8 @@ async def buy_func_product(m: MessageEvent):
     await m.show_snackbar("✅ Функциональный товар успешно куплен!\n"
                           f"Стоимость ренты увеличена на: {soft_divide(price, 10)}\n"
                           f"Баланс: {balance - price}\n")
+
+
+@bot.on.private_message(PayloadRule({"shop": 'items'}))
+async def shop_items(m: Message):
+    pass

@@ -12,4 +12,5 @@ from . import daughter_quests
 from . import daughter_targets
 from . import items
 from . import debuffs
+from . import races
 from . import common

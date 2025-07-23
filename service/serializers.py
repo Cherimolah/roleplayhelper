@@ -689,6 +689,38 @@ async def info_item_photo():
     keyboard = Keyboard().add(Text('Без фото', {"item_without_photo": True}), KeyboardButtonColor.SECONDARY)
     return reply, keyboard
 
+
+async def info_race_bonus(race_id: int):
+    reply = 'Установленные бонусы сейчас:\n'
+    attributes = await db.select([*db.Attribute]).gino.all()
+    keyboard = Keyboard(inline=True)
+    for i, attribute in enumerate(attributes):
+        bonus = await db.select([db.RaceBonus.bonus]).where(
+            and_(db.RaceBonus.race_id == race_id, db.RaceBonus.attribute_id == attribute.id)).gino.scalar()
+        if not bonus:
+            reply += f'{i + 1}. {attribute.name} +0\n'
+        else:
+            reply += f'{i + 1}. {attribute.name} {"+" if bonus >= 0 else ""}{bonus}\n'
+        keyboard.add(Callback(attribute.name, {'race_id': race_id, 'attribute_id': attribute.id, 'action': 'select'}), KeyboardButtonColor.PRIMARY)
+        if i % 2 == 1:
+            keyboard.row()
+    if len(keyboard.buttons[-1]) > 0:
+        keyboard.row()
+    keyboard.add(Text('Сохранить', {"race_id": race_id, 'action': 'save'}), KeyboardButtonColor.POSITIVE)
+    return reply, keyboard
+
+
+async def serialize_race_bonus(race_id: int):
+    raw = await db.select([db.RaceBonus.attribute_id, db.RaceBonus.bonus]).where(db.RaceBonus.race_id == race_id).gino.all()
+    if not raw:
+        return 'Без бонусов'
+    reply = '\n\n'
+    for i, data in enumerate(raw):
+        attribute_id, bonus = data
+        attribute = await db.select([db.Attribute.name]).where(db.Attribute.id == attribute_id).gino.scalar()
+        reply += f'{i + 1}. {attribute}: {"+" if bonus > 0 else ""}{bonus}\n'
+    return reply
+
 fields_content: Dict[str, Dict[str, List[Field]]] = {
     "Cabins": {
         "fields": [
@@ -831,6 +863,13 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field('Необходимый уровень репутации', Admin.ITEM_REPUTATION),
             Field('Фото', Admin.ITEM_PHOTO, info_item_photo),
             Field('Бонус', Admin.ITEM_BONUS, info_item_bonus, serialize_item_bonus)
+        ]
+    },
+    'Race': {
+        'name': 'Расы',
+        'fields': [
+            Field('Название', Admin.RACE_NAME),
+            RelatedTable('Бонус к характеристикам', Admin.RACE_BONUS, info_race_bonus, serialize_race_bonus)
         ]
     }
 }
