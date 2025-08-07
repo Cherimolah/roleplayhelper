@@ -1,4 +1,4 @@
-from vkbottle.bot import MessageEvent
+from vkbottle.bot import MessageEvent, Message
 from vkbottle import GroupEventType
 from vkbottle.dispatch.rules.base import PayloadMapRule
 from vkbottle_types.objects import MessagesForward, UsersUserFull
@@ -9,11 +9,15 @@ from service.custom_rules import AdminRule, ExpeditorRequestAvailable
 from service.serializers import fields_content, RelatedTable, Field
 from service.utils import send_edit_item
 
+
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'request_expeditor_id': int, 'action': 'confirm'}), AdminRule(), ExpeditorRequestAvailable())
-async def confirm_expeditor(m: MessageEvent, user: UsersUserFull, name: str, form_id: int, expeditor_id: int):
+async def confirm_expeditor(m: MessageEvent | Message, user: UsersUserFull, name: str, form_id: int, expeditor_id: int):
     await db.Expeditor.update.values(is_confirmed=True).where(db.Expeditor.id == expeditor_id).gino.status()
     data = await db.select([db.ExpeditorRequest.admin_id, db.ExpeditorRequest.message_id]).where(db.ExpeditorRequest.expeditor_id == expeditor_id).gino.all()
-    admin = (await bot.api.users.get(m.user_id))[0]
+    if isinstance(m, MessageEvent):
+        admin = (await bot.api.users.get(m.user_id))[0]
+    else:
+        admin = (await bot.api.users.get(m.from_id))[0]
     for admin_id, message_id in data:
         await bot.api.messages.send(message=f'✅ Карта экспедитора игрока [id{user.id}|{name} / {user.first_name} {user.last_name}] принята администратором '
                                             f'[id{admin_id}|{admin.first_name} {admin.last_name}]',
@@ -23,7 +27,8 @@ async def confirm_expeditor(m: MessageEvent, user: UsersUserFull, name: str, for
                                         is_reply=True
                                     ).json(),
                                     peer_id=admin_id)
-    await m.show_snackbar('Карта экспедитора успешно принята')
+    if isinstance(m, MessageEvent):
+        await m.show_snackbar('Карта экспедитора успешно принята')
     await db.ExpeditorRequest.delete.where(db.ExpeditorRequest.expeditor_id == expeditor_id).gino.status()
     status = await db.select([db.Form.status]).where(db.Form.id == form_id).gino.scalar()
     if status == 2:
