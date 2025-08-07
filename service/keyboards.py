@@ -207,7 +207,7 @@ shop_menu = Keyboard().add(
     Text("Прокачка номеров", {"shop": "cabins"}), KeyboardButtonColor.PRIMARY
 ).row().row().add(
     Text('Предметы экспедитора', {"shop": 'items'}), KeyboardButtonColor.PRIMARY
-).add(
+).row().add(
     Text("Назад", {"shop": "back"}), KeyboardButtonColor.NEGATIVE
 )
 

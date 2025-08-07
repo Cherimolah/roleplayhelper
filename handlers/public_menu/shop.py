@@ -1,7 +1,7 @@
 from vkbottle.bot import Message, MessageEvent
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
 from vkbottle import GroupEventType, Keyboard, Text, KeyboardButtonColor, Callback
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, or_
 
 import messages
 from loader import bot
@@ -10,7 +10,8 @@ from service.states import Menu
 import service.keyboards as keyboards
 from service.middleware import states
 from service.db_engine import db
-from service.utils import soft_divide
+from service.utils import soft_divide, get_current_form_id
+from service.serializers import serialize_item_group, serialize_item_type, serialize_item_bonus
 
 
 @bot.on.private_message(StateRule(Menu.MAIN), PayloadRule({"menu": "shop"}))
@@ -278,4 +279,96 @@ async def buy_func_product(m: MessageEvent):
 
 @bot.on.private_message(PayloadRule({"shop": 'items'}))
 async def shop_items(m: Message):
-    pass
+    form_id = await get_current_form_id(m.from_id)
+    expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
+    if not expeditor_id:
+        await m.answer('У вас нет Карты экспедитора!\n'
+                       'Создайте её в разделе «Анкета»')
+        return
+    is_confirmed = await db.select([db.Expeditor.is_confirmed]).where(db.Expeditor.id == expeditor_id).gino.scalar()
+    if not is_confirmed:
+        await m.answer('Ваша Карта экспедитора ещё не принята администрацией!\n'
+                       'Дождитесь решения администрации')
+        return
+    await show_page_item(m, 1)
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'item_shop_page': int}))
+async def item_shop_page(m: MessageEvent):
+    await show_page_item(m, m.payload['item_shop_page'])
+
+
+async def show_page_item(m: Message | MessageEvent, page: int):
+    if isinstance(m, Message):
+        user_id = m.from_id
+    else:
+        user_id = m.user_id
+    fraction_id = await db.select([db.Form.fraction_id]).where(db.Form.user_id == user_id).gino.scalar()
+    reputation = await db.select([db.UserToFraction.reputation]).where(
+        and_(db.UserToFraction.fraction_id == fraction_id, db.UserToFraction.user_id == user_id)
+    ).gino.scalar()
+    item = await db.select([*db.Item]).where(
+        and_(db.Item.available_for_sale.is_(True), or_(db.Item.fraction_id.is_(None),
+                                                       and_(db.Item.fraction_id == fraction_id, db.Item.reputation <= reputation)))
+    ).order_by(db.Item.id.asc()).offset(page - 1).limit(1).gino.first()
+    if not item:
+        await m.answer('На данный момент нет доступных для вас товаров :(')
+        return
+    count = await db.select([func.count(db.Item.id)]).where(
+        and_(db.Item.available_for_sale.is_(True), or_(db.Item.fraction_id.is_(None),
+                                                       and_(db.Item.fraction_id == fraction_id, db.Item.reputation <= reputation)))
+    ).gino.scalar()
+    keyboard = Keyboard(inline=True)
+    if page > 1:
+        keyboard.add(Callback('<-', {'item_shop_page': page - 1}), KeyboardButtonColor.PRIMARY)
+    if page < count:
+        keyboard.add(Callback('->', {'item_shop_page': page + 1}), KeyboardButtonColor.PRIMARY)
+    if len(keyboard.buttons[-1]) > 0:
+        keyboard.row()
+    keyboard.add(
+        Callback('Купить', {'buy_item': item.id}), KeyboardButtonColor.POSITIVE
+    )
+    reply = (f'Название: {item.name}\n'
+             f'Описание: {item.description}\n'
+             f'Группа: {await serialize_item_group(item.group_id)}\n'
+             f'Тип: {await serialize_item_type(item.type_id)}\n'
+             f'Количество использований: {item.count_use} раз\n'
+             f'Цена: {item.price}\n'
+             f'Эффект: {await serialize_item_bonus(item.bonus)}\n')
+    if isinstance(m, Message):
+        await m.answer(message=reply, keyboard=keyboard, attachment=item.photo)
+    else:
+        await m.edit_message(message=reply, keyboard=keyboard.get_json(), attachment=item.photo)
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'buy_item': int}))
+async def buy_item(m: MessageEvent):
+    item_id = m.payload['buy_item']
+    exist = await db.select([db.Item.id]).where(db.Item.id == item_id).gino.scalar()
+    if not exist:
+        await m.show_snackbar('Предмет удален из базы')
+        return
+    price, fraction_id, reputation = await db.select([db.Item.price, db.Item.fraction_id, db.Item.reputation]).where(db.Item.id == item_id).gino.first()
+    balance = await db.select([db.Form.balance]).where(db.Form.user_id == m.user_id).gino.scalar()
+    if balance < price:
+        await m.show_snackbar(f'❌ Недостаточный баланс! Не хватает {price - balance}')
+        return
+    if fraction_id:
+        user_fraction_id = await db.select([db.Form.fraction_id]).where(db.Form.user_id == m.user_id).gino.scalar()
+        fracton_name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
+        if user_fraction_id != fraction_id:
+            await m.show_snackbar(f'❌ Вы не состоите в нужной фракции ({fracton_name})')
+            return
+        user_reputation = await db.select([db.UserToFraction.reputation]).where(and_(db.UserToFraction.user_id == m.user_id, db.UserToFraction.fraction_id == fraction_id)).gino.scalar()
+        if user_reputation is None:
+            await m.show_snackbar(f'❌ У вас отсутствует репутация во фракции ({fracton_name})')
+            return
+        if user_reputation < reputation:
+            await m.show_snackbar(f'❌ Недостаточная репутация во фракции {fracton_name}')
+            return
+    form_id = await get_current_form_id(m.user_id)
+    await db.Form.update.values(balance=db.Form.balance - price).where(db.Form.id == form_id).gino.status()
+    expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
+    await db.ExpeditorToItems.create(expeditor_id=expeditor_id, item_id=item_id)
+    await m.show_snackbar('✅ Предмет успешно приобретен!\n'
+                          f'Баланс: {balance - price}')

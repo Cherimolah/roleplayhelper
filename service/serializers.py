@@ -561,8 +561,8 @@ async def info_item_group():
     return reply, keyboard
 
 
-async def serialize_item_group(item_id: int):
-    name = await db.select([db.ItemGroup.name]).where(db.ItemGroup.id == item_id).gino.scalar()
+async def serialize_item_group(group_id: int):
+    name = await db.select([db.ItemGroup.name]).where(db.ItemGroup.id == group_id).gino.scalar()
     return name
 
 
@@ -576,8 +576,8 @@ async def info_item_type():
     return reply, keyboard
 
 
-async def serialize_item_type(item_id: int):
-    name = await db.select([db.ItemType.name]).where(db.ItemType.id == item_id).gino.scalar()
+async def serialize_item_type(type_id: int):
+    name = await db.select([db.ItemType.name]).where(db.ItemType.id == type_id).gino.scalar()
     return name
 
 

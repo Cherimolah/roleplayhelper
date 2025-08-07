@@ -128,8 +128,8 @@ async def show_page_inventory(m: Message | MessageEvent, page: int, expeditor_id
     item = await db.Item.get(item_id)
     reply = (f'Название: {item.name}\n'
              f'Описание: {item.description}\n'
-             f'Группа: {await serialize_item_group(item_id)}\n'
-             f'Тип: {await serialize_item_type(item_id)}\n'
+             f'Группа: {await serialize_item_group(item.group_id)}\n'
+             f'Тип: {await serialize_item_type(item.type_id)}\n'
              f'Количество возможных использований: {item.count_use} раз\n'
              f'Количество доступных использований: {item.count_use - count_use} раз')
     if isinstance(m, Message):
