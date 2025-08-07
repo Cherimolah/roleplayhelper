@@ -40,6 +40,9 @@ async def select_edit_content(m: Message):
 @bot.on.private_message(PayloadMapRule({"edit_content": str}), AdminRule())
 async def select_action_with_cabins(m: Message):
     await db.User.update.values(editing_content=False).where(db.User.user_id == m.from_id).gino.status()
+    if m.payload['edit_content'] == 'Expeditor' and states.get(m.from_id).startswith(Admin.EDIT_CONTENT):
+        expeditor_id = int(states.get(m.from_id).split('*')[-1])
+        await db.Expeditor.update.values(is_confirmed=True).where(db.Expeditor.id == expeditor_id).gino.status()
     table_name = m.payload['edit_content']
     states.set(m.from_id, f"{Admin.SELECT_ACTION}_{table_name}")
     reply, keyboard = await page_content(table_name, page=1)
