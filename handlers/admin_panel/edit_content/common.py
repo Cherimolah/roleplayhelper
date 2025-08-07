@@ -42,11 +42,13 @@ async def select_action_with_cabins(m: Message):
     await db.User.update.values(editing_content=False).where(db.User.user_id == m.from_id).gino.status()
     if m.payload['edit_content'] == 'Expeditor' and states.get(m.from_id).startswith(Admin.EDIT_CONTENT):
         expeditor_id = int(states.get(m.from_id).split('*')[-1])
-        form_id = await db.select([db.Expeditor.form_id]).where(db.Expeditor.id == expeditor_id).gino.scalar()
-        user_id, name = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.id == form_id).gino.first()
-        user = (await bot.api.users.get(user_id))[0]
-        from handlers.requests.expeditors import confirm_expeditor
-        await confirm_expeditor(m, user, name, form_id, expeditor_id)
+        is_confirmed = await db.select([db.Expeditor.is_confirmed]).where(db.Expeditor.id == expeditor_id).gino.scalar()
+        if not is_confirmed:
+            form_id = await db.select([db.Expeditor.form_id]).where(db.Expeditor.id == expeditor_id).gino.scalar()
+            user_id, name = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.id == form_id).gino.first()
+            user = (await bot.api.users.get(user_id))[0]
+            from handlers.requests.expeditors import confirm_expeditor
+            await confirm_expeditor(m, user, name, form_id, expeditor_id)
     table_name = m.payload['edit_content']
     states.set(m.from_id, f"{Admin.SELECT_ACTION}_{table_name}")
     reply, keyboard = await page_content(table_name, page=1)

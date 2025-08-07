@@ -141,9 +141,9 @@ async def show_expeditor(expeditor_id: int, from_user_id) -> str:
         summary = value + profession_bonus + race_bonus
         description = ''
         if profession_bonus:
-            description += f' + {profession_bonus} от профессии'
+            description += f' {"+" if profession_bonus >= 0 else "-"} {abs(profession_bonus)} от профессии'
         if race_bonus:
-            description += f' + {race_bonus} от расы'
+            description += f' {"+" if race_bonus >= 0 else "-"} {abs(race_bonus)} от расы'
         if active_items:
             for active_item_id in active_items:
                 item_name, item_bonus = await db.select([db.Item.name, db.Item.bonus]).where(db.Item.id == active_item_id).gino.first()
