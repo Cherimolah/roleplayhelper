@@ -19,14 +19,20 @@ async def confirm_expeditor(m: MessageEvent | Message, user: UsersUserFull, name
     else:
         admin = (await bot.api.users.get(m.from_id))[0]
     for admin_id, message_id in data:
-        await bot.api.messages.send(message=f'✅ Карта экспедитора игрока [id{user.id}|{name} / {user.first_name} {user.last_name}] принята администратором '
-                                            f'[id{admin_id}|{admin.first_name} {admin.last_name}]',
-                                    forward=MessagesForward(
-                                        peer_id=admin_id,
-                                        conversation_message_ids=[message_id],
-                                        is_reply=True
-                                    ).json(),
-                                    peer_id=admin_id)
+        try:
+            await bot.api.messages.send(message=f'✅ Карта экспедитора игрока [id{user.id}|{name} / {user.first_name} {user.last_name}] принята администратором '
+                                                f'[id{admin_id}|{admin.first_name} {admin.last_name}]',
+                                        forward=MessagesForward(
+                                            peer_id=admin_id,
+                                            conversation_message_ids=[message_id],
+                                            is_reply=True
+                                        ).json(),
+                                        peer_id=admin_id)
+        except:
+            await bot.api.messages.send(
+                message=f'✅ Карта экспедитора игрока [id{user.id}|{name} / {user.first_name} {user.last_name}] принята администратором '
+                        f'[id{admin_id}|{admin.first_name} {admin.last_name}]',
+                peer_id=admin_id)
     if isinstance(m, MessageEvent):
         await m.show_snackbar('Карта экспедитора успешно принята')
     await db.ExpeditorRequest.delete.where(db.ExpeditorRequest.expeditor_id == expeditor_id).gino.status()
