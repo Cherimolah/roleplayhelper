@@ -55,15 +55,18 @@ async def decline_expeditor_request(m: MessageEvent, user: UsersUserFull, name: 
     await db.Expeditor.delete.where(db.Expeditor.id == expeditor_id).gino.status()
     admin = (await bot.api.users.get(m.user_id))[0]
     for admin_id, message_id in data:
-        await bot.api.messages.send(
-            message=f'❌ Карта экспедитора игрока [id{user.id}|{name} / {user.first_name} {user.last_name}] отклонена администратором '
-                    f'[id{admin_id}|{admin.first_name} {admin.last_name}]',
-            forward=MessagesForward(
-                peer_id=admin_id,
-                conversation_message_ids=[message_id],
-                is_reply=True
-            ).json(),
-            peer_id=admin_id)
+        try:
+            await bot.api.messages.send(
+                message=f'❌ Карта экспедитора игрока [id{user.id}|{name} / {user.first_name} {user.last_name}] отклонена администратором '
+                        f'[id{admin_id}|{admin.first_name} {admin.last_name}]',
+                forward=MessagesForward(
+                    peer_id=admin_id,
+                    conversation_message_ids=[message_id],
+                    is_reply=True
+                ).json(),
+                peer_id=admin_id)
+        except:
+            pass
     await m.show_snackbar('Карта экспедитора отклонена')
     await db.ExpeditorRequest.delete.where(db.ExpeditorRequest.expeditor_id == expeditor_id).gino.status()
     await bot.api.messages.send(message='К сожалению, ваша карта экспедитора была отклонена\n'
