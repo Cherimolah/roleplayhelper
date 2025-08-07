@@ -66,7 +66,10 @@ async def decline_expeditor_request(m: MessageEvent, user: UsersUserFull, name: 
                 ).json(),
                 peer_id=admin_id)
         except:
-            pass
+            await bot.api.messages.send(
+                message=f'❌ Карта экспедитора игрока [id{user.id}|{name} / {user.first_name} {user.last_name}] отклонена администратором '
+                        f'[id{admin_id}|{admin.first_name} {admin.last_name}]',
+                peer_id=admin_id)
     await m.show_snackbar('Карта экспедитора отклонена')
     await db.ExpeditorRequest.delete.where(db.ExpeditorRequest.expeditor_id == expeditor_id).gino.status()
     await bot.api.messages.send(message='К сожалению, ваша карта экспедитора была отклонена\n'
