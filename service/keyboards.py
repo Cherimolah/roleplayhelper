@@ -1,6 +1,7 @@
 from vkbottle import Keyboard, Text, KeyboardButtonColor, Callback
 
 from service.db_engine import db
+from service.utils import get_current_form_id
 
 another_profession = Keyboard().add(Text("Другая", {"profession": "another_profession"}), KeyboardButtonColor.NEGATIVE)
 orientations = Keyboard().add(Text("Гетеро", {"orientation": 0}), KeyboardButtonColor.PRIMARY).row().add(
@@ -79,6 +80,8 @@ manage_admins = Keyboard().add(
 )
 
 manage_content = Keyboard().add(
+    Text('Карты экспедитора', {'edit_content': 'Expeditor'}), KeyboardButtonColor.SECONDARY
+).row().add(
     Text("Товары", {"edit_content": "Shop"}), KeyboardButtonColor.PRIMARY
 ).add(
     Text("Профессии", {"edit_content": "Profession"}), KeyboardButtonColor.PRIMARY
@@ -137,7 +140,21 @@ async def generate_form_activity(user_id):
             Text('Перезаполнить вопросы дочерей',
                  {'form': 'clear_daughter_params'}), KeyboardButtonColor.PRIMARY
         )
-    form_activity.row().add(
+    if len(form_activity.buttons[-1]) > 0:
+        form_activity.row()
+    form_id = await get_current_form_id(user_id)
+    expeditor = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
+    if not expeditor:
+        form_activity.add(
+            Text('Заполнить карту экспедитора', {'form': 'new_expeditor'}), KeyboardButtonColor.POSITIVE
+        )
+    else:
+        form_activity.add(
+            Text('Карта экспедитора', {'form': 'my_expeditor'}), KeyboardButtonColor.POSITIVE
+        )
+    if len(form_activity.buttons[-1]) > 0:
+        form_activity.row()
+    form_activity.add(
         Text("Назад", {"menu": "home"}), KeyboardButtonColor.NEGATIVE
     )
     return form_activity
@@ -329,4 +346,12 @@ item_type = Keyboard().add(
     Text('Доступно в магазине', {"item_type": 1}), KeyboardButtonColor.POSITIVE
 ).row().add(
     Text('Только в виде награды', {"item_type": 0}), KeyboardButtonColor.NEGATIVE
+)
+
+sex_types = Keyboard().add(
+    Text('Мужской', {'sex': 1}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Женский', {'sex': 2}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Другой', {'sex': 3}), KeyboardButtonColor.PRIMARY
 )

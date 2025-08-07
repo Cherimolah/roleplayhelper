@@ -1,6 +1,7 @@
 from typing import Optional, Union, List, Dict, Callable
 import datetime
 import json
+from collections import Counter
 
 from vkbottle import Keyboard, Text, KeyboardButtonColor, Callback
 from sqlalchemy import func, and_
@@ -66,6 +67,12 @@ fraction_levels = {
     -89: "Политический соперник",
     -99: "Враг фракции",
     -100: "Еретик и террорист"
+}
+
+sex_types = {
+    1: 'Мужской',
+    2: 'Женский',
+    3: 'Другое'
 }
 
 
@@ -714,12 +721,165 @@ async def serialize_race_bonus(race_id: int):
     raw = await db.select([db.RaceBonus.attribute_id, db.RaceBonus.bonus]).where(db.RaceBonus.race_id == race_id).gino.all()
     if not raw:
         return 'Без бонусов'
-    reply = '\n\n'
+    reply = ''
     for i, data in enumerate(raw):
         attribute_id, bonus = data
         attribute = await db.select([db.Attribute.name]).where(db.Attribute.id == attribute_id).gino.scalar()
-        reply += f'{i + 1}. {attribute}: {"+" if bonus > 0 else ""}{bonus}\n'
+        reply += f'{"+" if bonus > 0 else ""}{bonus} к {attribute}, '
+    return reply[:-2]
+
+
+async def info_expeditor_name() -> tuple[str, Keyboard | None]:
+    return ('Нельзя установить имя для Карты Экспедитора. Оно подтягивается автоматически из анкеты пользователя\n\n'
+            'Отправьте любое сообщение, чтобы выйти из режима редактирвоания'), None
+
+
+async def serialize_expeditor_name(expeditor_id: int) -> str:
+    form_id = await db.select([db.Expeditor.form_id]).where(db.Expeditor.id == expeditor_id).gino.scalar()
+    name, user_id = await db.select([db.Form.name, db.Form.user_id]).where(db.Form.id == form_id).gino.first()
+    user = (await bot.api.users.get(user_id))[0]
+    return f'[id{user_id}|{name} / {user.first_name} {user.last_name}]'
+
+
+async def info_expeditor_sex() -> tuple[str, Keyboard | None]:
+    return 'Выберите пол:', keyboards.sex_types
+
+
+async def serialize_expeditor_sex(value: int) -> str:
+    return sex_types[value]
+
+
+async def info_expeditor_race() -> tuple[str, Keyboard | None]:
+    reply = 'Выберите расу:\n\n'
+    races = [x[0] for x in await db.select([db.Race.name]).order_by(db.Race.id.asc()).gino.all()]
+    for i, name in enumerate(races):
+        reply += f'{i + 1}. {name}\n'
+    return reply, None
+
+
+async def serialize_expeditor_race(value: int) -> str:
+    return await db.select([db.Race.name]).where(db.Race.id == value).gino.scalar()
+
+
+async def info_expeditor_pregnant() -> tuple[str, Keyboard | None]:
+    keyboard = Keyboard().add(
+        Text('Удалить оплодотворение', {'delete_expeditor_pregnant': True}), KeyboardButtonColor.NEGATIVE
+    )
+    return 'Отправьте текст значения оплодотворения', keyboard
+
+
+async def serialize_expeditor_pregnant(value: str | None) -> str:
+    if not value:
+        return 'Отстутствует'
+    return value
+
+
+async def info_expeditor_attributes(expeditor_id: int) -> tuple[str, Keyboard | None]:
+    reply = 'Текущие показания характеристик:\n\n'
+    reply += await serialize_expeditor_attributes(expeditor_id)
+    data = await db.select([db.ExpeditorToAttributes.attribute_id, db.ExpeditorToAttributes.value]).where(db.ExpeditorToAttributes.expeditor_id == expeditor_id).order_by(db.ExpeditorToAttributes.attribute_id.asc()).gino.all()
+    keyboard = Keyboard(inline=True)
+    for attribute_id, value in data:
+        attribute_name = await db.select([db.Attribute.name]).where(db.Attribute.id == attribute_id).gino.scalar()
+        keyboard.add(
+            Callback(attribute_name, {'expeditor_id': expeditor_id, 'attribute_id': attribute_id, 'action': 'select_attribute'}), KeyboardButtonColor.PRIMARY
+        )
+        if len(keyboard.buttons[-1]) >= 2:
+            keyboard.row()
+    if len(keyboard.buttons[-1]) > 0:
+        keyboard.row()
+    keyboard.add(Text('Сохранить', {'action': 'save_attribute'}), KeyboardButtonColor.POSITIVE)
+    return reply, keyboard
+
+
+async def serialize_expeditor_attributes(expeditor_id: int) -> str:
+    data = await db.select([db.ExpeditorToAttributes.attribute_id, db.ExpeditorToAttributes.value]).where(db.ExpeditorToAttributes.expeditor_id == expeditor_id).order_by(db.ExpeditorToAttributes.attribute_id.asc()).gino.all()
+    reply = '\n'
+    for attribute_id, value in data:
+        attribute_name = await db.select([db.Attribute.name]).where(db.Attribute.id == attribute_id).gino.scalar()
+        reply += f'{attribute_name}: {value}\n'
+    return reply[:-1]
+
+
+async def info_expeditor_debuffs(expeditor_id: int) -> tuple[str, Keyboard | None]:
+    reply = 'Текущие активные дебафы:\n\n'
+    reply += await serialize_expeditor_debuffs(expeditor_id)
+    keyboard = Keyboard(inline=True).add(
+        Callback('Добавить дебаф', {'expeditor_id': expeditor_id, 'action': 'add_debuff'}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Callback('Удалить дебаф', {'expeditor_id': expeditor_id, 'action': 'delete_debuff'}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text('Сохранить', {'action': 'save_debuffs'}), KeyboardButtonColor.POSITIVE
+    )
+    return reply, keyboard
+
+
+async def serialize_expeditor_debuffs(expeditor_id: int) -> str:
+    reply = '\n'
+    debufs = [x[0] for x in await db.select([db.ExpeditorToDebuffs.debuff_id]).where(
+        db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()]
+    if not debufs:
+        reply += 'Дебафы отсутствуют'
+    else:
+        injuries = await db.select([*db.StateDebuff]).where(
+            and_(db.StateDebuff.id.in_(debufs), db.StateDebuff.type_id == 1)).gino.all()
+        if injuries:
+            reply += 'Активные травмы:\n'
+            for i, debuff_id in enumerate(debufs):
+                debuff = await db.select([*db.StateDebuff]).where(db.StateDebuff.id == debuff_id).gino.first()
+                if debuff.type_id == 1:
+                    attribute = await db.select([db.Attribute.name]).where(
+                        db.Attribute.id == debuff.attribute_id).gino.scalar()
+                    reply += f'{i + 1}. {debuff.name} ({"+" if debuff.penalty >= 0 else ""}{debuff.penalty} к {attribute})\n'
+        else:
+            reply += 'Травмы отсутствуют\n'
+        madness = await db.select([*db.StateDebuff]).where(
+            and_(db.StateDebuff.id.in_(debufs), db.StateDebuff.type_id == 2)).gino.all()
+        if madness:
+            reply += 'Активные безумства:\n'
+            for i, debuff_id in enumerate(debufs):
+                debuff = await db.select([*db.StateDebuff]).where(db.StateDebuff.id == debuff_id).gino.scalar()
+                if debuff.type_id == 2:
+                    attribute = await db.select([db.Attribute.name]).where(
+                        db.Attribute.id == debuff.attribute_id).gino.scalar()
+                    reply += f'{i + 1}. {debuff.name} ({"+" if debuff.penalty >= 0 else ""}{debuff.penalty} к {attribute})\n'
+        else:
+            reply += 'Безумства отсутствуют'
     return reply
+
+
+async def info_expeditor_items(expeditor_id: int) -> tuple[str, Keyboard | None]:
+    reply = 'Текущие предметы в инвентаре:\n\n'
+    reply += await serialize_expeditor_items(expeditor_id)
+    keyboard = Keyboard(inline=True).add(
+        Callback('Добавить предмет', {'expeditor_id': expeditor_id, 'action': 'add_item'}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Callback('Удалить предмет', {'expeditor_id': expeditor_id, 'action': 'delete_item'}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text('Сохранить', {'action': 'save_items'}), KeyboardButtonColor.POSITIVE
+    )
+    return reply, keyboard
+
+
+async def serialize_expeditor_items(expeditor_id: int) -> str:
+    reply = '\n'
+    inventory = [x[0] for x in await db.select([db.ExpeditorToItems.item_id]).where(
+        db.ExpeditorToItems.expeditor_id == expeditor_id).gino.all()]
+    if inventory:
+        counts = dict(Counter(inventory))
+        reply += 'Предметы в инвентаре:\n'
+        item_ids = list(set(inventory))
+        for i, item in enumerate(item_ids):
+            name = await db.select([db.Item.name]).where(db.Item.id == item).gino.scalar()
+            reply += f'{name}'
+            if counts[item] > 1:
+                reply += f' X{counts[item]}'
+            reply += ', '
+        reply = reply[:-2]
+    else:
+        reply += 'Инвентарь пуст'
+    return reply
+
 
 fields_content: Dict[str, Dict[str, List[Field]]] = {
     "Cabins": {
@@ -870,6 +1030,18 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
         'fields': [
             Field('Название', Admin.RACE_NAME),
             RelatedTable('Бонус к характеристикам', Admin.RACE_BONUS, info_race_bonus, serialize_race_bonus)
+        ]
+    },
+    'Expeditor': {
+        'name': 'Карты экспедитора',
+        'fields': [
+            RelatedTable('Имя', Admin.EXPEDITOR_NAME, info_expeditor_name, serialize_expeditor_name),
+            Field('Пол', Admin.EXPEDITOR_SEX, info_expeditor_sex, serialize_expeditor_sex),
+            Field('Раса', Admin.EXPEDITOR_RACE, info_expeditor_race, serialize_expeditor_race),
+            Field('Оплодотворение', Admin.EXPEDITOR_PREGNANT, info_expeditor_pregnant, serialize_expeditor_pregnant),
+            RelatedTable('Характеристики', Admin.EXPEDITOR_ATTRIBUTES, info_expeditor_attributes, serialize_expeditor_attributes),
+            RelatedTable('Состояние (дебафы)', Admin.EXPEDITOR_DEBUFFS, info_expeditor_debuffs, serialize_expeditor_debuffs),
+            RelatedTable('Инвентарь', Admin.EXPEDITOR_ITEMS, info_expeditor_items, serialize_expeditor_items)
         ]
     }
 }

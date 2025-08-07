@@ -12,13 +12,13 @@ from vkbottle import Keyboard, Callback, KeyboardButtonColor
 
 from service.db_engine import db
 from loader import bot, photo_message_uploader, states
-from service.serializers import fields, Field, RelatedTable
+from service.serializers import fields, Field, RelatedTable, sex_types
 import messages
 from bot_extended import AioHTTPClientExtended
 import service.states
 import service.keyboards as keyboards
-from config import OWNER
-from service.serializers import fields_content, serialize_target_reward, parse_orientation, fraction_levels, parse_cooldown, FormatDataException
+from config import OWNER, ADMINS
+from service.serializers import fields_content, serialize_target_reward, parse_orientation, fraction_levels, parse_cooldown, FormatDataException, serialize_expeditor_debuffs, serialize_expeditor_items
 
 mention_regex = re.compile(r"\[(?P<type>id|club|public)(?P<id>\d*)\|(?P<text>.+)\]")
 link_regex = re.compile(r"https:/(?P<type>/|/m.)vk.com/(?P<screen_name>\w*)")
@@ -100,6 +100,77 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
         if admin_request:
             reply += f'Базовое либидо: {form.libido_bonus}\nБазовое подчинение: {form.subordination_bonus}'
     return reply, form.photo
+
+
+async def show_expeditor(expeditor_id: int, from_user_id) -> str:
+    expeditor = await db.Expeditor.get(expeditor_id)
+    form = await db.Form.get(expeditor.form_id)
+    user_id = form.user_id
+    user = (await bot.api.users.get(user_id))[0]
+    race = await db.select([db.Race.name]).where(db.Race.id == expeditor.race_id).gino.scalar()
+    profession = await db.select([db.Profession.name]).where(db.Profession.id == form.profession).gino.scalar()
+    fraction = await db.select([db.Fraction.name]).where(db.Fraction.id == form.fraction_id).gino.scalar()
+    rep_fraction, reputation = await get_reputation(from_user_id, user_id)
+    reply = (f'Карта экспедитора пользователя [id{user_id}|{user.first_name} {user.last_name}]:\n\n'
+             f'Имя персонажа: {form.name}\n'
+             f'Возраст: {form.age} Земных лет\n'
+             f'Пол: {sex_types[expeditor.sex]}\n'
+             f'Раса: {race}\n'
+             f'Специальность: {profession}\n'
+             f'Фракция: {fraction}\n'
+             f'Репутация: {reputation} ({rep_fraction})\n\n')
+    attributes = await db.select([db.ExpeditorToAttributes.attribute_id, db.ExpeditorToAttributes.value]).where(db.ExpeditorToAttributes.expeditor_id == expeditor_id).gino.all()
+    profession_bonuses = await db.select([db.ProfessionBonus.attribute_id, db.ProfessionBonus.bonus]).where(db.ProfessionBonus.profession_id == form.profession).gino.all()
+    race_bonuses = await db.select([db.RaceBonus.attribute_id, db.RaceBonus.bonus]).where(db.RaceBonus.race_id == expeditor.race_id).gino.all()
+    active_items = [x[0] for x in await db.select([db.ActiveItemToExpeditor.item_id]).where(
+        db.ActiveItemToExpeditor.expeditor_id == expeditor_id).gino.all()]
+    active_debuffs = [x[0] for x in await db.select([db.ExpeditorToDebuffs.debuff_id]).where(
+        db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()]
+    for attribute_id, value in attributes:
+        attribute = await db.select([db.Attribute.name]).where(db.Attribute.id == attribute_id).gino.scalar()
+        profession_bonus = 0
+        for at_id, bonus in profession_bonuses:
+            if at_id == attribute_id:
+                profession_bonus = bonus
+                break
+        race_bonus = 0
+        for at_id, bonus in race_bonuses:
+            if at_id == attribute_id:
+                race_bonus = bonus
+                break
+        summary = value + profession_bonus + race_bonus
+        description = ''
+        if profession_bonus:
+            description += f' + {profession_bonus} от профессии'
+        if race_bonus:
+            description += f' + {race_bonus} от расы'
+        if active_items:
+            for active_item_id in active_items:
+                item_name, item_bonus = await db.select([db.Item.name, db.Item.bonus]).where(db.Item.id == active_item_id).gino.first()
+                for bonus in item_bonus:
+                    if bonus.get('type') == 'attribute' and bonus.get('attribute_id') == attribute_id:
+                        description += f' {"+" if bonus >= 0 else "-"} {abs(bonus["bonus"])} от «{item_name}»'
+                        summary += bonus['bonus']
+                        break
+        if active_debuffs:
+            for active_debuf_id in active_debuffs:
+                attribute_type = await db.select([db.StateDebuff.attribute_id]).where(db.StateDebuff.id == active_debuf_id).gino.scalar()
+                if attribute_id == attribute_type:
+                    debuff_name, debuff_penalty = await db.select([db.StateDebuff.name, db.StateDebuff.penalty]).where(
+                        db.StateDebuff.id == active_debuf_id).gino.first()
+                    description += f' {"+" if debuff_penalty >= 0 else "-"} {abs(debuff_penalty)} от «{debuff_name}»'
+                    summary += debuff_penalty
+        reply += f'{attribute}: {summary} ({value} базовое{description})\n'
+    reply += await serialize_expeditor_debuffs(expeditor_id)
+    reply += '\n\n'
+    reply += (f'Либидо: {form.libido_level}\n'
+              f'Подчинение: {form.subordination_level}\n'
+              f'Оплодотворение: {expeditor.pregnant if expeditor.pregnant else 'Отсутствует'}\n\n')
+    reply += await serialize_expeditor_items(expeditor_id)
+    reply += '\n\n'
+    reply += (f'Количество доступных действий: {expeditor.count_actions}\n'
+              f'Текущий номер действия: {expeditor.action_number}')
+    return reply
 
 
 async def create_mention(user_id: int):
@@ -661,3 +732,10 @@ async def update_daughter_levels(user_id: int):
         await db.Form.update.values(subordination_level=sub_level, libido_level=lib_level).where(
             db.Form.user_id == user_id).gino.status()
         await asyncio.sleep(15)
+
+
+async def get_admin_ids():
+    admins = set([OWNER] + ADMINS)
+    admins_db = {x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()}
+    admins = list(admins | admins_db)
+    return admins

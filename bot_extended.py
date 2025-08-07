@@ -1,5 +1,6 @@
 import enum
 import json
+import traceback
 import typing
 from typing import Optional, Union, List
 from abc import ABC
@@ -137,8 +138,11 @@ class MessagesCategoryExtended(MessagesCategory):
             cmids: typing.Optional[typing.List[int]] = None,
             **kwargs
     ) -> typing.Dict[str, int]:
-        return await super().delete(message_ids=message_ids, spam=spam, group_id=group_id,
-                                    delete_for_all=delete_for_all, peer_id=peer_id, cmids=cmids, **kwargs)
+        try:
+            return await super().delete(message_ids=message_ids, spam=spam, group_id=group_id,
+                                        delete_for_all=delete_for_all, peer_id=peer_id, cmids=cmids, **kwargs)
+        except:
+            pass
 
 
 class UsersCategoryExtended(UsersCategory, ABC):

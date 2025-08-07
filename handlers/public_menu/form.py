@@ -54,6 +54,7 @@ async def load_forms_page(page) -> Tuple[str, Keyboard]:
 @bot.on.private_message(PayloadRule({"menu": "form"}), StateRule(Menu.MAIN))
 @bot.on.private_message(StateRule(Menu.EDIT_FORM), PayloadRule({"form_edit": "back"}))
 @bot.on.private_message(PayloadRule({"cabins_menu": "back"}), StateRule(Menu.CABINS_MENU))
+@bot.on.private_message(PayloadRule({'form': 'decline_new_expeditor'}), StateRule(Menu.CONFIRM_NEW_EXPEDITOR))
 async def send_form(m: Message):
     form, photo = await loads_form(m.from_id, m.from_id)
     states.set(m.from_id, Menu.SHOW_FORM)

@@ -65,6 +65,13 @@ async def select_delete_quest(m: Message):
 async def delete_quest(m: Message, value: int):
     item_id = await db.select([db.StateDebuff.id]).order_by(db.StateDebuff.id.asc()).offset(value - 1).limit(1).gino.scalar()
     await db.StateDebuff.delete.where(db.StateDebuff.id == item_id).gino.status()
+    items = await db.select([db.Item.id, db.Item.bonus]).gino.all()
+    for item_id, item_bonus in items:
+        for i, bonus in enumerate(item_bonus):
+            if bonus.get('type') == 'state' and bonus.get('action') in ('add', 'delete') and bonus.get('debuff_id') == item_bonus:
+                item_bonus.pop(i)
+                await db.Item.update.values(bonus=item_bonus).where(db.Item.id == item_id).gino.status()
+                break
     states.set(m.peer_id, f"{Admin.SELECT_ACTION}_StateDebuff")
     await m.answer("Дебаф успешно удален", keyboard=keyboards.gen_type_change_content("StateDebuff"))
     await send_content_page(m, "StateDebuff", 1)

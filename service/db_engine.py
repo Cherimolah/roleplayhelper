@@ -58,6 +58,7 @@ class Database(Gino):
             notification_enabled = Column(Boolean, default=True)
             editing_content = Column(Boolean, default=False)
             last_activity = Column(TIMESTAMP, default=datetime.datetime.now)
+            creating_expeditor = Column(Boolean, default=False)
 
         self.User = User
 
@@ -482,6 +483,69 @@ class Database(Gino):
             bonus = Column(Integer, default=0)
 
         self.RaceBonus = RaceBonus
+
+        class Expeditor(self.Model):
+            __tablename__ = 'expeditors'
+
+            id = Column(Integer, primary_key=True)
+            name = Column(Text)
+            sex = Column(Integer)
+            race_id = Column(Integer, ForeignKey('races.id', ondelete='SET NULL'))
+            pregnant = Column(Text)
+            count_actions = Column(Integer, default=5)
+            action_number = Column(Integer, default=1)
+            is_confirmed = Column(Boolean, default=False)
+            form_id = Column(Integer, ForeignKey('forms.id', ondelete='CASCADE'))
+
+        self.Expeditor = Expeditor
+
+        class ExpeditorToAttributes(self.Model):
+            __tablename__ = 'expeditor_attributes'
+
+            id = Column(Integer, primary_key=True)
+            expeditor_id = Column(Integer, ForeignKey('expeditors.id', ondelete='CASCADE'))
+            attribute_id = Column(Integer, ForeignKey('attributes.id', ondelete='CASCADE'))
+            value = Column(Integer)
+
+        self.ExpeditorToAttributes = ExpeditorToAttributes
+
+        class ExpeditorToItems(self.Model):
+            __tablename__ = 'expeditor_items'
+
+            id = Column(Integer, primary_key=True)
+            expeditor_id = Column(Integer, ForeignKey('expeditors.id', ondelete='CASCADE'))
+            item_id = Column(Integer, ForeignKey('items.id', ondelete='CASCADE'))
+            count_use = Column(Integer, default=0)
+
+        self.ExpeditorToItems = ExpeditorToItems
+
+        class ExpeditorToDebuffs(self.Model):
+            __tablename__ = 'expeditor_debuffs'
+
+            id = Column(Integer, primary_key=True)
+            expeditor_id = Column(Integer, ForeignKey('expeditors.id', ondelete='CASCADE'))
+            debuff_id = Column(Integer, ForeignKey('state_debuffs.id', ondelete='CASCADE'))
+
+        self.ExpeditorToDebuffs = ExpeditorToDebuffs
+
+        class ExpeditorRequest(self.Model):
+            __tablename__ = 'expeditor_requests'
+
+            id = Column(Integer, primary_key=True)
+            expeditor_id = Column(Integer, ForeignKey('expeditors.id', ondelete='CASCADE'))
+            admin_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'))
+            message_id = Column(Integer)
+
+        self.ExpeditorRequest = ExpeditorRequest
+
+        class ActiveItemToExpeditor(self.Model):
+            __tablename__ = 'active_item_to_expeditors'
+
+            id = Column(Integer, primary_key=True)
+            expeditor_id = Column(Integer, ForeignKey('expeditors.id', ondelete='CASCADE'))
+            item_id = Column(Integer, ForeignKey('items.id', ondelete='CASCADE'))
+
+        self.ActiveItemToExpeditor = ActiveItemToExpeditor
 
     async def connect(self):
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")

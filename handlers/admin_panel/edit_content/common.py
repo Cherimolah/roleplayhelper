@@ -30,6 +30,7 @@ from service.db_engine import db
 @bot.on.private_message(PayloadRule({"Item": "back"}), AdminRule())
 @bot.on.private_message(PayloadRule({"StateDebuff": "back"}), AdminRule())
 @bot.on.private_message(PayloadRule({"Race": "back"}), AdminRule())
+@bot.on.private_message(PayloadRule({"Expeditor": "back"}), AdminRule())
 async def select_edit_content(m: Message):
     states.set(m.from_id, Admin.SELECT_EDIT_CONTENT)
     await m.answer(messages.content, keyboard=keyboards.manage_content)
@@ -108,6 +109,15 @@ async def delete_cabin_message_event(m: MessageEvent, content_type: str, table):
             target_ids.remove(item_id)
             await db.DaughterQuest.update.values(target_ids=target_ids).where(
                 db.DaughterQuest.id == quest_id).gino.status()
+    if table.__tablename__ == 'items':
+        items = await db.select([db.Item.id, db.Item.bonus]).gino.all()
+        for item_id, item_bonus in items:
+            for i, bonus in enumerate(item_bonus):
+                if bonus.get('type') == 'state' and bonus.get('action') in ('add', 'delete') and bonus.get(
+                        'debuff_id') == item_bonus:
+                    item_bonus.pop(i)
+                    await db.Item.update.values(bonus=item_bonus).where(db.Item.id == item_id).gino.status()
+                    break
     await table.delete.where(table.id == item_id).gino.status()
     await m.edit_message(f"{fields_content[content_type]['name']} {item_name} успешно удалён")
 

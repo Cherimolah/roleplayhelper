@@ -29,6 +29,11 @@ class DaughterQuestions:
     Q8 = "q8"
 
 
+class ExpeditorQuestions:
+    sex = 'sex'
+    race = 'race'
+
+
 class Menu:
     MAIN = "main_menu"
     SHOW_FORM = "show_form"
@@ -62,6 +67,7 @@ class Menu:
     SHOP_CABINS = "shop_cabins"
     CABINS_MENU = "cabins_menu"
     DAUGHTER_QUEST_MENU = 'daughter_quest_menu'
+    CONFIRM_NEW_EXPEDITOR = "confirm_new_editor"
 
 
 class Admin:
@@ -200,3 +206,17 @@ class Admin:
     RACE_NAME = 'race_name'
     RACE_BONUS = 'race_bonus'
     RACE_DELETE = 'race_delete'
+    EXPEDITOR_NAME = 'expeditor_name'
+    EXPEDITOR_SEX = 'expeditor_sex'
+    EXPEDITOR_RACE = 'expeditor_race'
+    EXPEDITOR_PREGNANT = 'expeditor_pregnant'
+    EXPEDITOR_ATTRIBUTES = 'expeditor_attributes'
+    EXPEDITOR_DEBUFFS = 'expeditor_debuffs'
+    EXPEDITOR_SELECT_TYPE_DEBUFF = 'expeditor_select_type_debuff'
+    EXPEDITOR_ADD_DEBUFF = 'expeditor_add_debuff'
+    EXPEDITOR_DELETE_DEBUFF = 'expeditor_delete_debuff'
+    EXPEDITOR_ITEMS = 'expeditor_items'
+    EXPEDITOR_SELECT_TYPE_ITEMS = 'expeditor_select_type_items'
+    EXPEDITOR_ADD_ITEMS = 'expeditor_add_items'
+    EXPEDITOR_DELETE_ITEMS = 'expeditor_delete_items'
+    EXPEDITOR_DELETE = 'expeditor_delete'

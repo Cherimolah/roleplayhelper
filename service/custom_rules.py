@@ -4,7 +4,7 @@ from typing import Union, Optional
 from vkbottle.dispatch.rules import ABCRule
 from vkbottle.bot import Message, MessageEvent
 
-from loader import states
+from loader import states, bot
 from service.db_engine import db
 import messages
 from service.states import Menu, Admin
@@ -201,9 +201,27 @@ class ChatAction(ABCRule[Message], ABC):
     async def check(self, m: Message):
         if m.chat_id in CHAT_IDS and f"{{{self.command}}}" in m.text.lower():
             return True
+        return False
 
 
 class DaughterRule(ABCRule[Message], ABC):
     async def check(self, event: Message):
         status = await db.select([db.Form.status]).where(db.Form.user_id == event.from_id).gino.scalar()
         return status == 2
+
+
+class ExpeditorRequestAvailable(ABCRule[MessageEvent], ABC):
+    async def check(self, m: MessageEvent):
+        if not m.payload.get('request_expeditor_id'):
+            return False
+        expeditor_id = await db.select([db.ExpeditorRequest.expeditor_id]).where(
+            db.ExpeditorRequest.id == m.payload['request_expeditor_id']).gino.scalar()
+        if not expeditor_id:
+            await m.show_snackbar(
+                f'Запрос на Карту экспедитора устарел')
+            return False
+        form_id = await db.select([db.Expeditor.form_id]).where(db.Expeditor.id == expeditor_id).gino.scalar()
+        user_id, name = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.id == form_id).gino.first()
+        user = (await bot.api.users.get(user_id))[0]
+        return {'user': user, 'name': name, 'form_id': form_id, 'expeditor_id': expeditor_id}
+

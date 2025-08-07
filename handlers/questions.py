@@ -64,7 +64,7 @@ async def start(m: Message):
         await db.User.update.values(creating_form=True).where(db.User.user_id == m.from_id).gino.status()
         await m.answer(messages.hello, keyboard=Keyboard())
     else:
-        creating_form, editing_form = await db.select([db.User.creating_form, db.User.editing_form]).where(db.User.user_id == m.from_id).gino.first()
+        creating_form, editing_form, creating_expeditor = await db.select([db.User.creating_form, db.User.editing_form, db.User.creating_expeditor]).where(db.User.user_id == m.from_id).gino.first()
         if creating_form:
             await m.answer("Вы сейчас находитесь в режиме создания анкеты, пожалуйста, "
                                            "заполните её до конца")
@@ -73,8 +73,13 @@ async def start(m: Message):
             await m.answer("Вы сейчас находитесь в режиме редактирования анкеты, пожалуйста, "
                            "заполните её до конца или отклоните изменения")
             return
+        if creating_expeditor:
+            await m.answer('Вы сейчас находитесь в режиме создания Карты экспедитора!\n'
+                           'Заполните сначала её до конца')
+            return
         states.set(m.from_id, Menu.MAIN)
         await m.answer("Главное меню", keyboard=await keyboards.main_menu(m.from_id))
+    await db.User.update.values(editing_content=False).where(db.User.user_id == m.from_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Registration.PERSONAL_NAME), LimitSymbols(50))

@@ -31,8 +31,7 @@ async def accept_form(m: MessageEvent):
     await db.Form.update.values(is_request=False).where(db.Form.id == form_id).gino.status()
     state = await db.select([db.User.state]).where(db.User.user_id == user_id).gino.scalar()
     if state == "wait":
-        await bot.api.messages.send(peer_id=32650977, message="sggs")
-        await db.User.update.values(state=Menu.MAIN, creating_form=True).where(db.User.user_id == user_id).gino.status()
+        await db.User.update.values(state=Menu.MAIN, creating_form=False).where(db.User.user_id == user_id).gino.status()
         await bot.api.messages.send(peer_ids=user_id, message=messages.form_accepted, keyboard=await keyboards.main_menu(user_id))
     else:
         await db.User.update.values(editing_form=False).where(db.User.user_id == user_id).gino.status()

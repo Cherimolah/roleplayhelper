@@ -77,7 +77,10 @@ async def send_select_fields(m: Message, value: int = None):
 async def enter_field_value(m: Message):
     _, form_id, field = states.get(m.from_id).split("*")
     form_id = int(form_id)
-    if field == "photo":
+    if field == 'name':
+        await db.Form.update.values(name=m.text).where(db.Form.id == form_id).gino.status()
+        await db.Expeditor.update.values(name=m.text).where(db.Expeditor.form_id == form_id).gino.status()
+    elif field == "photo":
         if not m.attachments:
             await m.answer(messages.need_photo)
             return
