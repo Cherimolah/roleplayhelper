@@ -700,6 +700,13 @@ async def apply_reward(user_id: int, data: dict):
             lib_level = min(100, max(0, libido + reward['libido']))
             await db.Form.update.values(libido_level=lib_level).where(db.Form.user_id == user_id).gino.status()
             await db.Form.update.values(subordination_level=sub_level).where(db.Form.user_id == user_id).gino.status()
+        elif reward['type'] == 'item':
+            item_id = reward['item_id']
+            count = reward['count']
+            form_id = await get_current_form_id(user_id)
+            expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
+            for i in range(count):
+                await db.ExpeditorToItems.create(expeditor_id=expeditor_id, item_id=item_id)
 
 
 async def update_daughter_levels(user_id: int):
