@@ -347,13 +347,18 @@ async def info_target_reward():
              'I. Бонус к репутации\n'
              'II. Награда валютой\n'
              'III. Изменение параметров\n'
-             'IV. Предметы карты экспедитора\n\n'
+             'IV. Предметы карты экспедитора\n'
+             'V. Изменение характеристик\n\n'
              'Список фракций:\n')
     fractions = [x[0] for x in await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()]
     for i, fraction in enumerate(fractions):
         reply += f"{i + 1}. {fraction}\n"
+    reply += '\nСписок характеристик:\n'
+    attributes = [x[0] for x in await db.select([db.Attribute.name]).order_by(db.Attribute.id.asc()).gino.all()]
+    for i, attribute in enumerate(attributes):
+        reply += f"{i + 1}. {attribute}\n"
     reply += '\nПредметы Карты экспедитора:\n'
-    items =[x[0] for x in await db.select([db.Item.name]).order_by(db.Item.id.asc()).gino.all()]
+    items = [x[0] for x in await db.select([db.Item.name]).order_by(db.Item.id.asc()).gino.all()]
     for i, item in enumerate(items):
         reply += f"{i + 1}. {item}\n"
     reply += ("\nЧтобы указать награду в виде бонуса к репутации необходимо написать команду «РЕП {номер фракции} "
@@ -365,6 +370,8 @@ async def info_target_reward():
               "Чтобы указать награду в виде предметов Карты экспедитора необходимо написать команду «ПРЕ» и перечислить "
               "номера со множителями через запятую\n"
               "Например:\n«ПРЕ 1, 2х4» задаёт награду 1 шт. предмета 1 и 4 шт. предмета 2\n\n"
+              "Чтобы указать награду в виде изменения характеристик, необходимо написать команду «ХАР {номер} {изменение}». "
+              "Например:\nХАР 1 +5\n\n"
               "❗️ Можно указать несколько вариантов через новую строку")
     return reply, None
 
@@ -373,17 +380,25 @@ async def info_quest_penalty():
     reply = ('Возможные варианты штрафа:\n'
              'I. Бонус к репутации\n'
              'II. Награда валютой\n'
-             'III. Изменение параметров\n\n'
+             'III. Изменение параметров\n'
+             'IV. Изменение характеристик\n'
              'Список фракций:\n')
     fractions = [x[0] for x in await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()]
     for i, fraction in enumerate(fractions):
         reply += f"{i + 1}. {fraction}\n"
+    reply += '\nСписок характеристик:\n'
+    attributes = [x[0] for x in await db.select([db.Attribute.name]).order_by(db.Attribute.id.asc()).gino.all()]
+    for i, attribute in enumerate(attributes):
+        reply += f"{i + 1}. {attribute}\n"
     reply += ("\nЧтобы указать штраф в виде уменьшения репутации необходимо написать команду «РЕП {номер фракции} "
               "{бонус}». Например:\nРЕП 1 -10\n\n"
               "Чтобы указать штраф в виде валюты необходимо написать команду «ВАЛ {бонус}». Например:\n"
               "ВАЛ -100\n\n"
               "Чтобы указать штраф в виде изменения параметра необходимо написать команду «ПАР {либидо} {подчинение}». "
-              "Например:\nПАР -10 30\n\n❗️ Можно указать несколько вариантов через новую строку")
+              "Например:\nПАР -10 30\n\n"
+              "Чтобы указать награду в виде изменения характеристик, необходимо написать команду «ХАР {номер} {изменение}». "
+              "Например:\nХАР 1 +5\n\n"
+              "❗️ Можно указать несколько вариантов через новую строку")
     keyboard = Keyboard().add(Text('Без штрафа', {"without_penalty": True}), KeyboardButtonColor.SECONDARY)
     return reply, keyboard
 
@@ -396,7 +411,7 @@ async def parse_reward(text: str) -> List[Dict]:
             try:
                 fraction_id, reputation_bonus = map(int, line.split()[1:])
             except:
-                raise FormatDataException('Неверно указаны параметры')
+                raise FormatDataException('Неверно указаны параметры бонуса к репутации')
             fraction_id = await db.select([db.Fraction.id]).order_by(db.Fraction.id.asc()).offset(
                 fraction_id - 1).limit(1).gino.scalar()
             if not fraction_id:
@@ -411,7 +426,7 @@ async def parse_reward(text: str) -> List[Dict]:
                 _, bonus = line.split()
                 bonus = int(bonus)
             except:
-                raise FormatDataException('Неверно указаны параметры')
+                raise FormatDataException('Неверно указаны параметры валюты')
             data.append({
                 'type': 'value_bonus',
                 'bonus': bonus
@@ -422,7 +437,7 @@ async def parse_reward(text: str) -> List[Dict]:
                 libido = int(libido)
                 subordination = int(subordination)
             except:
-                raise FormatDataException('Неверно указаны параметры')
+                raise FormatDataException('Неверно указаны параметры либидо/подчинения')
             data.append({
                 'type': 'daughter_params',
                 'libido': libido,
@@ -434,22 +449,38 @@ async def parse_reward(text: str) -> List[Dict]:
                 line = line[3:]
                 line = line.replace('х', 'x')  # Кириллицу на латинскую
                 params = line.split(',')
-                item_ids = [x[0] for x in await db.select([db.Item.id]).order_by(db.Item.id.asc()).gino.all()]
-                for param in params:
-                    if 'x' in param:
-                        number, multiplier = map(int, param.split('x'))
-                    else:
-                        number = int(param)
-                        multiplier = 1
-                    data.append({
-                        'type': 'item',
-                        'item_id': item_ids[number - 1],
-                        'count': multiplier
-                    })
             except:
-                import traceback
-                print(traceback.format_exc())
-                raise FormatDataException('Неверно указаны параметры')
+                raise FormatDataException('Неправильно указаны параметры для выдачи предметов')
+            item_ids = [x[0] for x in await db.select([db.Item.id]).order_by(db.Item.id.asc()).gino.all()]
+            for param in params:
+                if 'x' in param:
+                    number, multiplier = map(int, param.split('x'))
+                else:
+                    number = int(param)
+                    multiplier = 1
+                exist = await db.select([db.Item.id]).order_by(db.Item.asc()).offset(number - 1).limit(1).gino.scalar()
+                if not exist:
+                    raise FormatDataException('Указан предмет, которого не существует')
+                data.append({
+                    'type': 'item',
+                    'item_id': item_ids[number - 1],
+                    'count': multiplier
+                })
+        elif line.startswith('хар'):
+            try:
+                _, attribute_id, value = line.split()
+                attribute_id = int(attribute_id)
+                value = int(value)
+            except:
+                raise FormatDataException('Неверно указаны параметры для изменения характеристик')
+            attribute_id = await db.select([db.Attribute.id]).order_by(db.Attribute.id.asc()).offset(attribute_id - 1).limit(1).gino.scalar()
+            if not attribute_id:
+                raise FormatDataException('Указана несуществующая характеристика')
+            data.append({
+                'type': 'attribute',
+                'attribute_id': attribute_id,
+                'value': value
+            })
         else:
             raise FormatDataException('Недоступный вариант награды')
     return data
@@ -465,15 +496,19 @@ async def serialize_target_reward(data):
         if reward['type'] == 'fraction_bonus':
             fraction = await db.select([db.Fraction.name]).where(db.Fraction.id == reward['fraction_id']).gino.scalar()
             bonus = f"{'+' if reward['reputation_bonus'] >= 0 else ''}{reward['reputation_bonus']}"
-            reply += f'Бонус к репутации {bonus} во фракции «{fraction}»'
+            reply += f'бонус к репутации {bonus} во фракции «{fraction}»'
         elif reward['type'] == 'value_bonus':
             reply += str(reward['bonus']) + ' валюты'
         elif reward['type'] == 'daughter_params':
-            reply += f'Изменение либидо на {"+" if reward["libido"] > 0 else ""}{reward["libido"]}, изменение подчинение на {"+" if reward["subordination"] > 0 else ""}{reward["subordination"]}'
+            reply += f'{"+" if reward["libido"] > 0 else ""}{reward["libido"]} к Либидо, {"+" if reward["subordination"] > 0 else ""}{reward["subordination"]} к Подчинению'
         elif reward['type'] == 'item':
             name = await db.select([db.Item.name]).where(db.Item.id == reward['item_id']).gino.scalar()
             count = reward['count']
-            reply += f'Предмет  «{name}» ({count} шт.)'
+            reply += f'предмет  «{name}» ({count} шт.)'
+        elif reward['type'] == 'attribute':
+            name = await db.select([db.Attribute.name]).where(db.Attribute.id == reward['attribute_id']).gino.scalar()
+            value = reward['value']
+            reply += f'{"+" if value >= 0 else ""}{value} к {name}'
         reply += ", "
     return reply[:-2]
 

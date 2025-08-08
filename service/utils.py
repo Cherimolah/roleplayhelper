@@ -705,8 +705,20 @@ async def apply_reward(user_id: int, data: dict):
             count = reward['count']
             form_id = await get_current_form_id(user_id)
             expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
+            if not expeditor_id:
+                continue
             for i in range(count):
                 await db.ExpeditorToItems.create(expeditor_id=expeditor_id, item_id=item_id)
+        elif reward['type'] == 'attribute':
+            attribute_id = reward['attribute_id']
+            value = reward['value']
+            form_id = await get_current_form_id(user_id)
+            expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
+            if not expeditor_id:
+                continue
+            await db.ExpeditorToAttributes.update.values(value=db.ExpeditorToAttributes.value + value).where(
+                and_(db.ExpeditorToAttributes.expeditor_id == expeditor_id, db.ExpeditorToAttributes.attribute_id == attribute_id)
+            ).gino.scalar()
 
 
 async def update_daughter_levels(user_id: int):
