@@ -78,6 +78,10 @@ async def select_attribute(m: MessageEvent):
     ).add(
         Callback('+5', {'expeditor_id': expeditor_id, 'attribute_id': attribute_id, 'delta': 5}), KeyboardButtonColor.PRIMARY
     ).row().add(
+        Callback('-10', {'expeditor_id': expeditor_id, 'attribute_id': attribute_id, 'delta': -10}), KeyboardButtonColor.PRIMARY
+    ).add(
+        Callback('+10', {'expeditor_id': expeditor_id, 'attribute_id': attribute_id, 'delta': 10}), KeyboardButtonColor.PRIMARY
+    ).row().add(
         Callback('Назад', {'expeditor_id': expeditor_id, 'attributes': 'back'}), KeyboardButtonColor.NEGATIVE
     )
     await m.edit_message(message=reply, keyboard=keyboard.get_json())
@@ -88,13 +92,6 @@ async def update_attribute(m: MessageEvent):
     expeditor_id = m.payload['expeditor_id']
     attribute_id = m.payload['attribute_id']
     delta = m.payload['delta']
-    current = await db.select([db.ExpeditorToAttributes.value]).where(
-        and_(db.ExpeditorToAttributes.attribute_id == attribute_id,
-             db.ExpeditorToAttributes.expeditor_id == expeditor_id)
-    ).gino.scalar()
-    if not 22 <= current + delta <= 40:
-        await m.show_snackbar('Допустимые значения в диапазоне от 22 до 40')
-        return
     await db.ExpeditorToAttributes.update.values(value=db.ExpeditorToAttributes.value + delta).where(
         and_(db.ExpeditorToAttributes.attribute_id == attribute_id, db.ExpeditorToAttributes.expeditor_id == expeditor_id)
     ).gino.status()
