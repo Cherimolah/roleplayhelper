@@ -35,13 +35,12 @@ async def on_startup():
     form_ids = [x[0] for x in await db.select([db.Form.id]).gino.all()]
     for form_id in form_ids:
         asyncio.get_event_loop().create_task(take_off_payments(form_id))
-    # #  TODO: переделать
-    # quests = await db.select([db.QuestToForm.form_id, db.QuestToForm.quest_start]).gino.all()
-    # for form_id, quest_id, start_at in quests:
-    #     quest = await db.Quest.get(quest_id)
-    #     cooldown = calculate_time(quest, start_at)
-    #     if cooldown:
-    #         asyncio.get_event_loop().create_task(quest_over(cooldown, form_id, quest_id))
+    quests = await db.select([db.QuestToForm.form_id, db.QuestToForm.quest_start]).gino.all()
+    for form_id, quest_id, start_at in quests:
+        quest = await db.Quest.get(quest_id)
+        cooldown = calculate_time(quest, start_at)
+        if cooldown:
+            asyncio.get_event_loop().create_task(quest_over(cooldown, form_id, quest_id))
     admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
     if admins:
         await bot.api.messages.send(peer_ids=admins, message="🎉 Бот запущен!", is_notification=True)
