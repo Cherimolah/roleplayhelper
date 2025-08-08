@@ -346,17 +346,26 @@ async def info_target_reward():
     reply = ('Возможные варианты награды:\n'
              'I. Бонус к репутации\n'
              'II. Награда валютой\n'
-             'III. Изменение параметров\n\n'
+             'III. Изменение параметров\n'
+             'IV. Предметы карты экспедитора\n\n'
              'Список фракций:\n')
     fractions = [x[0] for x in await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()]
     for i, fraction in enumerate(fractions):
         reply += f"{i + 1}. {fraction}\n"
+    reply += '\nПредметы Карты экспедитора:\n'
+    items =[x[0] for x in await db.select([db.Item.name]).order_by(db.Item.id.asc()).gino.all()]
+    for i, item in enumerate(items):
+        reply += f"{i + 1}. {item}\n"
     reply += ("\nЧтобы указать награду в виде бонуса к репутации необходимо написать команду «РЕП {номер фракции} "
               "{бонус}». Например:\nРЕП 1 10\n\n"
               "Чтобы указать награду в виде валюты необходимо написать команду «ВАЛ {бонус}». Например:\n"
               "ВАЛ 100\n\n"
               "Чтобы указать награду в виде изменения параметра необходимо написать команду «ПАР {либидо} {подчинение}». "
-              "Например:\n ПАР -10 30\n\n❗️ Можно указать несколько вариантов через новую строку")
+              "Например:\nПАР -10 30\n\n"
+              "Чтобы указать награду в виде предметов Карты экспедитора необходимо написать команду «ПРЕ» и перечислить "
+              "номера со множителями через запятую\n"
+              "Например:\n«ПРЕ 1, 2х4» задаёт награду 1 шт. предмета 1 и 4 шт. предмета 2\n\n"
+              "❗️ Можно указать несколько вариантов через новую строку")
     return reply, None
 
 
@@ -419,6 +428,28 @@ async def parse_reward(text: str) -> List[Dict]:
                 'libido': libido,
                 'subordination': subordination
             })
+        elif line.startswith('пре'):
+            try:
+                line = line.replace(' ', '')
+                line = line[3:]
+                line = line.replace('х', 'x')  # Кириллицу на латинскую
+                params = line.split(',')
+                item_ids = [x[0] for x in await db.select([db.Item.id]).order_by(db.Item.id.asc()).gino.all()]
+                for param in params:
+                    if 'x' in param:
+                        number, multiplier = map(int, param.split('x'))
+                    else:
+                        number = int(param)
+                        multiplier = 1
+                    data.append({
+                        'type': 'item',
+                        'item_id': item_ids[number - 1],
+                        'count': multiplier
+                    })
+            except:
+                import traceback
+                print(traceback.format_exc())
+                raise FormatDataException('Неверно указаны параметры')
         else:
             raise FormatDataException('Недоступный вариант награды')
     return data
@@ -439,6 +470,10 @@ async def serialize_target_reward(data):
             reply += str(reward['bonus']) + ' валюты'
         elif reward['type'] == 'daughter_params':
             reply += f'Изменение либидо на {"+" if reward["libido"] > 0 else ""}{reward["libido"]}, изменение подчинение на {"+" if reward["subordination"] > 0 else ""}{reward["subordination"]}'
+        elif reward['type'] == 'item':
+            name = await db.select([db.Item.name]).where(db.Item.id == reward['item_id']).gino.scalar()
+            count = reward['count']
+            reply += f'Предмет  «{name}» ({count} шт.)'
         reply += ", "
     return reply[:-2]
 
