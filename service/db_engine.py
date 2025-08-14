@@ -573,7 +573,7 @@ class Database(Gino):
 
             id = Column(Integer, primary_key=True)
             chat_id = Column(Integer)
-            admin_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'))
+            judge_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'))
             message_id = Column(Integer)
 
         self.ActionModeRequest = ActionModeRequest

@@ -6,3 +6,4 @@ from . import group_events
 from . import chat_commands
 from . import requests
 from . import judge_panel
+from . import action_mode
