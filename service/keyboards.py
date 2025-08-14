@@ -24,7 +24,7 @@ def get_skip_button(field: str):
 
 
 async def main_menu(user_id: int):
-    is_admin = (await db.select([db.User.admin]).where(db.User.user_id == user_id).gino.scalar()) > 0
+    admin, judge = await db.select([db.User.admin, db.User.judge]).where(db.User.user_id == user_id).gino.first()
     keyboard = (Keyboard().add(
         Text("Анкета", {"menu": "form"}), KeyboardButtonColor.PRIMARY
     ).add(
@@ -38,7 +38,11 @@ async def main_menu(user_id: int):
     ).row().add(
         Text("Администрация проекта", {"menu": "staff"}), KeyboardButtonColor.NEGATIVE
     ))
-    if is_admin:
+    if judge:
+        keyboard.row().add(
+            Text('Панель судьи', {'main_menu': 'judge_panel'}), KeyboardButtonColor.SECONDARY
+        )
+    if admin:
         keyboard.row().add(
             Text("Админ-панель", {"menu": "admin_panel"}), KeyboardButtonColor.NEGATIVE
         )
@@ -73,8 +77,12 @@ admin_menu = Keyboard().add(
 
 manage_admins = Keyboard().add(
     Text("Добавить администратора", {"manage_admins": "add_admin"}), KeyboardButtonColor.PRIMARY
-).row().add(
+).add(
     Text("Удалить администратора", {"manage_admins": "delete_admins"}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Добавить судью', {'manage_admins': 'add_judge'}), KeyboardButtonColor.PRIMARY
+).add(
+    Text('Удалить судью', {'manage_admins': 'delete_judge'}), KeyboardButtonColor.PRIMARY
 ).row().add(
     Text("Назад", {"manage_admins": "back"}), KeyboardButtonColor.NEGATIVE
 )
@@ -354,4 +362,13 @@ sex_types = Keyboard().add(
     Text('Женский', {'sex': 2}), KeyboardButtonColor.PRIMARY
 ).row().add(
     Text('Другой', {'sex': 3}), KeyboardButtonColor.PRIMARY
+)
+
+
+judge_menu = Keyboard().add(
+    Text('Предметы карты экспедитора', {'edit_content': 'Item'}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Дебафы состояния', {'edit_content': 'StateDebuff'}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Назад', {'judge_menu': 'back'}), KeyboardButtonColor.NEGATIVE
 )

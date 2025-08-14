@@ -295,14 +295,15 @@ async def take_off_payments(form_id: int):
 
 
 async def send_page_users(m: Union[Message, MessageEvent], page: int = 1):
-    users = await db.select([db.User.user_id, db.User.admin]).order_by(db.User.admin.desc()).order_by(
+    users = await db.select([db.User.user_id, db.User.admin, db.User.judge]).order_by(db.User.admin.desc()).order_by(db.User.judge.desc()).order_by(
         db.User.user_id.asc()).offset((page - 1) * 15).limit(15).gino.all()
     user_ids = [x[0] for x in users]
     users_info = await bot.api.users.get(user_ids)
     reply = messages.list_users
     for i, user in enumerate(users):
-        reply = f"{reply}{(page - 1) * 15 + i + 1}. {'👑' if user.admin == 2 else '🅰' if user.admin == 1 else ''}" \
-                f" [id{user.user_id}|{users_info[i].first_name} {users_info[i].last_name}]\n"
+        reply = (f"{reply}{(page - 1) * 15 + i + 1}. {'👑' if user.admin == 2 else '🅰' if user.admin == 1 else ''}"
+                 f"{'🧑‍⚖️' if user.judge else ''}"
+                 f" [id{user.user_id}|{users_info[i].first_name} {users_info[i].last_name}]\n")
     keyboard = None
     count_users = await db.func.count(db.User.user_id).gino.scalar()
     if count_users % 15 == 0:

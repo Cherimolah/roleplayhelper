@@ -3,6 +3,7 @@ from typing import Union, Optional
 
 from vkbottle.dispatch.rules import ABCRule
 from vkbottle.bot import Message, MessageEvent
+from vkbottle.dispatch.rules.abc import T_contra
 
 from loader import states, bot
 from service.db_engine import db
@@ -225,3 +226,11 @@ class ExpeditorRequestAvailable(ABCRule[MessageEvent], ABC):
         user = (await bot.api.users.get(user_id))[0]
         return {'user': user, 'name': name, 'form_id': form_id, 'expeditor_id': expeditor_id}
 
+
+class JudgeRule(ABCRule, ABC):
+    async def check(self, event: Message | MessageEvent):
+        if isinstance(event, Message):
+            is_judge = await db.select([db.User.judge]).where(db.User.user_id == event.from_id).gino.scalar()
+        else:
+            is_judge = await db.select([db.User.judge]).where(db.User.user_id == event.user_id).gino.scalar()
+        return is_judge

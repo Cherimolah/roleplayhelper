@@ -2,14 +2,15 @@ import inspect
 
 from vkbottle.bot import Message, MessageEvent
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
+from vkbottle.dispatch.rules.abc import OrRule
 from vkbottle import GroupEventType, Keyboard
 
 import messages
 import service.keyboards as keyboards
 from loader import bot
-from service.custom_rules import AdminRule, StateRule, SelectContent, NumericRule, EditContent
+from service.custom_rules import AdminRule, StateRule, SelectContent, NumericRule, EditContent, JudgeRule
 from service.middleware import states
-from service.states import Admin
+from service.states import Admin, Judge
 from service.utils import page_content, send_edit_item, fields_content, Field, RelatedTable
 from service.db_engine import db
 
@@ -32,13 +33,21 @@ from service.db_engine import db
 @bot.on.private_message(PayloadRule({"Race": "back"}), AdminRule())
 @bot.on.private_message(PayloadRule({"Expeditor": "back"}), AdminRule())
 async def select_edit_content(m: Message):
-    states.set(m.from_id, Admin.SELECT_EDIT_CONTENT)
-    await m.answer(messages.content, keyboard=keyboards.manage_content)
+    judge = await db.select([db.User.judge_panel]).where(db.User.user_id == m.from_id).gino.scalar()
+    if not judge:
+        states.set(m.from_id, Admin.SELECT_EDIT_CONTENT)
+        await m.answer(messages.content, keyboard=keyboards.manage_content)
+    else:
+        states.set(m.from_id, Judge.MENU)
+        await m.answer('Добро пожаловать в панель судьи', keyboard=keyboards.judge_menu)
 
 
-@bot.on.private_message(StateRule(Admin.SELECT_EDIT_CONTENT), PayloadMapRule({"edit_content": str}), AdminRule())
-@bot.on.private_message(PayloadMapRule({"edit_content": str}), AdminRule())
+@bot.on.private_message(PayloadMapRule({"edit_content": str}), OrRule(JudgeRule(), AdminRule()))
 async def select_action_with_cabins(m: Message):
+    is_judge = await db.select([db.User.judge]).where(db.User.user_id == m.from_id).gino.scalar()
+    if is_judge and m.payload['edit_content'] not in ('Item', 'StateDebuff'):
+        await m.answer('Доступ запрещен')
+        return
     await db.User.update.values(editing_content=False).where(db.User.user_id == m.from_id).gino.status()
     if m.payload['edit_content'] == 'Expeditor' and states.get(m.from_id).startswith(Admin.EDIT_CONTENT):
         expeditor_id = int(states.get(m.from_id).split('*')[-1])
@@ -64,7 +73,7 @@ async def show_page_content(m: MessageEvent):
     await m.edit_message(message=reply, keyboard=keyboard)
 
 
-@bot.on.private_message(SelectContent(), NumericRule(), AdminRule())
+@bot.on.private_message(SelectContent(), NumericRule(), OrRule(JudgeRule(), AdminRule()))
 async def select_cabin(m: Message, value: int, content_type: str, table):
     item = await db.select([*table]).order_by(table.id.asc()).offset(value-1).limit(1).gino.first()
     if not item:
@@ -89,7 +98,7 @@ async def select_cabin(m: Message, value: int, content_type: str, table):
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, SelectContent(),
-                  PayloadMapRule({"item_type": str, "item_id": int, "action": "delete"}))
+                  PayloadMapRule({"item_type": str, "item_id": int, "action": "delete"}), OrRule(JudgeRule(), AdminRule()))
 async def delete_cabin_message_event(m: MessageEvent, content_type: str, table):
     item_id = m.payload["item_id"]
     item_name = await db.select([table.name]).where(table.id == item_id).gino.scalar()
@@ -132,7 +141,7 @@ async def delete_cabin_message_event(m: MessageEvent, content_type: str, table):
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, SelectContent(),
-                  PayloadMapRule({"item_type": str, "item_id": int, "action": "edit"}))
+                  PayloadMapRule({"item_type": str, "item_id": int, "action": "edit"}), OrRule(JudgeRule(), AdminRule()))
 async def edit_cabin_message_event(m: MessageEvent, content_type: str, table):
     item = await db.select([*table]).where(table.id == m.payload['item_id']).gino.first()
     reply = ""
@@ -154,7 +163,7 @@ async def edit_cabin_message_event(m: MessageEvent, content_type: str, table):
     await send_edit_item(m.user_id, m.payload["item_id"], content_type)
 
 
-@bot.on.private_message(EditContent(), NumericRule(), AdminRule())
+@bot.on.private_message(EditContent(), NumericRule(), OrRule(JudgeRule(), AdminRule()))
 async def select_field_to_edit(m: Message, value: int, content_type: str):
     if value > len(fields_content[content_type]['fields']):
         return "Слишком большое число"

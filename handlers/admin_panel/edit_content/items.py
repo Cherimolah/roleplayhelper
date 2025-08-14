@@ -1,10 +1,11 @@
 from vkbottle.bot import Message, MessageEvent
 from vkbottle import Keyboard, Text, KeyboardButtonColor, GroupEventType, Callback
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule, AttachmentTypeRule
+from vkbottle.dispatch.rules.abc import OrRule
 from sqlalchemy import func
 
 from loader import bot, states
-from service.custom_rules import StateRule, AdminRule, NumericRule
+from service.custom_rules import StateRule, AdminRule, NumericRule, JudgeRule
 from service.states import Admin
 from service.db_engine import db
 from service import keyboards
@@ -12,20 +13,20 @@ from service.utils import send_content_page, allow_edit_content, FormatDataExcep
 from service.serializers import info_item_group, info_item_bonus, info_item_type, serialize_item_bonus, info_item_fraction, info_item_photo
 
 
-@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Item"), PayloadRule({"Item": "add"}), AdminRule())
+@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Item"), PayloadRule({"Item": "add"}), OrRule(JudgeRule(), AdminRule()))
 async def create_quest(m: Message):
     item = await db.Item.create()
     states.set(m.from_id, f"{Admin.ITEM_NAME}*{item.id}")
     await m.answer("Напишите название предмета", keyboard=Keyboard())
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_NAME), AdminRule())
+@bot.on.private_message(StateRule(Admin.ITEM_NAME), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', state=Admin.ITEM_DESCRIPTION, text='Укажите описание предмета')
 async def item_name(m: Message, item_id: int, editing_content: bool):
     await db.Item.update.values(name=m.text).where(db.Item.id == item_id).gino.status()
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_DESCRIPTION), AdminRule())
+@bot.on.private_message(StateRule(Admin.ITEM_DESCRIPTION), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', state=Admin.ITEM_GROUP)
 async def item_description(m: Message, item_id: int, editing_content: bool):
     await db.Item.update.values(description=m.text).where(db.Item.id == item_id).gino.status()
@@ -34,7 +35,7 @@ async def item_description(m: Message, item_id: int, editing_content: bool):
         await m.answer(reply, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_GROUP), PayloadMapRule({"item_group": int}), AdminRule())
+@bot.on.private_message(StateRule(Admin.ITEM_GROUP), PayloadMapRule({"item_group": int}), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', state=Admin.ITEM_TYPE)
 async def item_type(m: Message, item_id: int, editing_content: bool):
     await db.Item.update.values(group_id=m.payload['item_group']).where(db.Item.id == item_id).gino.status()
@@ -43,7 +44,7 @@ async def item_type(m: Message, item_id: int, editing_content: bool):
         await m.answer(reply, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_TYPE), PayloadMapRule({"item_type": int}), AdminRule())
+@bot.on.private_message(StateRule(Admin.ITEM_TYPE), PayloadMapRule({"item_type": int}), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item')
 async def item_type(m: Message, item_id: int, editing_content: bool):
     await db.Item.update.values(type_id=m.payload['item_type']).where(db.Item.id == item_id).gino.status()
@@ -58,14 +59,14 @@ async def item_type(m: Message, item_id: int, editing_content: bool):
             return
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_COUNT_USE), NumericRule(min_number=2), AdminRule())
+@bot.on.private_message(StateRule(Admin.ITEM_COUNT_USE), NumericRule(min_number=2), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', state=Admin.ITEM_AVAILABLE_FOR_SALE,
                     text='Укажите тип предмета', keyboard=keyboards.item_type)
 async def item_count_use(m: Message, item_id: int, editing_content: bool, value: int):
     await db.Item.update.values(count_use=value).where(db.Item.id == item_id).gino.status()
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_AVAILABLE_FOR_SALE), PayloadMapRule({"item_type": int}), AdminRule())
+@bot.on.private_message(StateRule(Admin.ITEM_AVAILABLE_FOR_SALE), PayloadMapRule({"item_type": int}), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item')
 async def item_available_for_sale(m: Message, item_id: int, editing_content: bool):
     await db.Item.update.values(available_for_sale=m.payload['item_type']).where(db.Item.id == item_id).gino.status()
@@ -79,7 +80,7 @@ async def item_available_for_sale(m: Message, item_id: int, editing_content: boo
             await m.answer(reply, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_PRICE), NumericRule(), AdminRule())
+@bot.on.private_message(StateRule(Admin.ITEM_PRICE), NumericRule(), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', state=Admin.ITEM_FRACTION_ID)
 async def item_price(m: Message, item_id: int, editing_content: bool, value: int):
     await db.Item.update.values(price=value).where(db.Item.id == item_id).gino.status()
@@ -88,14 +89,14 @@ async def item_price(m: Message, item_id: int, editing_content: bool, value: int
         await m.answer(reply, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_FRACTION_ID), PayloadRule({"item_for_all_fractions": True}), AdminRule())
+@bot.on.private_message(StateRule(Admin.ITEM_FRACTION_ID), PayloadRule({"item_for_all_fractions": True}), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', state=Admin.ITEM_PHOTO, text='Отправьте изображение предмета',
                     keyboard=Keyboard().add(Text('Без фото', {"item_without_photo": True}), KeyboardButtonColor.SECONDARY))
 async def item_fraction_id(m: Message, item_id: int, editing_content: bool):
     await db.Item.update.values(fraction_id=None, reputation=0).where(db.Item.id == item_id).gino.status()
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_FRACTION_ID), NumericRule(), AdminRule())
+@bot.on.private_message(StateRule(Admin.ITEM_FRACTION_ID), NumericRule(), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', state=Admin.ITEM_REPUTATION, text='Укажите уровень необходимой репутации', keyboard=Keyboard())
 async def item_reputation(m: Message, item_id: int, editing_content: bool, value: int):
     fraction_id = await db.select([db.Fraction.id]).order_by(db.Fraction.id.asc()).offset(value - 1).limit(1).gino.scalar()
@@ -104,14 +105,14 @@ async def item_reputation(m: Message, item_id: int, editing_content: bool, value
     await db.Item.update.values(fraction_id=fraction_id).where(db.Item.id == item_id).gino.status()
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_REPUTATION), NumericRule(min_number=-100, max_number=100), AdminRule())
+@bot.on.private_message(StateRule(Admin.ITEM_REPUTATION), NumericRule(min_number=-100, max_number=100), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', state=Admin.ITEM_PHOTO, text='Отправьте изображение предмета',
                     keyboard=Keyboard().add(Text('Без фото', {"item_without_photo": True}), KeyboardButtonColor.SECONDARY))
 async def item_reputation(m: Message, value: int, item_id: int, editing_content: bool):
     await db.Item.update.values(reputation=value).where(db.Item.id == item_id).gino.status()
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_PHOTO), PayloadRule({"item_without_photo": True}), AdminRule())
+@bot.on.private_message(StateRule(Admin.ITEM_PHOTO), PayloadRule({"item_without_photo": True}), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', state=Admin.ITEM_BONUS)
 async def item_photo(m: Message, item_id: int, editing_content: bool):
     await db.Item.update.values(photo=None).where(db.Item.id == item_id).gino.status()
@@ -119,7 +120,7 @@ async def item_photo(m: Message, item_id: int, editing_content: bool):
         await show_bonus_menu(m, item_id)
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_PHOTO), AttachmentTypeRule('photo'), AdminRule())
+@bot.on.private_message(StateRule(Admin.ITEM_PHOTO), AttachmentTypeRule('photo'), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', state=Admin.ITEM_BONUS)
 async def item_photo_set(m: Message, item_id: int, editing_content: bool):
     message = await m.get_full_message()
@@ -139,7 +140,7 @@ async def show_bonus_menu(m, item_id):
         await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, "action": "add_bonus"}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, "action": "add_bonus"}), OrRule(JudgeRule(), AdminRule()))
 async def add_item_bonus(m: MessageEvent):
     reply = 'Укажите тип бонуса:'
     keyboard = Keyboard(inline=True).add(
@@ -154,15 +155,15 @@ async def add_item_bonus(m: MessageEvent):
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"select_bonus_type": 'back', 'item_id': int}), AdminRule())
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('delete_item_bonus'), PayloadMapRule({"select_bonus_type": 'back', 'item_id': int}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"select_bonus_type": 'back', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('delete_item_bonus'), PayloadMapRule({"select_bonus_type": 'back', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def edit_item_bonus(m: MessageEvent):
     await db.User.update.values(state=f'{Admin.ITEM_BONUS}*{m.payload["item_id"]}').where(db.User.user_id == m.user_id).gino.status()
     await show_bonus_menu(m, m.payload['item_id'])
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"select_bonus_type": 'attribute', 'item_id': int}), AdminRule())
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('set_bonus_attribute'), PayloadMapRule({"select_bonus_type": 'attribute', 'item_id': int}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"select_bonus_type": 'attribute', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('set_bonus_attribute'), PayloadMapRule({"select_bonus_type": 'attribute', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_item_bonus_type(m: MessageEvent):
     await db.User.update.values(state=f'{Admin.ITEM_BONUS}*{m.payload["item_id"]}').gino.status()
     attributes = await db.select([*db.Attribute]).gino.all()
@@ -178,7 +179,7 @@ async def select_item_bonus_type(m: MessageEvent):
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"bonus_attribute_id": int, 'item_id': int}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"bonus_attribute_id": int, 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_item_bonus_attribute(m: MessageEvent):
     reply = 'Укажите значение для бонуса/штрафа к характеристике'
     await db.User.update.values(state=f'set_bonus_attribute*{m.payload["item_id"]}*{m.payload["bonus_attribute_id"]}').where(db.User.user_id == m.user_id).gino.status()
@@ -186,7 +187,7 @@ async def select_item_bonus_attribute(m: MessageEvent):
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
-@bot.on.private_message(StateRule('set_bonus_attribute'), NumericRule(min_number=-200, max_number=200), AdminRule())
+@bot.on.private_message(StateRule('set_bonus_attribute'), NumericRule(min_number=-200, max_number=200), OrRule(JudgeRule(), AdminRule()))
 async def select_item_bonus_attribute(m: Message, value: int):
     _, item_id, attribute_id = states.get(m.from_id).split('*')
     item_id = int(item_id)
@@ -198,9 +199,9 @@ async def select_item_bonus_attribute(m: Message, value: int):
     await show_bonus_menu(m, item_id)
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"select_bonus_type": 'state', 'item_id': int}), AdminRule())
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('add_debuff'), PayloadMapRule({"select_bonus_type": 'state', 'item_id': int}), AdminRule())
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('delete_debuff'), PayloadMapRule({"select_bonus_type": 'state', 'item_id': int}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"select_bonus_type": 'state', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('add_debuff'), PayloadMapRule({"select_bonus_type": 'state', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('delete_debuff'), PayloadMapRule({"select_bonus_type": 'state', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_item_bonus_state(m: MessageEvent):
     await db.User.update.values(state=f"{Admin.ITEM_BONUS}*{m.payload['item_id']}").where(db.User.user_id == m.user_id).gino.status()
     reply = 'Выберите вариант воздействия на состояние'
@@ -218,13 +219,13 @@ async def select_item_bonus_state(m: MessageEvent):
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, 'action': 'add_debuff'}))
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, 'action': 'add_debuff'}), OrRule(JudgeRule(), AdminRule()))
 async def add_item_bonus_state(m: MessageEvent):
     await db.User.update.values(state=f'add_debuff*{m.payload["item_id"]}').where(db.User.user_id == m.user_id).gino.status()
     await show_page_debuffs(m, 1, m.payload['item_id'])
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, 'action': 'delete_debuff'}))
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, 'action': 'delete_debuff'}), OrRule(JudgeRule(), AdminRule()))
 async def add_item_bonus_state(m: MessageEvent):
     await db.User.update.values(state=f'delete_debuff*{m.payload["item_id"]}').where(db.User.user_id == m.user_id).gino.status()
     await show_page_debuffs(m, 1, m.payload['item_id'])
@@ -248,7 +249,7 @@ async def show_page_debuffs(m: MessageEvent, page: int, item_id: int):
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
-@bot.on.private_message(StateRule('add_debuff'), NumericRule(), AdminRule())
+@bot.on.private_message(StateRule('add_debuff'), NumericRule(), OrRule(JudgeRule(), AdminRule()))
 async def add_item_bonus_state(m: Message, value: int):
     debuff_id = await db.select([db.StateDebuff.id]).order_by(db.StateDebuff.id.asc()).offset(value - 1).limit(1).gino.scalar()
     item_id = int(states.get(m.from_id).split('*')[-1])
@@ -259,7 +260,7 @@ async def add_item_bonus_state(m: Message, value: int):
     await show_bonus_menu(m, item_id)
 
 
-@bot.on.private_message(StateRule('delete_debuff'), NumericRule(), AdminRule())
+@bot.on.private_message(StateRule('delete_debuff'), NumericRule(), OrRule(JudgeRule(), AdminRule()))
 async def add_item_bonus_state(m: Message, value: int):
     debuff_id = await db.select([db.StateDebuff.id]).order_by(db.StateDebuff.id.asc()).offset(value - 1).limit(1).gino.scalar()
     item_id = int(states.get(m.from_id).split('*')[-1])
@@ -270,7 +271,7 @@ async def add_item_bonus_state(m: Message, value: int):
     await show_bonus_menu(m, item_id)
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, 'action': 'delete_type_debuff'}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, 'action': 'delete_type_debuff'}), OrRule(JudgeRule(), AdminRule()))
 async def delete_type_debuff(m: MessageEvent):
     types = await db.select([*db.DebuffType]).order_by(db.DebuffType.id.asc()).gino.all()
     reply = 'Выберите тип дебафа, который будет удален при использовании предмета'
@@ -281,7 +282,7 @@ async def delete_type_debuff(m: MessageEvent):
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, 'action': 'select_type_debuff_delete', 'type_id': int}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, 'action': 'select_type_debuff_delete', 'type_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_type_debuff_delete(m: MessageEvent):
     bonus = await db.select([db.Item.bonus]).where(db.Item.id == m.payload['item_id']).gino.scalar()
     bonus.append({"type": 'state', 'action': 'delete_type', 'type_id': m.payload['type_id']})
@@ -289,7 +290,7 @@ async def select_type_debuff_delete(m: MessageEvent):
     await show_bonus_menu(m, m.payload['item_id'])
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, 'action': 'delete_all_debuff'}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, 'action': 'delete_all_debuff'}), OrRule(JudgeRule(), AdminRule()))
 async def delete_all_debuff(m: MessageEvent):
     bonus = await db.select([db.Item.bonus]).where(db.Item.id == m.payload['item_id']).gino.scalar()
     bonus.append({"type": 'state', 'action': 'delete_all'})
@@ -297,9 +298,9 @@ async def delete_all_debuff(m: MessageEvent):
     await show_bonus_menu(m, m.payload['item_id'])
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"select_bonus_type": 'sex_state', 'item_id': int}), AdminRule())
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('set_libido'), PayloadMapRule({"select_bonus_type": 'sex_state', 'item_id': int}), AdminRule())
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('set_subordination'), PayloadMapRule({"select_bonus_type": 'sex_state', 'item_id': int}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"select_bonus_type": 'sex_state', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('set_libido'), PayloadMapRule({"select_bonus_type": 'sex_state', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('set_subordination'), PayloadMapRule({"select_bonus_type": 'sex_state', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_bonus_type(m: MessageEvent):
     await db.User.update.values(state=f'{Admin.ITEM_BONUS}*{m.payload["item_id"]}').where(db.User.user_id == m.user_id).gino.status()
     reply = 'Выберите тип бонуса'
@@ -315,7 +316,7 @@ async def select_bonus_type(m: MessageEvent):
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({'bonus_type': 'subordination', 'item_id': int}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({'bonus_type': 'subordination', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_bonus_type(m: MessageEvent):
     await db.User.update.values(state=f'set_subordination*{m.payload["item_id"]}').where(db.User.user_id == m.user_id).gino.status()
     reply = 'Укажите бонус/штраф к Подчинение при использовании предмета'
@@ -325,7 +326,7 @@ async def select_bonus_type(m: MessageEvent):
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
-@bot.on.private_message(StateRule('set_subordination'), NumericRule(min_number=-100, max_number=100), AdminRule())
+@bot.on.private_message(StateRule('set_subordination'), NumericRule(min_number=-100, max_number=100), OrRule(JudgeRule(), AdminRule()))
 async def select_bonus_state(m: Message, value: int):
     item_id = int(states.get(m.from_id).split('*')[-1])
     bonus = await db.select([db.Item.bonus]).where(db.Item.id == item_id).gino.scalar()
@@ -335,7 +336,7 @@ async def select_bonus_state(m: Message, value: int):
     await show_bonus_menu(m, item_id)
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({'bonus_type': 'libido', 'item_id': int}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({'bonus_type': 'libido', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_bonus_type(m: MessageEvent):
     await db.User.update.values(state=f'set_libido*{m.payload["item_id"]}').where(
         db.User.user_id == m.user_id).gino.status()
@@ -347,7 +348,7 @@ async def select_bonus_type(m: MessageEvent):
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
-@bot.on.private_message(StateRule('set_libido'), NumericRule(min_number=-100, max_number=100), AdminRule())
+@bot.on.private_message(StateRule('set_libido'), NumericRule(min_number=-100, max_number=100), OrRule(JudgeRule(), AdminRule()))
 async def select_bonus_state(m: Message, value: int):
     item_id = int(states.get(m.from_id).split('*')[-1])
     bonus = await db.select([db.Item.bonus]).where(db.Item.id == item_id).gino.scalar()
@@ -357,8 +358,8 @@ async def select_bonus_state(m: Message, value: int):
     await show_bonus_menu(m, item_id)
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({'bonus_type': 'pregnant', 'item_id': int}), AdminRule())
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('set_pregnant'), PayloadMapRule({'bonus_type': 'pregnant', 'item_id': int}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({'bonus_type': 'pregnant', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('set_pregnant'), PayloadMapRule({'bonus_type': 'pregnant', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_bonus_type(m: MessageEvent):
     await db.User.update.values(state=f'{Admin.ITEM_BONUS}*{m.payload["item_id"]}').where(db.User.user_id == m.user_id).gino.status()
     reply = 'Выберите действие с состоянием Оплодотворение'
@@ -372,7 +373,7 @@ async def select_bonus_type(m: MessageEvent):
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({'select_type': 'add_pregnant', 'item_id': int}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({'select_type': 'add_pregnant', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_bonus_state(m: MessageEvent):
     await db.User.update.values(state=f'set_pregnant*{m.payload["item_id"]}').where(db.User.user_id == m.user_id).gino.status()
     reply = 'Укажите строку, которая будет записана в Оплодотворение'
@@ -382,7 +383,7 @@ async def select_bonus_state(m: MessageEvent):
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
-@bot.on.private_message(StateRule('set_pregnant'), AdminRule())
+@bot.on.private_message(StateRule('set_pregnant'), OrRule(JudgeRule(), AdminRule()))
 async def select_bonus_state(m: Message):
     item_id = int(states.get(m.from_id).split('*')[-1])
     bonus = await db.select([db.Item.bonus]).where(db.Item.id == item_id).gino.scalar()
@@ -392,7 +393,7 @@ async def select_bonus_state(m: Message):
     await show_bonus_menu(m, item_id)
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({'select_type': 'delete_pregnant', 'item_id': int}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({'select_type': 'delete_pregnant', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_bonus_type(m: MessageEvent):
     item_id = m.payload['item_id']
     bonus = await db.select([db.Item.bonus]).where(db.Item.id == item_id).gino.scalar()
@@ -402,7 +403,7 @@ async def select_bonus_type(m: MessageEvent):
     await show_bonus_menu(m, item_id)
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, "action": "delete_bonus"}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, "action": "delete_bonus"}), OrRule(JudgeRule(), AdminRule()))
 async def select_bonus_type(m: MessageEvent):
     await db.User.update.values(state=f'delete_item_bonus*{m.payload["item_id"]}').where(db.User.user_id == m.user_id).gino.status()
     reply = 'Выберите бонус, который хотите удалить:\n'
@@ -414,7 +415,7 @@ async def select_bonus_type(m: MessageEvent):
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
-@bot.on.private_message(StateRule('delete_item_bonus'), NumericRule(), AdminRule())
+@bot.on.private_message(StateRule('delete_item_bonus'), NumericRule(), OrRule(JudgeRule(), AdminRule()))
 async def delete_item_bonus(m: Message, value: int):
     item_id = int(states.get(m.from_id).split('*')[-1])
     bonus = await db.select([db.Item.bonus]).where(db.Item.id == item_id).gino.scalar()
@@ -427,13 +428,13 @@ async def delete_item_bonus(m: Message, value: int):
     await show_bonus_menu(m, item_id)
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, "action": "save_bonus"}), AdminRule())
+@bot.on.private_message(StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, "action": "save_bonus"}), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', end=True, text='Предмет успешно создан')
 async def save_bonus(m: Message, item_id: int, editing_content: bool):
     pass
 
 
-@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Item"), PayloadRule({"Item": "delete"}), AdminRule())
+@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Item"), PayloadRule({"Item": "delete"}), OrRule(JudgeRule(), AdminRule()))
 async def select_delete_quest(m: Message):
     items = await db.select([db.Item.name]).order_by(db.Item.id.asc()).gino.all()
     if not items:
@@ -445,7 +446,7 @@ async def select_delete_quest(m: Message):
     await m.answer(reply, keyboard=Keyboard())
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_DELETE), NumericRule(), AdminRule())
+@bot.on.private_message(StateRule(Admin.ITEM_DELETE), NumericRule(), OrRule(JudgeRule(), AdminRule()))
 async def delete_quest(m: Message, value: int):
     item_id = await db.select([db.Item.id]).order_by(db.Item.id.asc()).offset(value - 1).limit(1).gino.scalar()
     await db.Item.delete.where(db.Item.id == item_id).gino.status()

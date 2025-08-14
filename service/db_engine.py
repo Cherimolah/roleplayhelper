@@ -1,9 +1,11 @@
 import datetime
 import enum
+import os.path
 from typing import List, Tuple
 
 from gino import Gino
-from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, Boolean, TIMESTAMP, func, and_, Float, ARRAY, JSON, Date
+from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, Boolean, TIMESTAMP, func, and_, Float, ARRAY, \
+    JSON, Date
 
 from config import USER, PASSWORD, HOST, DATABASE
 
@@ -52,6 +54,7 @@ class Database(Gino):
 
             user_id = Column(Integer, primary_key=True)
             admin = Column(Integer, default=0)
+            judge = Column(Boolean, default=False)
             state = Column(Text)
             creating_form = Column(Boolean, default=True)
             editing_form = Column(Boolean, default=False)
@@ -59,6 +62,7 @@ class Database(Gino):
             editing_content = Column(Boolean, default=False)
             last_activity = Column(TIMESTAMP, default=datetime.datetime.now)
             creating_expeditor = Column(Boolean, default=False)
+            judge_panel = Column(Boolean, default=False)
 
         self.User = User
 
@@ -547,6 +551,33 @@ class Database(Gino):
 
         self.ActiveItemToExpeditor = ActiveItemToExpeditor
 
+        class ActionMode(self.Model):
+            __tablename__ = 'action_mode'
+
+            id = Column(Integer, primary_key=True)
+            chat_id = Column(Integer)
+
+        self.ActionMode = ActionMode
+
+        class UsersToActionMode(self.Model):
+            __tablename__ = 'users_to_action_moode'
+
+            id = Column(Integer, primary_key=True)
+            action_mode_id = Column(Integer, ForeignKey('action_mode.id', ondelete='CASCADE'))
+            user_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'))
+
+        self.UsersToActionMode = UsersToActionMode
+
+        class ActionModeRequest(self.Model):
+            __tablename__ = 'action_mode_requests'
+
+            id = Column(Integer, primary_key=True)
+            chat_id = Column(Integer)
+            admin_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'))
+            message_id = Column(Integer)
+
+        self.ActionModeRequest = ActionModeRequest
+
     async def connect(self):
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")
         await self.gino.create_all()
@@ -578,7 +609,8 @@ class Database(Gino):
             await self.Shop.create(name='Бутылка дорогого алкоголя', price=100, service=False)
         attributes = await self.select([func.count(db.Attribute.id)]).gino.scalar()
         if attributes == 0:
-            for name in ('Сила', "Скорость", "Выносливость", "Ловкость", "Восприятие", "Реакция", "Стрессоустойчивость"):
+            for name in (
+            'Сила', "Скорость", "Выносливость", "Ловкость", "Восприятие", "Реакция", "Стрессоустойчивость"):
                 await self.Attribute.create(name=name)
         item_groups = await self.select([func.count(db.ItemGroup.id)]).gino.scalar()
         if item_groups == 0:
@@ -593,12 +625,18 @@ class Database(Gino):
             for name in ('Травмы', 'Безумие'):
                 await self.DebuffType.create(name=name)
 
+        if not os.path.exists('data'):
+            os.mkdir('data')
+            os.mkdir('data/decors')
+            os.mkdir('data/shop')
+
     async def change_reputation(self, user_id: int, fraction_id: int, delta: int):
         id = await self.select([self.UserToFraction.id]).where(
             and_(self.UserToFraction.user_id == user_id, self.UserToFraction.fraction_id == fraction_id)).gino.scalar()
         if id:
             reputation = await self.select([self.UserToFraction.reputation]).where(
-                and_(self.UserToFraction.user_id == user_id, self.UserToFraction.fraction_id == fraction_id)).gino.scalar()
+                and_(self.UserToFraction.user_id == user_id,
+                     self.UserToFraction.fraction_id == fraction_id)).gino.scalar()
         else:
             reputation = 0
             id = (await self.UserToFraction.create(user_id=user_id, fraction_id=fraction_id)).id

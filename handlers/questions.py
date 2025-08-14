@@ -8,7 +8,7 @@ from sqlalchemy import and_, func
 
 from service.db_engine import db
 from loader import bot
-from service.states import Registration, Menu, DaughterQuestions
+from service.states import Registration, Menu, DaughterQuestions, Judge
 import messages
 from service.custom_rules import StateRule, NumericRule, LimitSymbols, CommandWithAnyArgs
 import service.keyboards as keyboards
@@ -52,6 +52,7 @@ async def api_request(m: Message):
 @bot.on.private_message(command="start")
 @bot.on.private_message(PayloadRule({"menu": "home"}))
 @bot.on.private_message(StateRule(Menu.SHOP_MENU), PayloadRule({"shop": "back"}))
+@bot.on.private_message(StateRule(Judge.MENU), PayloadRule({"judge_menu": "back"}))
 async def start(m: Message):
     user = await db.User.get(m.from_id)
     if not user:
@@ -80,6 +81,7 @@ async def start(m: Message):
         states.set(m.from_id, Menu.MAIN)
         await m.answer("Главное меню", keyboard=await keyboards.main_menu(m.from_id))
     await db.User.update.values(editing_content=False).where(db.User.user_id == m.from_id).gino.status()
+    await db.User.update.values(judge_panel=False).where(db.User.user_id == m.from_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Registration.PERSONAL_NAME), LimitSymbols(50))

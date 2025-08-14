@@ -24,6 +24,14 @@ async def change_page_users(m: MessageEvent):
 
 
 @bot.on.private_message(StateRule(Admin.MENU), PayloadRule({"admin_menu": "admins_edit"}), AdminRule())
+@bot.on.private_message(StateRule(Admin.ADD_JUDGE), PayloadRule({'manage_judge': 'back'}), AdminRule())
+@bot.on.private_message(StateRule(Admin.DELETE_JUDGE), PayloadRule({'manage_judge': 'back'}), AdminRule())
+@bot.on.private_message(StateRule(Admin.ENTER_NEW_ADMIN_ID), PayloadRule({'manage_judge': 'back'}), AdminRule())
+@bot.on.private_message(StateRule(Admin.ENTER_OLD_ADMIN_ID), PayloadRule({'manage_judge': 'back'}), AdminRule())
+@bot.on.private_message(StateRule(Admin.CONFIRM_NEW_ADMIN_ID), PayloadRule({"new_admin": "decline"}), AdminRule())
+@bot.on.private_message(StateRule(Admin.CONFIRM_OLD_ADMIN_ID), PayloadRule({"old_admin": "decline"}), AdminRule())
+@bot.on.private_message(StateRule(Admin.ENTER_NEW_JUDGE), PayloadRule({"old_judge": "decline"}), AdminRule())
+@bot.on.private_message(StateRule(Admin.ENTER_OLD_JUDGE), PayloadRule({"old_judge": "decline"}), AdminRule())
 async def send_administrators(m: Message):
     admin = await db.select([db.User.admin]).where(db.User.user_id == m.from_id).gino.scalar()
     if admin < 2:

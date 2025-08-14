@@ -1,9 +1,10 @@
 from vkbottle.bot import Message
 from vkbottle import Keyboard
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
+from vkbottle.dispatch.rules.abc import OrRule
 
 from loader import bot, states
-from service.custom_rules import StateRule, AdminRule, NumericRule
+from service.custom_rules import StateRule, AdminRule, NumericRule, JudgeRule
 from service.states import Admin
 from service.db_engine import db
 from service import keyboards
@@ -11,14 +12,14 @@ from service.utils import send_content_page, allow_edit_content
 from service.serializers import info_debuff_type, info_debuff_attribute
 
 
-@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_StateDebuff"), PayloadRule({"StateDebuff": "add"}), AdminRule())
+@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_StateDebuff"), PayloadRule({"StateDebuff": "add"}), OrRule(JudgeRule(), AdminRule()))
 async def create_quest(m: Message):
     item = await db.StateDebuff.create()
     states.set(m.from_id, f"{Admin.DEBUFF_NAME}*{item.id}")
     await m.answer("Напишите название дебафа", keyboard=Keyboard())
 
 
-@bot.on.private_message(StateRule(Admin.DEBUFF_NAME), AdminRule())
+@bot.on.private_message(StateRule(Admin.DEBUFF_NAME), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('StateDebuff', state=Admin.DEBUFF_TYPE)
 async def debuff_name(m: Message, item_id: int, editing_content: bool):
     await db.StateDebuff.update.values(name=m.text).where(db.StateDebuff.id == item_id).gino.status()
@@ -27,7 +28,7 @@ async def debuff_name(m: Message, item_id: int, editing_content: bool):
         await m.answer(reply, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.DEBUFF_TYPE), PayloadMapRule({"debuff_type_id": int}), AdminRule())
+@bot.on.private_message(StateRule(Admin.DEBUFF_TYPE), PayloadMapRule({"debuff_type_id": int}), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('StateDebuff', state=Admin.DEBUFF_ATTRIBUTE)
 async def debuff_type(m: Message, item_id: int, editing_content: bool):
     await db.StateDebuff.update.values(type_id=m.payload['debuff_type_id']).where(db.StateDebuff.id == item_id).gino.status()
@@ -36,20 +37,20 @@ async def debuff_type(m: Message, item_id: int, editing_content: bool):
         await m.answer(reply, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.DEBUFF_ATTRIBUTE), PayloadMapRule({"debuff_attribute_id": int}), AdminRule())
+@bot.on.private_message(StateRule(Admin.DEBUFF_ATTRIBUTE), PayloadMapRule({"debuff_attribute_id": int}), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('StateDebuff', state=Admin.DEBUFF_PENALTY,
                     text='Укажите штраф, который будет выдаваться к этой характеристике (!! со знаком минус)', keyboard=Keyboard())
 async def debuff_attribute(m: Message, item_id: int, editing_content: bool):
     await db.StateDebuff.update.values(attribute_id=m.payload['debuff_attribute_id']).where(db.StateDebuff.id == item_id).gino.status()
 
 
-@bot.on.private_message(StateRule(Admin.DEBUFF_PENALTY), NumericRule(min_number=-200, max_number=200), AdminRule())
+@bot.on.private_message(StateRule(Admin.DEBUFF_PENALTY), NumericRule(min_number=-200, max_number=200), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('StateDebuff', text='Дебаф успешно создан', end=True)
 async def debuff_penalty(m: Message, value: int, item_id: int, editing_content: bool):
     await db.StateDebuff.update.values(penalty=value).where(db.StateDebuff.id == item_id).gino.status()
 
 
-@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_StateDebuff"), PayloadRule({"StateDebuff": "delete"}), AdminRule())
+@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_StateDebuff"), PayloadRule({"StateDebuff": "delete"}), OrRule(JudgeRule(), AdminRule()))
 async def select_delete_quest(m: Message):
     debuffs = await db.select([db.StateDebuff.name]).order_by(db.StateDebuff.id.asc()).gino.all()
     if not debuffs:
@@ -61,7 +62,7 @@ async def select_delete_quest(m: Message):
     await m.answer(reply, keyboard=Keyboard())
 
 
-@bot.on.private_message(StateRule(Admin.DEBUFF_DELETE), NumericRule(), AdminRule())
+@bot.on.private_message(StateRule(Admin.DEBUFF_DELETE), NumericRule(), OrRule(JudgeRule(), AdminRule()))
 async def delete_quest(m: Message, value: int):
     item_id = await db.select([db.StateDebuff.id]).order_by(db.StateDebuff.id.asc()).offset(value - 1).limit(1).gino.scalar()
     await db.StateDebuff.delete.where(db.StateDebuff.id == item_id).gino.status()

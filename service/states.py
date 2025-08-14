@@ -220,3 +220,11 @@ class Admin:
     EXPEDITOR_ADD_ITEMS = 'expeditor_add_items'
     EXPEDITOR_DELETE_ITEMS = 'expeditor_delete_items'
     EXPEDITOR_DELETE = 'expeditor_delete'
+    ADD_JUDGE = 'add_judge'
+    DELETE_JUDGE = 'delete_judge'
+    ENTER_NEW_JUDGE = 'enter_new_judge'
+    ENTER_OLD_JUDGE = 'enter_old_judge'
+
+
+class Judge:
+    MENU = 'judge_menu'

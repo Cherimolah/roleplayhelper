@@ -5,3 +5,5 @@ from . import admin_panel
 from . import group_events
 from . import chat_commands
 from . import requests
+from . import action_mode
+from . import judge_panel
