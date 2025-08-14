@@ -966,7 +966,6 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field("Название", Admin.DAYLIC_NAME),
             Field("Описание", Admin.DAYLIC_DESCRIPTION),
             Field("Награда", Admin.DAYLIC_REWARD),
-            Field("Кулдаун", Admin.DAYLIC_COOLDOWN, info_cooldown, parse_cooldown_async),
             Field("Профессия", Admin.DAYLIC_PROFESSION, professions, profession_serialize),
             Field("Фракция", Admin.DAYLIC_FRACTION, info_fraction_daylic, serialize_fraction_daylic),
             Field("Бонус к репутации", Admin.DAYLIC_REPUTATTION)
@@ -1092,7 +1091,8 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field('Для фракции', Admin.ITEM_FRACTION_ID, info_item_fraction, serialize_target_fraction),
             Field('Необходимый уровень репутации', Admin.ITEM_REPUTATION),
             Field('Фото', Admin.ITEM_PHOTO, info_item_photo),
-            Field('Бонус', Admin.ITEM_BONUS, info_item_bonus, serialize_item_bonus)
+            Field('Бонус', Admin.ITEM_BONUS, info_item_bonus, serialize_item_bonus),
+            Field('Время использования', Admin.ITEM_ACTION_TIME)
         ]
     },
     'Race': {

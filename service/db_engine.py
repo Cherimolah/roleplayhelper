@@ -110,7 +110,7 @@ class Database(Gino):
             last_payment = Column(TIMESTAMP, default=datetime.datetime.now)
             status = Column(Integer, ForeignKey("statuses.id", ondelete='SET NULL'), default=1)
             activated_daylic = Column(Integer, ForeignKey("daylics.id", ondelete='SET NULL'))
-            deactivated_daylic = Column(TIMESTAMP, default=datetime.datetime.now)
+            daylic_completed = Column(Boolean, default=False)
             freeze_request = Column(Boolean, default=False)
             delete_request = Column(Boolean, default=False)
             created_at = Column(TIMESTAMP, default=datetime.datetime.now)
@@ -260,7 +260,6 @@ class Database(Gino):
             name = Column(Text)
             description = Column(Text)
             reward = Column(Integer)
-            cooldown = Column(Integer)
             profession_id = Column(Integer, ForeignKey("professions.id", ondelete='SET NULL'))
             fraction_id = Column(Integer, ForeignKey("fractions.id", ondelete='SET NULL'))
             reputation = Column(Integer, default=0)
@@ -448,6 +447,7 @@ class Database(Gino):
             reputation = Column(Integer, default=0)
             photo = Column(Text)
             bonus = Column(JSON, default=[])
+            action_time = Column(Integer)
 
         self.Item = Item
 

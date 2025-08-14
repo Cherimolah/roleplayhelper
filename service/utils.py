@@ -451,8 +451,7 @@ async def send_daylics():
             next_time = last_daylic + datetime.timedelta(days=3)
             seconds = (next_time - datetime.datetime.now()).total_seconds()
         await asyncio.sleep(seconds)
-        data = await db.select([db.Form.id, db.Form.user_id]).where(
-            db.Form.deactivated_daylic < datetime.datetime.now()).gino.all()
+        data = await db.select([db.Form.id, db.Form.user_id]).where(db.Form.is_request.is_(False)).gino.all()
         for form_id, user_id in data:
             profession_id = await db.select([db.Form.profession]).where(db.Form.id == form_id).gino.scalar()
             daylic_used = [x[0] for x in await db.select([db.DaylicHistory.daylic_id]).where(db.DaylicHistory.form_id == form_id).gino.all()]
@@ -463,7 +462,7 @@ async def send_daylics():
                 daylic = await db.select([db.Daylic.id]).where(db.Daylic.profession_id == profession_id).order_by(func.random()).gino.scalar()
             if daylic:
                 await db.DaylicHistory.create(form_id=form_id, daylic_id=daylic)
-                await db.Form.update.values(activated_daylic=daylic).where(db.Form.id == form_id).gino.status()
+                await db.Form.update.values(activated_daylic=daylic, daylic_completed=False).where(db.Form.id == form_id).gino.status()
                 await bot.api.messages.send(peer_id=user_id, message="Вам доступно новое ежедневное задание!",
                                             is_notification=True)
         await db.Metadata.update.values(last_daylic_date=datetime.datetime.now()).gino.status()

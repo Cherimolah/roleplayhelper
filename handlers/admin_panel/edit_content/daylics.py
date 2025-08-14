@@ -33,23 +33,9 @@ async def set_description_daylic(m: Message, item_id: int, editing_content: bool
 
 @bot.on.private_message(StateRule(Admin.DAYLIC_REWARD), NumericRule(), AdminRule())
 @allow_edit_content("Daylic", text="Награда за выполнение установлена. Теперь пришлите кулдаун в формате "
-                                   "\"1 день 2 часа 3 минуты\"", state=Admin.DAYLIC_COOLDOWN)
+                                   "\"1 день 2 часа 3 минуты\"", state=Admin.DAYLIC_PROFESSION)
 async def set_daylic_reward(m: Message, value: int, item_id: int, editing_content: bool):
     await db.Daylic.update.values(reward=value).where(db.Daylic.id == item_id).gino.status()
-
-
-@bot.on.private_message(StateRule(Admin.DAYLIC_COOLDOWN), AdminRule())
-@allow_edit_content("Daylic", state=Admin.DAYLIC_PROFESSION)
-async def set_cooldown_daylic(m: Message, item_id: int, editing_content: bool):
-    if not parse_period(m.text):
-        raise FormatDataException("Период указан неверно")
-    await db.Daylic.update.values(cooldown=parse_period(m.text)).where(db.Daylic.id == item_id).gino.status()
-    if not editing_content:
-        professions = await db.select([db.Profession.name]).order_by(db.Profession.id).gino.all()
-        reply = "Время кулдауна установлено. Теперь укажите профессию к которй будет привязан дейлик\n\n"
-        for i, profession in enumerate(professions):
-            reply = f"{reply}{i + 1}. {profession.name}\n"
-        return reply
 
 
 @bot.on.private_message(StateRule(Admin.DAYLIC_PROFESSION), NumericRule(), AdminRule())

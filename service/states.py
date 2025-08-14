@@ -128,7 +128,6 @@ class Admin:
     DAYLIC_NAME = "daylic_name"
     DAYLIC_DESCRIPTION = "daylic_description"
     DAYLIC_REWARD = "daylic_reward"
-    DAYLIC_COOLDOWN = "daylic_cooldown"
     DAYLIC_PROFESSION = "daylic_profession"
     DAYLIC_FRACTION = "daylic_fraction"
     DAYLIC_REPUTATTION = "daylic_reputation"
@@ -197,6 +196,7 @@ class Admin:
     ITEM_REPUTATION = 'item_reputation'
     ITEM_PHOTO = 'item_photo'
     ITEM_BONUS = 'item_bonus'
+    ITEM_ACTION_TIME = 'item_action_time'
     ITEM_DELETE = 'item_delete'
     DEBUFF_NAME = 'debuff_name'
     DEBUFF_TYPE = 'debuff_type'

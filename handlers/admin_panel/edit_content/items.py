@@ -429,9 +429,16 @@ async def delete_item_bonus(m: Message, value: int):
 
 
 @bot.on.private_message(StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, "action": "save_bonus"}), OrRule(JudgeRule(), AdminRule()))
-@allow_edit_content('Item', end=True, text='Предмет успешно создан')
+@allow_edit_content('Item', text='Укажите время использования предмета\n(в количестве шт. циклов постов)',
+                    state=Admin.ITEM_ACTION_TIME)
 async def save_bonus(m: Message, item_id: int, editing_content: bool):
     pass
+
+
+@bot.on.private_message(StateRule(Admin.ITEM_ACTION_TIME), NumericRule(), AdminRule())
+@allow_edit_content('Item', text='Предмет успешно создан', end=True)
+async def set_item_action_time(m: Message, item_id: int, editing_content: bool, value: int):
+    await db.Item.update.values(action_time=int(value)).where(db.Item.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Item"), PayloadRule({"Item": "delete"}), OrRule(JudgeRule(), AdminRule()))

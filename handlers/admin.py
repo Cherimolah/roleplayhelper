@@ -298,17 +298,13 @@ async def check_daylic(m: MessageEvent):
         return
     daylic_id, form_id = await db.select([db.CompletedDaylic.daylic_id, db.CompletedDaylic.form_id]).where(db.CompletedDaylic.id == response_id).gino.first()
     name, user_id = await db.select([db.Form.name, db.Form.user_id]).where(db.Form.id == form_id).gino.first()
-    reward, daylic_name, cooldown = await db.select([db.Daylic.reward, db.Daylic.name, db.Daylic.cooldown]).where(
+    reward, daylic_name = await db.select([db.Daylic.reward, db.Daylic.name]).where(
         db.Daylic.id == daylic_id).gino.first()
     if m.payload['action'] == 'accept':
-        await (db.Form.update.values(balance=db.Form.balance + reward,
-                                     deactivated_daylic=datetime.datetime.now()+datetime.timedelta(seconds=cooldown),
-                                     activated_daylic=None)
-               .where(db.Form.id == form_id).gino.status())
         await db.CompletedDaylic.update.values(is_checked=True, is_claimed=True).where(db.CompletedDaylic.id == response_id).gino.status()
+        await db.Form.update.values(daylic_completed=True).where(db.Form.user_id == user_id).gino.status()
         await bot.api.messages.send(peer_id=user_id, message=f"Вам засчитано выполнения дейлика {daylic_name}\n"
-                                     f"Вы получили награду в размере {reward} монет\n"
-                                     f"На вас наложен кулдаун {parse_cooldown(cooldown)}", is_notification=True)
+                                     f"Вы получили награду в размере {reward} валюты", is_notification=True)
         await m.edit_message(f"Дейлик {daylic_name} засчитан игроку [id{user_id}|{name}], выдана награда {reward} монет")
     else:
         await db.CompletedDaylic.update.values(is_checked=True, is_claimed=False).where(
