@@ -36,6 +36,8 @@ class StateMiddleware(BaseMiddleware[Message], ABC):
         states.set(self.event.from_id, state or "")
 
     async def post(self) -> None:
+        if self.event.peer_id > 2000000000:
+            return
         state = states.get(self.event.from_id)
         await db.User.update.values(state=state).where(db.User.user_id == self.event.from_id).gino.status()
         states.delete(self.event.from_id)

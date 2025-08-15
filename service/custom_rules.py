@@ -234,3 +234,39 @@ class JudgeRule(ABCRule, ABC):
         else:
             is_judge = await db.select([db.User.judge]).where(db.User.user_id == event.user_id).gino.scalar()
         return is_judge
+
+
+class UserFree(ABCRule, ABC):
+    async def check(self, event: Message | MessageEvent):
+        if isinstance(event, Message):
+            user_id = event.from_id
+        else:
+            user_id = event.user_id
+        user = await db.User.get(user_id)
+        if user.creating_form or user.editing_form or user.editing_content or user.creating_expeditor or user.judge_panel:
+            if isinstance(event, Message):
+                await event.answer('Сначала необходимо выйти в главное меню')
+                return
+            else:
+                await event.show_snackbar('Сначала необходимо выйти в главное меню')
+            return False
+        return True
+
+
+class JudgeFree(ABCRule, ABC):
+    async def check(self, event: Message | MessageEvent):
+        if isinstance(event, Message):
+            user_id = event.from_id
+        else:
+            user_id = event.user_id
+        form_id = await get_current_form_id(user_id)
+        chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.judge_id == form_id).gino.scalar()
+        if chat_id:
+            chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=2000000000 + chat_id)).items[0].chat_settings.title
+            if isinstance(event, Message):
+                await event.answer(f'Вы уже руководите Экшен-режимом в чате «{chat_name}»')
+                return
+            else:
+                await event.show_snackbar(f'Вы уже руководите Экшен-режимом в чате «{chat_name}»')
+            return False
+        return True

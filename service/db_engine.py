@@ -556,11 +556,12 @@ class Database(Gino):
 
             id = Column(Integer, primary_key=True)
             chat_id = Column(Integer)
+            judge_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'))
 
         self.ActionMode = ActionMode
 
         class UsersToActionMode(self.Model):
-            __tablename__ = 'users_to_action_moode'
+            __tablename__ = 'users_to_action_mode'
 
             id = Column(Integer, primary_key=True)
             action_mode_id = Column(Integer, ForeignKey('action_mode.id', ondelete='CASCADE'))
@@ -575,6 +576,7 @@ class Database(Gino):
             chat_id = Column(Integer)
             judge_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'))
             message_id = Column(Integer)
+            from_id = Column(Integer)
 
         self.ActionModeRequest = ActionModeRequest
 
@@ -624,6 +626,10 @@ class Database(Gino):
         if state_types == 0:
             for name in ('Травмы', 'Безумие'):
                 await self.DebuffType.create(name=name)
+
+        races = await self.select([func.count(self.Race.id)]).gino.scalar()
+        if races == 0:
+            await self.Race.create(name='Человек')
 
         if not os.path.exists('data'):
             os.mkdir('data')

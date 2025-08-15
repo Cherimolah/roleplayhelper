@@ -78,6 +78,11 @@ async def start(m: Message):
             await m.answer('Вы сейчас находитесь в режиме создания Карты экспедитора!\n'
                            'Заполните сначала её до конца')
             return
+        chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.judge_id == m.from_id).gino.scalar()
+        if chat_id:
+            chat_name = (await bot.api.messages.get_conversations_by_id(peer_id=2000000000 + chat_id)).items[0].chat_settings.title
+            await m.answer(f'Вы сеейчас являетесь судьей экшен-режима в чате «{chat_name}»')
+            return
         states.set(m.from_id, Menu.MAIN)
         await m.answer("Главное меню", keyboard=await keyboards.main_menu(m.from_id))
     await db.User.update.values(editing_content=False).where(db.User.user_id == m.from_id).gino.status()

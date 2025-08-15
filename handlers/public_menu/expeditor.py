@@ -84,7 +84,7 @@ async def select_race(m: Message, value: int):
         ).row().add(
             Callback('Отклонить', {'request_expeditor_id': request.id, 'action': 'decline'}), KeyboardButtonColor.NEGATIVE
         )
-        message = (await bot.api.messages.send(peer_id=m.from_id,
+        message = (await bot.api.messages.send(peer_id=admin_id,
                                                message=await show_expeditor(expeditor_id, admin_id),
                                                keyboard=keyboard))[0]
         await db.ExpeditorRequest.update.values(message_id=message.conversation_message_id).where(db.ExpeditorRequest.id == request.id).gino.status()

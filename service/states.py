@@ -228,3 +228,5 @@ class Admin:
 
 class Judge:
     MENU = 'judge_menu'
+    REASON_DECLINE = 'reason_decline_judge'
+    ADD_USERS = 'add_users'
