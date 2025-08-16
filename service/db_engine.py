@@ -10,6 +10,10 @@ from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, Boolean, T
 from config import USER, PASSWORD, HOST, DATABASE
 
 
+def now():
+    return datetime.datetime.now(tz=datetime.timezone(datetime.timedelta(hours=3)))
+
+
 class Attribute(enum.IntEnum):
     POWER = 1  # Сила
     SPEED = 2  # Скорость
@@ -283,7 +287,7 @@ class Database(Gino):
             maintainence_break = Column(Boolean, default=False)
             time_to_freeze = Column(Integer, default=604800)  # 1 week
             time_to_delete = Column(Integer, default=2592000)  # 30 days
-            last_daylic_date = Column(TIMESTAMP(timezone=False), default=datetime.datetime.now)
+            last_daylic_date = Column(TIMESTAMP(timezone=True), default=now)
 
         self.Metadata = Metadata
 
@@ -298,8 +302,6 @@ class Database(Gino):
             description = Column(Text)
 
         self.Decor = Decor
-
-        # TODO: Тут я дурачек зачем-то фракции, декор привзяал к user_id, а не к form_id. Переделывать не хочется. Пока и так рабоатет
 
         class UserDecor(self.Model):
             __tablename__ = "user_decors"

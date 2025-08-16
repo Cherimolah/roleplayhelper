@@ -10,7 +10,7 @@ from vkbottle.bot import Message, MessageEvent
 import aiofiles
 from vkbottle import Keyboard, Callback, KeyboardButtonColor
 
-from service.db_engine import db
+from service.db_engine import db, now
 from loader import bot, photo_message_uploader, states
 from service.serializers import fields, Field, RelatedTable, sex_types
 import messages
@@ -434,7 +434,7 @@ async def check_quest_completed(form_id: int) -> bool:
 
 
 def calculate_wait_time(hours: int = 0, minutes: int = 0, seconds: int = 0) -> float:
-    today = datetime.datetime.now()
+    today = now()
     expected = datetime.datetime(today.year, today.month, today.day, hours, minutes, seconds)
     if today > expected:
         expected = expected + datetime.timedelta(days=1)
@@ -446,10 +446,10 @@ async def send_daylics():
     while True:
         last_daylic = await db.select([db.Metadata.last_daylic_date]).gino.scalar()
         if not last_daylic:
-            seconds = calculate_wait_time(hours=18)
+            seconds = calculate_wait_time(hours=23, minutes=59, seconds=59)
         else:
             next_time = last_daylic + datetime.timedelta(days=3)
-            seconds = (next_time - datetime.datetime.now()).total_seconds()
+            seconds = (next_time - now()).total_seconds()
         await asyncio.sleep(seconds)
         data = await db.select([db.Form.id, db.Form.user_id]).where(db.Form.is_request.is_(False)).gino.all()
         for form_id, user_id in data:

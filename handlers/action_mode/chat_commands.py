@@ -8,7 +8,7 @@ from service.db_engine import db
 from service.utils import get_current_form_id
 
 
-# @bot.on.chat_message(VBMLRule('/клавиатура'), AdminRule())
+@bot.on.chat_message(VBMLRule('/клавиатура'), AdminRule())
 async def send_keyboard(m: Message):
     keyboard = Keyboard().add(
         Text('Запросить экшен-режим', {'action_mode': 'create_request'}), KeyboardButtonColor.PRIMARY
