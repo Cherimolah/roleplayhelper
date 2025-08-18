@@ -754,3 +754,23 @@ async def get_admin_ids():
     admins_db = {x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()}
     admins = list(admins | admins_db)
     return admins
+
+
+async def filter_users_expeditors(user_ids: list[int]) -> list[int]:
+    """
+    Отфильтровывает список пользователей, у кого есть карта экспедитора
+    """
+    form_ids = [x[0] for x in await db.select([db.Form.id]).where(db.Form.user_id.in_(user_ids)).gino.all()]
+    form_ids = [x[0] for x in await db.select([db.Expeditor.form_id]).where(db.Expeditor.form_id.in_(form_ids)).gino.all()]
+    user_ids = [x[0] for x in await db.select([db.Form.user_id]).where(db.Form.id.in_(form_ids)).gino.all()]
+    return user_ids
+
+
+async def update_initiative(action_mode_id: int):
+    user_ids = [x[0] for x in await db.select([db.UsersToActionMode.user_id]).where(db.UsersToActionMode.action_mode_id == action_mode_id).gino.all()]
+    perception_data = await db.select([db.Form.user_id, db.ExpeditorToAttributes.value]).select_from(
+        db.ExpeditorToAttributes.join(db.Expeditor, db.ExpeditorToAttributes.expeditor_id == db.Expeditor.id)
+        .join(db.Form, db.Form.id == db.Expeditor.form_id)
+    ).where(db.Form.user_id.in_(user_ids)).gino.all()
+
+

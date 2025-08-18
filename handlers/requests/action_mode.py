@@ -2,13 +2,39 @@ from vkbottle.bot import MessageEvent, Message
 from vkbottle.dispatch.rules.base import PayloadMapRule, PayloadRule
 from vkbottle import GroupEventType, Keyboard, KeyboardButtonColor, Text
 from vkbottle_types.objects import MessagesForward
+from sqlalchemy import and_
 
 from loader import bot, states
 from service.custom_rules import JudgeRule, UserFree, JudgeFree, StateRule
 from service.db_engine import db
 from service.states import Judge
 from handlers.questions import start
-from service.utils import get_mention_from_message
+from service.utils import get_mention_from_message, filter_users_expeditors
+
+
+async def send_users_in_action_mode(m: Message | MessageEvent, chat_id: int):
+    action_mode_id = await db.select([db.ActionMode.id]).where(db.ActionMode.chat_id == chat_id).gino.scalar()
+    reply = ('Отправьте ссылки/сообщения/упоминания пользователей, которых хотите добавить в экшен режим\n'
+             'Они должны находиться в нужном чате и иметь карту экспедитора!\n'
+             'Когда будет готово нажмите кнопку запуска экшен-режима\n\n'
+             'Игроки добавленные в экшен-режим:\n')
+    users_data = await db.select([db.Form.user_id, db.Form.name]).select_from(
+        db.UsersToActionMode.join(db.User, db.UsersToActionMode.user_id == db.User.user_id).join(db.Form, db.User.user_id == db.Form.user_id)
+    ).where(db.UsersToActionMode.action_mode_id == action_mode_id).order_by(db.User.user_id.asc()).gino.all()
+    user_ids = [x[0] for x in users_data]
+    user_names = [x[1] for x in users_data]
+    users = await bot.api.users.get(user_ids=user_ids)
+    for i in range(len(users)):
+        reply += f'{i + 1}. [id{user_ids[i]}|{user_names[i]} / {users[i].first_name} {users[i].last_name}]\n'
+    keyboard = Keyboard().add(
+        Text('Запустить экшен-режим', {'action_mode': 'start'}), KeyboardButtonColor.POSITIVE
+    ).row().add(
+        Text('Удалить участников', {'action_mode': 'delete_users'}), KeyboardButtonColor.NEGATIVE
+    )
+    if isinstance(m, Message):
+        await m.answer(reply, keyboard=keyboard)
+    else:
+        await bot.api.messages.send(peer_id=m.user_id, message=reply)
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'action_mode_request_id': int, 'action_mode': 'decline'}), JudgeRule(), UserFree(), JudgeFree())
@@ -76,53 +102,66 @@ async def confirm_action_mode(m: MessageEvent):
     states.set(m.user_id, Judge.ADD_USERS)
     action_mode = await db.ActionMode.create(chat_id=request.chat_id, judge_id=m.user_id)
     await db.UsersToActionMode.create(action_mode_id=action_mode.id, user_id=request.from_id)
-    keyboard = Keyboard().add(
-        Text('Запустить экшен-режим', {'action_mode': 'start'}), KeyboardButtonColor.POSITIVE
-    ).row().add(
-        Text('Удалить участников', {'action_mode': 'delete_users'}), KeyboardButtonColor.NEGATIVE
-    )
-    reply = ('Отправьте ссылки/сообщения/упоминания пользователей, которых хотите добавить в экшен режим\n'
-             'Они должны находиться в нужном чате и иметь карту экспедитора!\n'
-             'Когда будет готово нажмите кнопку запуска экшен-режима\n\n'
-             'Игроки добавленные в экшен-режим:\n')
-    members = await bot.api.messages.get_conversation_members(peer_id=2000000000 + request.chat_id)
-    user_ids = [x.member_id for x in members.items if x.member_id > 0]
-    form_ids = [x[0] for x in await db.select([db.Form.id]).where(db.Form.user_id.in_(user_ids)).gino.all()]
-    form_ids = [x[0] for x in await db.select([db.Expeditor.form_id]).where(db.Expeditor.form_id.in_(form_ids)).gino.all()]
-    users_data = await db.select([db.Form.name, db.Form.user_id]).where(db.Form.id.in_(form_ids)).gino.all()
-    users = await bot.api.users.get(user_ids=[x[1] for x in users_data])
-    for i in range(len(users_data)):
-        reply += f'{i + 1}. [id{users_data[i][1]}|{users_data[i][0]} / {users[i].first_name} {users[i].last_name}]\n'
-    await m.edit_message(message=reply, keyboard=keyboard.get_json())
+    await m.edit_message(f'Вы активировали экшен-режим в чате «{chat_name}»')
+    await send_users_in_action_mode(m, action_mode.chat_id)
 
 
 @bot.on.private_message(StateRule(Judge.ADD_USERS), PayloadRule({'action_mode': 'start'}), JudgeRule())
+@bot.on.private_message(StateRule(Judge.DELETE_USERS), PayloadRule({'action_mode': 'start'}), JudgeRule())
 async def start_action_mode(m: Message):
-    pass
+    await db.ActionMode.update.values(started=True).where(db.ActionMode.judge_id == m.from_id).gino.scalar()
+    chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.judge_id == m.from_id).gino.scalar()
+    chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=[2000000000 + chat_id])).items[0].chat_settings.title
+    await m.answer(f'Вы успешно запустили экшен-режим в чате «{chat_name}»\n')
+    judge_name = await db.select([db.Form.name]).where(db.Form.user_id == m.from_id).gino.scalar()
+    judge = await m.get_user()
+    await bot.api.messages.send(message=f'Судья [id{m.from_id}|{judge_name} / {judge.first_name} {judge.last_name}] '
+                                        f'запустил экшен режим')
 
 
 @bot.on.private_message(StateRule(Judge.ADD_USERS), PayloadRule({'action_mode': 'delete_users'}), JudgeRule())
-async def delete_users_from_action_mode(m: Message):
-    pass
-
-
-async def send_users_in_action_mode(m: Message, chat_id: int):
-    action_mode_id = await db.select([db.ActionMode.id]).where(db.ActionMode.chat_id == chat_id).gino.scalar()
-    user_ids = [x[0] for x in await db.select([db.UsersToActionMode.user_id]).where(db.UsersToActionMode.action_mode_id == action_mode_id).gino.all()]
-    reply = ('Отправьте ссылки/сообщения/упоминания пользователей, которых хотите добавить в экшен режим\n'
-             'Они должны находиться в нужном чате и иметь карту экспедитора!\n'
-             'Когда будет готово нажмите кнопку запуска экшен-режима\n\n'
-             'Игроки добавленные в экшен-режим:\n')
-    user_names = [x[0] for x in await db.select([db.Form.name]).where(db.Form.user_id.in_(user_ids)).gino.all()]
+async def delete_users(m: Message):
+    states.set(m.from_id, Judge.DELETE_USERS)
+    reply = 'Укажите номера пользователей через запятую, кого хотите удалить из экшен режима:\n\n'
+    action_mode_id = await db.select([db.ActionMode.id]).where(db.ActionMode.judge_id == m.from_id).gino.scalar()
+    users_data = await db.select([db.Form.user_id, db.Form.name]).select_from(
+        db.UsersToActionMode.join(db.User, db.UsersToActionMode.user_id == db.User.user_id).join(db.Form, db.User.user_id == db.Form.user_id)
+    ).where(db.UsersToActionMode.action_mode_id == action_mode_id).order_by(db.User.user_id.asc()).gino.all()
+    user_ids = [x[0] for x in users_data]
+    user_names = [x[1] for x in users_data]
     users = await bot.api.users.get(user_ids=user_ids)
-    for i in range(len(users)):
-        reply += f'{i + 1}. [id{user_ids[i]}|{user_names[i]} / {users[i].first_name} {users[i].last_name}]\n'
+    for i, user_id in enumerate(user_ids):
+        reply += f'{i + 1}. [id{user_id}|{user_names[i]} / {users[i].first_name} {users[i].last_name}]\n'
     keyboard = Keyboard().add(
         Text('Запустить экшен-режим', {'action_mode': 'start'}), KeyboardButtonColor.POSITIVE
     ).row().add(
-        Text('Удалить участников', {'action_mode': 'delete_users'}), KeyboardButtonColor.NEGATIVE
+        Text('Добавить пользователей', {'action_mode': 'add_users'}), KeyboardButtonColor.POSITIVE
     )
     await m.answer(reply, keyboard=keyboard)
+
+
+@bot.on.private_message(StateRule(Judge.DELETE_USERS), PayloadRule({'action_mode': 'add_users'}), JudgeRule())
+async def add_users(m: Message):
+    states.set(m.from_id, Judge.ADD_USERS)
+    chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.judge_id == m.from_id).gino.scalar()
+    await send_users_in_action_mode(m, chat_id)
+
+
+@bot.on.private_message(StateRule(Judge.DELETE_USERS), JudgeRule())
+async def delete_users_from_action_mode(m: Message):
+    action_mode_id = await db.select([db.ActionMode.id]).where(db.ActionMode.judge_id == m.from_id).gino.scalar()
+    user_ids = [x[0] for x in await db.select([db.UsersToActionMode.user_id]).where(db.UsersToActionMode.action_mode_id == action_mode_id).order_by(db.UsersToActionMode.user_id.asc()).order_by(db.UsersToActionMode.user_id.asc()).gino.all()]
+    try:
+        numbers = list(map(int, m.text.replace(' ', '').split(',')))
+    except:
+        await m.answer('Неправильный формат!')
+        return
+    for i in numbers:
+        try:
+            await db.UsersToActionMode.delete.where(and_(db.UsersToActionMode.action_mode_id == action_mode_id, db.UsersToActionMode.user_id == user_ids[i - 1])).gino.status()
+        except IndexError:
+            pass  # Пропускаем где выходит за список
+    await delete_users(m)
 
 
 @bot.on.private_message(StateRule(Judge.ADD_USERS), JudgeRule())
@@ -136,14 +175,13 @@ async def add_users_to_action_mode(m: Message):
     members = await bot.api.messages.get_conversation_members(peer_id=2000000000 + chat_id)
     member_ids = {x.member_id for x in members.items if x.member_id > 0}
     user_ids = list(user_ids & member_ids)  # users in chat
-    form_ids = [x[0] for x in await db.select([db.Form.id]).where(db.Form.user_id.in_(user_ids)).gino.all()]  # users have forms
-    form_ids = [x[0] for x in await db.select([db.Expeditor.form_id]).where(db.Expeditor.form_id.in_(form_ids)).gino.all()]  # users have expeditor_map
-    user_ids = [x[0] for x in await db.select([db.Form.user_id]).where(db.Form.id.in_(form_ids)).gino.all()]  # new users' ids after all filters
+    user_ids.sort()
+    user_ids = await filter_users_expeditors(user_ids)
     for user_id in user_ids:
         await db.UsersToActionMode.create(action_mode_id=action_mode_id, user_id=user_id)
     reply = 'Добавлены пользователи:\n\n'
     users = await bot.api.users.get(user_ids=user_ids)
-    user_names = [x[0] for x in await db.select([db.Form.name]).where(db.Form.user_id.in_(user_ids)).gino.all()]
+    user_names = [x[0] for x in await db.select([db.Form.name]).where(db.Form.user_id.in_(user_ids)).order_by(db.Form.user_id.asc()).gino.all()]
     for i in range(len(users)):
         reply += f'{i + 1}. [id{user_ids[i]}|{user_names[i]} / {users[i].first_name} {users[i].last_name}]\n'
     await m.answer(reply)
