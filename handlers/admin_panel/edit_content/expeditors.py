@@ -63,7 +63,7 @@ async def select_attribute(m: MessageEvent):
     attribute_id = m.payload['attribute_id']
     expeditor_id = m.payload['expeditor_id']
     state = f'{Admin.EXPEDITOR_ATTRIBUTES}*{expeditor_id}*{attribute_id}'
-    await db.User.update.values(state=state).where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, state)
     attribute_name = await db.select([db.Attribute.name]).where(db.Attribute.id == attribute_id).gino.scalar()
     value = await db.select([db.ExpeditorToAttributes.value]).where(
         and_(db.ExpeditorToAttributes.expeditor_id == expeditor_id, db.ExpeditorToAttributes.attribute_id == attribute_id)
@@ -110,7 +110,7 @@ async def save_content(m: Message, item_id: int, editing_content: bool):
 async def back_debuffs(m: MessageEvent):
     expeditor_id = m.payload['expeditor_id']
     reply, keyboard = await info_expeditor_debuffs(expeditor_id)
-    await db.User.update.values(state=f'{Admin.EXPEDITOR_DEBUFFS}*{expeditor_id}').where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'{Admin.EXPEDITOR_DEBUFFS}*{expeditor_id}')
     await m.edit_message(message=reply, keyboard=keyboard.get_json())
 
 
@@ -133,7 +133,7 @@ async def select_debuff_to_add(m: MessageEvent):
     keyboard.add(
         Callback('Назад', {'expeditor_id': expeditor_id, 'action': 'back_debuffs'}), KeyboardButtonColor.NEGATIVE
     )
-    await db.User.update.values(state=f'{Admin.EXPEDITOR_SELECT_TYPE_DEBUFF}*{expeditor_id}').where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'{Admin.EXPEDITOR_SELECT_TYPE_DEBUFF}*{expeditor_id}')
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
@@ -151,7 +151,7 @@ async def add_debuff_type(m: MessageEvent):
     keyboard = Keyboard(inline=True).add(
         Callback('Назад', {'expeditor_id': expeditor_id, 'action': 'back_add_debuff'}), KeyboardButtonColor.NEGATIVE
     )
-    await db.User.update.values(state=f'{Admin.EXPEDITOR_ADD_DEBUFF}*{expeditor_id}*{debuff_type}').where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'{Admin.EXPEDITOR_ADD_DEBUFF}*{expeditor_id}*{debuff_type}')
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
@@ -185,8 +185,7 @@ async def select_delete_debuff(m: MessageEvent):
     keyboard = Keyboard(inline=True).add(
         Callback('Назад', {'expeditor_id': expeditor_id, 'action': 'back_delete_debuff'}), KeyboardButtonColor.NEGATIVE
     )
-    await db.User.update.values(state=f'{Admin.EXPEDITOR_DELETE_DEBUFF}*{expeditor_id}').where(
-        db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'{Admin.EXPEDITOR_DELETE_DEBUFF}*{expeditor_id}')
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
@@ -216,7 +215,7 @@ async def save_debuffs(m: Message, item_id: int, editing_content: bool):
 async def back_items(m: MessageEvent):
     expeditor_id = m.payload['expeditor_id']
     reply, keyboard = await info_expeditor_items(expeditor_id)
-    await db.User.update.values(state=f'{Admin.EXPEDITOR_ITEMS}*{expeditor_id}').where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'{Admin.EXPEDITOR_ITEMS}*{expeditor_id}')
     await m.edit_message(message=reply, keyboard=keyboard.get_json())
 
 
@@ -239,7 +238,7 @@ async def select_item_to_add(m: MessageEvent):
     keyboard.add(
         Callback('Назад', {'expeditor_id': expeditor_id, 'action': 'back_item'}), KeyboardButtonColor.NEGATIVE
     )
-    await db.User.update.values(state=f'{Admin.EXPEDITOR_SELECT_TYPE_ITEMS}*{expeditor_id}').where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'{Admin.EXPEDITOR_SELECT_TYPE_ITEMS}*{expeditor_id}')
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
@@ -257,7 +256,7 @@ async def add_item_type(m: MessageEvent):
     keyboard = Keyboard(inline=True).add(
         Callback('Назад', {'expeditor_id': expeditor_id, 'action': 'back_add_item'}), KeyboardButtonColor.NEGATIVE
     )
-    await db.User.update.values(state=f'{Admin.EXPEDITOR_ADD_ITEMS}*{expeditor_id}*{item_type}').where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'{Admin.EXPEDITOR_ADD_ITEMS}*{expeditor_id}*{item_type}')
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
@@ -292,8 +291,7 @@ async def select_delete_items(m: MessageEvent):
     keyboard = Keyboard(inline=True).add(
         Callback('Назад', {'expeditor_id': expeditor_id, 'action': 'back_delete_item'}), KeyboardButtonColor.NEGATIVE
     )
-    await db.User.update.values(state=f'{Admin.EXPEDITOR_DELETE_ITEMS}*{expeditor_id}').where(
-        db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'{Admin.EXPEDITOR_DELETE_ITEMS}*{expeditor_id}')
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
 

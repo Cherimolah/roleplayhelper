@@ -2,7 +2,7 @@
 Загружает ботов, загрузчиков медиа контента и полей для анкет
 """
 import sys
-from typing import List, Callable
+from typing import List
 
 from vkbottle.bot import Bot, BotLabeler
 from vkbottle import API, CtxStorage
@@ -10,7 +10,6 @@ from loguru import logger
 from vkbottle import PhotoMessageUploader, DocMessagesUploader, VideoUploader
 
 from config import BOT_TOKEN, USER_TOKENS
-from service.states import Registration, Admin
 from bot_extended import (APIExtended, RawBotEventViewExtended, BotMessageViewExtended, ErrorHandlerExtended,
                           RouterExtended, AioHTTPClientExtended)
 

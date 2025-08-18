@@ -7,14 +7,13 @@ from vkbottle import Keyboard, GroupEventType, Callback, KeyboardButtonColor, Te
 from sqlalchemy import and_, func
 
 from service.db_engine import db
-from loader import bot
+from loader import bot, states
 from service.states import Registration, Menu, DaughterQuestions, Judge
 import messages
 from service.custom_rules import StateRule, NumericRule, LimitSymbols, CommandWithAnyArgs
 import service.keyboards as keyboards
 from service.utils import loads_form, reload_image, show_fields_edit, page_fractions
 from config import OWNER, ADMINS
-from service.middleware import states
 
 
 @bot.on.private_message(StateRule(Registration.WAIT))
@@ -80,8 +79,8 @@ async def start(m: Message):
             return
         chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.judge_id == m.from_id).gino.scalar()
         if chat_id:
-            chat_name = (await bot.api.messages.get_conversations_by_id(peer_id=2000000000 + chat_id)).items[0].chat_settings.title
-            await m.answer(f'Вы сеейчас являетесь судьей экшен-режима в чате «{chat_name}»')
+            chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=2000000000 + chat_id)).items[0].chat_settings.title
+            await m.answer(f'Вы сейчас являетесь судьей экшен-режима в чате «{chat_name}»')
             return
         states.set(m.from_id, Menu.MAIN)
         await m.answer("Главное меню", keyboard=await keyboards.main_menu(m.from_id))
@@ -309,7 +308,7 @@ async def fraction_accept(m: MessageEvent):
     await db.change_reputation(m.user_id, fraction_id, 0)
     creating_form = await db.select([db.User.creating_form]).where(db.User.user_id == m.user_id).gino.scalar()
     if creating_form:
-        await db.User.update.values(state=Registration.PHOTO).where(db.User.user_id == m.user_id).gino.status()
+        states.set(m.user_id, Registration.PHOTO)
         await m.edit_message(f"Вы успешно вступили в фракцию «{name}»")
         await m.send_message("Отправьте фотографию своего персонажа", keyboard=Keyboard().get_json())
     else:
@@ -373,7 +372,7 @@ async def q1(m: Message | MessageEvent):
         await db.Form.update.values(status=2).where(db.Form.user_id == m.from_id).gino.status()
         await m.answer(reply, keyboard=keyboard)
     else:
-        await db.User.update.values(state=DaughterQuestions.Q1).where(db.User.user_id == m.user_id).gino.status()
+        states.set(m.user_id, DaughterQuestions.Q1)
         await db.Form.update.values(status=2).where(db.Form.user_id == m.user_id).gino.status()
         await bot.api.messages.send(message=reply, keyboard=keyboard, peer_id=m.user_id)
 

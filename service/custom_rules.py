@@ -12,12 +12,13 @@ from service.states import Menu, Admin
 import service.keyboards as keyboards
 from service.utils import get_mention_from_message, get_current_form_id, fields_content
 from config import ADMINS, CHAT_IDS
+from service.states import StateValue
 
 
 class StateRule(ABCRule[Message], ABC):
 
-    def __init__(self, state: str):
-        self.state = state
+    def __init__(self, state: str | StateValue):
+        self.state = str(state)
 
     async def check(self, event: Union[Message, MessageEvent]):
         if isinstance(event, Message):

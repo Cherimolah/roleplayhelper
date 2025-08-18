@@ -158,14 +158,14 @@ async def add_item_bonus(m: MessageEvent):
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"select_bonus_type": 'back', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('delete_item_bonus'), PayloadMapRule({"select_bonus_type": 'back', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def edit_item_bonus(m: MessageEvent):
-    await db.User.update.values(state=f'{Admin.ITEM_BONUS}*{m.payload["item_id"]}').where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'{Admin.ITEM_BONUS}*{m.payload["item_id"]}')
     await show_bonus_menu(m, m.payload['item_id'])
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"select_bonus_type": 'attribute', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('set_bonus_attribute'), PayloadMapRule({"select_bonus_type": 'attribute', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_item_bonus_type(m: MessageEvent):
-    await db.User.update.values(state=f'{Admin.ITEM_BONUS}*{m.payload["item_id"]}').gino.status()
+    states.set(m.user_id, f'{Admin.ITEM_BONUS}*{m.payload["item_id"]}')
     attributes = await db.select([*db.Attribute]).gino.all()
     keyboard = Keyboard(inline=True)
     for i, attribute in enumerate(attributes):
@@ -182,7 +182,7 @@ async def select_item_bonus_type(m: MessageEvent):
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"bonus_attribute_id": int, 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_item_bonus_attribute(m: MessageEvent):
     reply = 'Укажите значение для бонуса/штрафа к характеристике'
-    await db.User.update.values(state=f'set_bonus_attribute*{m.payload["item_id"]}*{m.payload["bonus_attribute_id"]}').where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'set_bonus_attribute*{m.payload["item_id"]}*{m.payload["bonus_attribute_id"]}')
     keyboard = Keyboard(inline=True).add(Callback('Назад', {"select_bonus_type": 'attribute', 'item_id': m.payload['item_id']}), KeyboardButtonColor.NEGATIVE)
     await m.edit_message(reply, keyboard=keyboard.get_json())
 
@@ -203,7 +203,7 @@ async def select_item_bonus_attribute(m: Message, value: int):
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('add_debuff'), PayloadMapRule({"select_bonus_type": 'state', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('delete_debuff'), PayloadMapRule({"select_bonus_type": 'state', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_item_bonus_state(m: MessageEvent):
-    await db.User.update.values(state=f"{Admin.ITEM_BONUS}*{m.payload['item_id']}").where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f"{Admin.ITEM_BONUS}*{m.payload['item_id']}")
     reply = 'Выберите вариант воздействия на состояние'
     keyboard = Keyboard(inline=True).add(
         Callback('Добавить дебаф', {"item_id": m.payload['item_id'], 'action': 'add_debuff'}), KeyboardButtonColor.PRIMARY
@@ -221,13 +221,13 @@ async def select_item_bonus_state(m: MessageEvent):
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, 'action': 'add_debuff'}), OrRule(JudgeRule(), AdminRule()))
 async def add_item_bonus_state(m: MessageEvent):
-    await db.User.update.values(state=f'add_debuff*{m.payload["item_id"]}').where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'add_debuff*{m.payload["item_id"]}')
     await show_page_debuffs(m, 1, m.payload['item_id'])
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, 'action': 'delete_debuff'}), OrRule(JudgeRule(), AdminRule()))
 async def add_item_bonus_state(m: MessageEvent):
-    await db.User.update.values(state=f'delete_debuff*{m.payload["item_id"]}').where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'delete_debuff*{m.payload["item_id"]}')
     await show_page_debuffs(m, 1, m.payload['item_id'])
 
 
@@ -302,7 +302,7 @@ async def delete_all_debuff(m: MessageEvent):
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('set_libido'), PayloadMapRule({"select_bonus_type": 'sex_state', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('set_subordination'), PayloadMapRule({"select_bonus_type": 'sex_state', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_bonus_type(m: MessageEvent):
-    await db.User.update.values(state=f'{Admin.ITEM_BONUS}*{m.payload["item_id"]}').where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'{Admin.ITEM_BONUS}*{m.payload["item_id"]}')
     reply = 'Выберите тип бонуса'
     keyboard = Keyboard(inline=True).add(
         Callback('Подчинение', {'bonus_type': 'subordination', 'item_id': m.payload['item_id']}), KeyboardButtonColor.PRIMARY
@@ -318,7 +318,7 @@ async def select_bonus_type(m: MessageEvent):
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({'bonus_type': 'subordination', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_bonus_type(m: MessageEvent):
-    await db.User.update.values(state=f'set_subordination*{m.payload["item_id"]}').where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'set_subordination*{m.payload["item_id"]}')
     reply = 'Укажите бонус/штраф к Подчинение при использовании предмета'
     keyboard = Keyboard(inline=True).add(
         Callback('Назад', {"select_bonus_type": 'sex_state', 'item_id': m.payload['item_id']}), KeyboardButtonColor.NEGATIVE
@@ -338,8 +338,7 @@ async def select_bonus_state(m: Message, value: int):
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({'bonus_type': 'libido', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_bonus_type(m: MessageEvent):
-    await db.User.update.values(state=f'set_libido*{m.payload["item_id"]}').where(
-        db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'set_libido*{m.payload["item_id"]}')
     reply = 'Укажите бонус/штраф к Либидо при использовании предмета'
     keyboard = Keyboard(inline=True).add(
         Callback('Назад', {"select_bonus_type": 'sex_state', 'item_id': m.payload['item_id']}),
@@ -361,7 +360,7 @@ async def select_bonus_state(m: Message, value: int):
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({'bonus_type': 'pregnant', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule('set_pregnant'), PayloadMapRule({'bonus_type': 'pregnant', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_bonus_type(m: MessageEvent):
-    await db.User.update.values(state=f'{Admin.ITEM_BONUS}*{m.payload["item_id"]}').where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'{Admin.ITEM_BONUS}*{m.payload["item_id"]}')
     reply = 'Выберите действие с состоянием Оплодотворение'
     keyboard = Keyboard(inline=True).add(
         Callback('Добавить оплодотворение', {'select_type': 'add_pregnant', 'item_id': m.payload['item_id']}), KeyboardButtonColor.PRIMARY
@@ -375,7 +374,7 @@ async def select_bonus_type(m: MessageEvent):
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({'select_type': 'add_pregnant', 'item_id': int}), OrRule(JudgeRule(), AdminRule()))
 async def select_bonus_state(m: MessageEvent):
-    await db.User.update.values(state=f'set_pregnant*{m.payload["item_id"]}').where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'set_pregnant*{m.payload["item_id"]}')
     reply = 'Укажите строку, которая будет записана в Оплодотворение'
     keyboard = Keyboard(inline=True).add(
         Callback('Назад', {'bonus_type': 'pregnant', 'item_id': m.payload['item_id']}), KeyboardButtonColor.NEGATIVE
@@ -399,13 +398,13 @@ async def select_bonus_type(m: MessageEvent):
     bonus = await db.select([db.Item.bonus]).where(db.Item.id == item_id).gino.scalar()
     bonus.append({"type": 'sex_state', 'action': 'delete_pregnant'})
     await db.Item.update.values(bonus=bonus).where(db.Item.id == item_id).gino.status()
-    await db.User.update.values(state=f'{Admin.ITEM_BONUS}*{item_id}').where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'{Admin.ITEM_BONUS}*{item_id}')
     await show_bonus_menu(m, item_id)
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, "action": "delete_bonus"}), OrRule(JudgeRule(), AdminRule()))
 async def select_bonus_type(m: MessageEvent):
-    await db.User.update.values(state=f'delete_item_bonus*{m.payload["item_id"]}').where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f'delete_item_bonus*{m.payload["item_id"]}')
     reply = 'Выберите бонус, который хотите удалить:\n'
     bonus = await db.select([db.Item.bonus]).where(db.Item.id == m.payload['item_id']).gino.scalar()
     reply += await serialize_item_bonus(bonus)

@@ -1,6 +1,5 @@
 import enum
 import json
-import traceback
 import typing
 from typing import Optional, Union, List
 from abc import ABC

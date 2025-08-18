@@ -182,7 +182,7 @@ async def send_quest_page(m: Union[Message, MessageEvent], page: int):
     if isinstance(m, Message):
         await m.answer(reply, keyboard=keyboard)
     else:
-        await db.User.update.values(state=Menu.SHOW_QUESTS).where(db.User.user_id == user_id).gino.status()
+        states.set(user_id, Menu.SHOW_QUESTS)
         await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
@@ -202,7 +202,7 @@ async def take_quest(m: MessageEvent):
     if quest.closed_at:
         seconds = (quest.closed_at - datetime.datetime.now()).total_seconds()
         asyncio.get_event_loop().create_task(quest_over(seconds, form_id, quest_id))
-    await db.User.update.values(state=Menu.SHOW_QUESTS).where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, Menu.SHOW_QUESTS)
     await db.QuestHistory.create(quest_id=quest_id, form_id=form_id)
     await m.send_message("После завершения квеста нажмите на кнопку завершения. Вы можете выйти и вернутся "
                                    "во вкладку квесты", keyboard=reply[1].get_json())

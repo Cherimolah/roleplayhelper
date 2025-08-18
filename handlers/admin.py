@@ -31,7 +31,7 @@ async def accept_form(m: MessageEvent):
     await db.Form.update.values(is_request=False).where(db.Form.id == form_id).gino.status()
     state = await db.select([db.User.state]).where(db.User.user_id == user_id).gino.scalar()
     if state == "wait":
-        await db.User.update.values(state=Menu.MAIN, creating_form=False).where(db.User.user_id == user_id).gino.status()
+        states.set(user_id, Menu.MAIN)
         await bot.api.messages.send(peer_ids=user_id, message=messages.form_accepted, keyboard=await keyboards.main_menu(user_id))
     else:
         await db.User.update.values(editing_form=False).where(db.User.user_id == user_id).gino.status()
@@ -44,12 +44,11 @@ async def accept_form(m: MessageEvent):
         professions = await db.select([db.Profession.name]).gino.all()
         for i, prof in enumerate(professions):
             reply = f"{reply}{i+1}. {prof.name}\n"
-        await db.User.update.values(state=f"{Admin.SELECT_PROFESSION}*{user_id}").where(db.User.user_id == m.user_id).gino.status()
+        states.set(m.user_id, f"{Admin.SELECT_PROFESSION}*{user_id}")
         await m.send_message(reply, keyboard=keyboards.another_profession_to_user(user_id))
         return
     if not cabin:
-        await db.User.update.values(state=f"{Admin.SELECT_CABIN}*{user_id}").where(
-            db.User.user_id == m.user_id).gino.status()
+        states.set(m.user_id, f"{Admin.SELECT_CABIN}*{user_id}")
         free = []
         i = 1
         employed = {x[0] for x in await db.select([db.Form.cabin]).gino.all()}
@@ -129,7 +128,7 @@ async def decline_form(m: MessageEvent):
         await m.edit_message("Анкета уже была принята или отклонена другим администратором")
         return
     user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
-    await db.User.update.values(state=f"{Admin.REASON_DECLINE}*{user_id}").where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f"{Admin.REASON_DECLINE}*{user_id}")
     user = (await bot.api.users.get(user_id))[0]
     await m.edit_message(f"Укажите причину отказа от анкеты пользователя [id{user_id}|{user.first_name} {user.last_name}]",
                         keyboard=keyboards.reason_decline_form)
@@ -144,7 +143,7 @@ async def reason_decline_form(m: Message):
         and_(db.Form.user_id == user_id, db.Form.is_request.is_(False))).gino.first()
     if not main_form:
         keyboard = keyboards.fill_quiz
-        await db.User.update.values(state=None).where(db.User.user_id == user_id).gino.status()
+        states.set(user_id, None)
         await bot.api.messages.send(peer_id=user_id, message=f"{messages.form_decline}\n\n{m.text}", keyboard=keyboard,
                                     is_notification=True)
     else:
@@ -403,7 +402,7 @@ async def select_add_reputation(m: MessageEvent):
     reply = f"Укажите номер какой фракции добавить к репутации {await create_mention(user_id)}:\n\n"
     for i, name in enumerate(fractions):
         reply += f"{i + 1}. {name}\n"
-    await db.User.update.values(state=f"{Admin.ADDING_REPUTATION}*{user_id}").where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f"{Admin.ADDING_REPUTATION}*{user_id}")
     await m.edit_message(reply)
 
 
@@ -435,7 +434,7 @@ async def select_fraction_to_edit_rep(m: MessageEvent):
         fraction_id, reputation = data
         name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
         reply += f"{i + 1}. {name} ({reputation})\n"
-    await db.User.update.values(state=f"{Admin.SELECT_USER_FRACTION}*{user_id}").where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f"{Admin.SELECT_USER_FRACTION}*{user_id}")
     await m.edit_message(reply)
 
 
@@ -481,7 +480,7 @@ async def select_reputation_delete(m: MessageEvent):
         fraction_id, reputation = data
         name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
         reply += f"{i + 1}. {name} ({reputation})\n"
-    await db.User.update.values(state=f"{Admin.DELETE_USER_REPUTATION}*{user_id}").where(db.User.user_id == m.user_id).gino.status()
+    states.set(m.user_id, f"{Admin.DELETE_USER_REPUTATION}*{user_id}")
     await m.edit_message(reply)
 
 

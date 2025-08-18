@@ -476,8 +476,6 @@ async def show_fields_edit(user_id: int, new=True):
         params['is_request'] = True
         await db.Form.create(**params)
         await db.User.update.values(editing_form=True).where(db.User.user_id == user_id).gino.status()
-    await db.User.update.values(state=service.states.Menu.SELECT_FIELD_EDIT_NUMBER).where(
-        db.User.user_id == user_id).gino.status()
     states.set(user_id, service.states.Menu.SELECT_FIELD_EDIT_NUMBER)
     reply = ("Выберите поле для редактирования. "
              "Когда закончите нажмите кнопку «Подтвердить изменения»\n\n")
@@ -600,8 +598,6 @@ async def send_edit_item(user_id: int, item_id: int, item_type: str):
             else:
                 reply += f"{i + 1}. {data.name}: {await data.serialize_func(item[i + 1])}\n"
     keyboard = keyboards.get_edit_content(item_type)
-    await db.User.update.values(state=f"{service.states.Admin.EDIT_CONTENT}_{item_type}*{item.id}").where(
-        db.User.user_id == user_id).gino.status()
     states.set(user_id, f"{service.states.Admin.EDIT_CONTENT}_{item_type}*{item.id}")
     await bot.api.messages.send(message=reply, keyboard=keyboard.get_json(), peer_id=user_id, attachment=attachment)
 

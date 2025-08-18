@@ -3,11 +3,14 @@ import datetime
 from abc import ABC
 
 from vkbottle import BaseMiddleware, Keyboard
-from vkbottle.bot import Message
+from vkbottle.bot import Message, MessageEvent
 
 from service.db_engine import db
 from service.utils import check_last_activity
 from loader import states
+
+
+from enum import StrEnum
 
 
 class MaintainenceMiddleware(BaseMiddleware[Message], ABC):
@@ -38,7 +41,7 @@ class StateMiddleware(BaseMiddleware[Message], ABC):
     async def post(self) -> None:
         if self.event.peer_id > 2000000000:
             return
-        state = states.get(self.event.from_id)
+        state = str(states.get(self.event.from_id))
         await db.User.update.values(state=state).where(db.User.user_id == self.event.from_id).gino.status()
         states.delete(self.event.from_id)
 
@@ -71,3 +74,20 @@ class ActivityUsersMiddleware(BaseMiddleware[Message], ABC):
             return
         await db.User.update.values(last_activity=datetime.datetime.now()).where(db.User.user_id == self.event.from_id).gino.status()
         asyncio.get_event_loop().create_task(check_last_activity(self.event.from_id))
+
+
+class StateMiddlewareME(BaseMiddleware[MessageEvent]):
+
+    async def pre(self) -> None:
+        if self.event['object']['peer_id'] > 2000000000:
+            return
+        state = await db.select([db.User.state]).where(db.User.user_id == self.event['object']['user_id']).gino.scalar()
+        states.set(self.event['object']['user_id'], state or "")
+
+    async def post(self) -> None:
+        if self.event['object']['peer_id'] > 2000000000:
+            return
+        state = str(states.get(self.event['object']['user_id']))
+        await db.User.update.values(state=state).where(db.User.user_id == self.event['object']['user_id']).gino.status()
+        states.delete(self.event['object']['user_id'])
+

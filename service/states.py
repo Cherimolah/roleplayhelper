@@ -1,4 +1,24 @@
-class Registration:
+class StateValue(str):
+    def __new__(cls, value, owner_name):
+        obj = super().__new__(cls, value)
+        obj.owner_name = owner_name
+        return obj
+
+    def __str__(self):
+        return f"{self.owner_name}.{super().__str__()}"
+
+
+class StateMeta(type):
+    def __new__(mcs, name, bases, attrs):
+        new_attrs = {}
+        for k, v in attrs.items():
+            if not k.startswith('__') and isinstance(v, str):
+                v = StateValue(v, name)
+            new_attrs[k] = v
+        return super().__new__(mcs, name, bases, new_attrs)
+
+
+class Registration(metaclass=StateMeta):
     PERSONAL_NAME = "name"
     PROFESSION = "profession"
     AGE = "age"
@@ -18,7 +38,7 @@ class Registration:
     WAIT = "wait"
 
 
-class DaughterQuestions:
+class DaughterQuestions(metaclass=StateMeta):
     Q1 = "q1"
     Q2 = "q2"
     Q3 = "q3"
@@ -29,12 +49,12 @@ class DaughterQuestions:
     Q8 = "q8"
 
 
-class ExpeditorQuestions:
+class ExpeditorQuestions(metaclass=StateMeta):
     sex = 'sex'
     race = 'race'
 
 
-class Menu:
+class Menu(metaclass=StateMeta):
     MAIN = "main_menu"
     SHOW_FORM = "show_form"
     SEARCH_FORM = "search_form"
@@ -70,7 +90,7 @@ class Menu:
     CONFIRM_NEW_EXPEDITOR = "confirm_new_editor"
 
 
-class Admin:
+class Admin(metaclass=StateMeta):
     MENU = "admin_menu"
     REASON_DECLINE = "reason_decline"
     SELECT_PROFESSION = "select_profession"
@@ -226,7 +246,8 @@ class Admin:
     ENTER_OLD_JUDGE = 'enter_old_judge'
 
 
-class Judge:
+class Judge(metaclass=StateMeta):
     MENU = 'judge_menu'
     REASON_DECLINE = 'reason_decline_judge'
     ADD_USERS = 'add_users'
+    DELETE_USERS = 'delete_users'
