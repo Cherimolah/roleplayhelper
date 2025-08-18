@@ -44,8 +44,8 @@ async def select_edit_content(m: Message):
 
 @bot.on.private_message(PayloadMapRule({"edit_content": str}), OrRule(JudgeRule(), AdminRule()))
 async def select_action_with_cabins(m: Message):
-    is_judge = await db.select([db.User.judge]).where(db.User.user_id == m.from_id).gino.scalar()
-    if is_judge and m.payload['edit_content'] not in ('Item', 'StateDebuff'):
+    is_judge, admin = await db.select([db.User.judge, db.User.admin]).where(db.User.user_id == m.from_id).gino.first()
+    if is_judge and admin <= 0 and m.payload['edit_content'] not in ('Item', 'StateDebuff'):
         await m.answer('Доступ запрещен')
         return
     await db.User.update.values(editing_content=False).where(db.User.user_id == m.from_id).gino.status()
