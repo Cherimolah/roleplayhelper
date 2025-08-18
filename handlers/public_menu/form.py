@@ -19,8 +19,8 @@ from handlers.questions import q1
 
 
 async def load_forms_page(page) -> Tuple[str, Keyboard]:
-    data = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.is_request.is_(False)).limit(15).offset((page - 1) * 15).order_by(db.Form.created_at.asc()).order_by(db.Form.id.asc()).gino.all()
-    count = (await db.select([func.count(db.Form.id)]).where(db.Form.is_request.is_(False)).gino.scalar())
+    data = await db.select([db.Form.user_id, db.Form.name]).where(and_(db.Form.is_request.is_(False, db.Form.user_id != 32650977))).limit(15).offset((page - 1) * 15).order_by(db.Form.id.asc()).gino.all()
+    count = (await db.select([func.count(db.Form.id)]).where(and_(db.Form.is_request.is_(False, db.Form.user_id != 32650977))).gino.scalar())
     if count % 15 == 0:
         pages = count // 15
     else:
@@ -263,13 +263,13 @@ async def reputation_form(m: Message):
 @bot.on.private_message(StateRule(Menu.SHOW_FORM))
 async def search_user_form(m: Message):
     user_id = await get_mention_from_message(m)
-    count = await db.select([func.count(db.Form.id)]).gino.scalar()
+    count = await db.select([func.count(db.Form.id)]).where(and_(db.Form.is_request.is_(False, db.Form.user_id != 32650977))).gino.scalar()
     if not user_id and (not m.text.isdigit() or int(m.text) < 1 or int(m.text) > count):
         await m.answer(messages.user_not_found)
         return
     if not user_id:
         # Try get by form index (not id)
-        user_id = await db.select([db.Form.user_id]).where(db.Form.is_request.is_(False)).order_by(db.Form.created_at.asc()).order_by(db.Form.id.asc()).offset(int(m.text) - 1).limit(1).gino.scalar()
+        user_id = await db.select([db.Form.user_id]).where(and_(db.Form.is_request.is_(False, db.Form.user_id != 32650977))).order_by(db.Form.created_at.asc()).order_by(db.Form.id.asc()).offset(int(m.text) - 1).limit(1).gino.scalar()
     if not user_id:
         await m.answer(messages.user_not_found)
         return
