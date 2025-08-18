@@ -182,7 +182,7 @@ async def send_quest_page(m: Union[Message, MessageEvent], page: int):
     if isinstance(m, Message):
         await m.answer(reply, keyboard=keyboard)
     else:
-        states.set(user_id, Menu.SHOW_QUESTS)
+        await db.User.update.values(state=Menu.SHOW_QUESTS).where(db.User.user_id == user_id).gino.status()
         await m.edit_message(reply, keyboard=keyboard.get_json())
 
 
