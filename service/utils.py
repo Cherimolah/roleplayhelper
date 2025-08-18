@@ -435,7 +435,7 @@ async def check_quest_completed(form_id: int) -> bool:
 
 def calculate_wait_time(hours: int = 0, minutes: int = 0, seconds: int = 0) -> float:
     today = now()
-    expected = datetime.datetime(today.year, today.month, today.day, hours, minutes, seconds)
+    expected = datetime.datetime(today.year, today.month, today.day, hours, minutes, seconds, tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
     if today > expected:
         expected = expected + datetime.timedelta(days=1)
     return (expected - today).total_seconds()
