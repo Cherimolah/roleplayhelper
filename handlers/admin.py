@@ -8,6 +8,7 @@ from vkbottle.dispatch.rules.base import PayloadMapRule, PayloadRule
 from sqlalchemy import and_
 import openpyxl
 from vkbottle import DocMessagesUploader, Callback, KeyboardButtonColor, Keyboard, GroupEventType
+from sqlalchemy.sql.schema import Column
 
 from loader import bot
 from service.db_engine import db
@@ -27,14 +28,18 @@ async def accept_form(m: MessageEvent):
         await m.edit_message("Анкета уже была принята или отклонена другим администратором")
         return
     user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
-    await db.Form.delete.where(and_(db.Form.user_id == user_id, db.Form.is_request.is_(False))).gino.status()
-    await db.Form.update.values(is_request=False).where(db.Form.id == form_id).gino.status()
+    form = await db.select([*db.Form]).where(db.Form.id == form_id).gino.first()
+    fields = [*db.Form]
+    data = {fields[i].name: form[i] for i in range(len(fields))}
+    del data['id']
+    data['is_request'] = False
+    await db.Form.update.values(**data).where(and_(db.Form.user_id == user_id, db.Form.is_request.is_(False))).gino.status()
+    await db.Form.delete.where(and_(db.Form.user_id == user_id, db.Form.is_request.is_(True))).gino.status()
     state = await db.select([db.User.state]).where(db.User.user_id == user_id).gino.scalar()
     if state == "wait":
         states.set(user_id, Menu.MAIN)
         await bot.api.messages.send(peer_ids=user_id, message=messages.form_accepted, keyboard=await keyboards.main_menu(user_id))
     else:
-        await db.User.update.values(editing_form=False).where(db.User.user_id == user_id).gino.status()
         await bot.api.messages.send(peer_ids=user_id, message="Заявка на редактирование анкеты была принята", is_notification=True)
     name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
     await m.edit_message(f"Анкета участника [id{user_id}|{name}] принята")

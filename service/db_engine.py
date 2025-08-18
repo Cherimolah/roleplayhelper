@@ -274,8 +274,8 @@ class Database(Gino):
             __tablename__ = "completed_daylics"
 
             id = Column(Integer, primary_key=True)
-            form_id = Column(Integer, ForeignKey("forms.id"))
-            daylic_id = Column(Integer, ForeignKey("daylics.id", ondelete='SET NULL'))
+            form_id = Column(Integer, ForeignKey("forms.id", ondelete='CASCADE'))
+            daylic_id = Column(Integer, ForeignKey("daylics.id", ondelete='CASCADE'))
             is_claimed = Column(Boolean, default=False)
             is_checked = Column(Boolean, default=False)
 
