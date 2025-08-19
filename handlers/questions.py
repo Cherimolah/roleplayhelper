@@ -12,7 +12,7 @@ from service.states import Registration, Menu, DaughterQuestions, Judge
 import messages
 from service.custom_rules import StateRule, NumericRule, LimitSymbols, CommandWithAnyArgs
 import service.keyboards as keyboards
-from service.utils import loads_form, reload_image, show_fields_edit, page_fractions
+from service.utils import loads_form, reload_image, show_fields_edit, page_fractions, get_admin_ids
 from config import OWNER, ADMINS
 
 
@@ -342,15 +342,29 @@ async def set_character(m: Message):
 
 @bot.on.private_message(StateRule(Registration.WANT_DAUGHTER), PayloadRule({"want_daughter": False}))
 async def want_daughter(m: Message):
-    states.set(m.from_id, Registration.WAIT)
-    await db.User.update.values(creating_form=False).where(db.User.user_id == m.from_id).gino.scalar()
-    await m.answer(messages.form_ready, keyboard=Keyboard())
+    creating_form = await db.select([db.User.creating_form]).where(db.User.user_id == m.from_id).gino.scalar()
+    if creating_form:
+        states.set(m.from_id, Registration.WAIT)
+        await db.User.update.values(creating_form=False).where(db.User.user_id == m.from_id).gino.scalar()
+        await m.answer(messages.form_ready, keyboard=Keyboard())
+    else:
+        states.set(m.from_id, Menu.MAIN)
+        await db.User.update.values(editing_form=False).where(db.User.user_id == m.from_id).gino.scalar()
+        await m.answer('Отредактированная анкета отправлена администрации', keyboard=await keyboards.main_menu(m.from_id),
+                       is_notification=True)
     form_id = await db.select([db.Form.id]).where(db.Form.user_id == m.from_id).gino.scalar()
-    admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
-    admins = list(set(admins).union(ADMINS))
-    for admin in admins:
-        form, photo = await loads_form(m.from_id, admin, True)
-        await bot.api.messages.send(peer_ids=admin, message=form, attachment=photo, keyboard=keyboards.create_accept_form(form_id))
+    user = await m.get_user()
+    admins = await get_admin_ids()
+    for admin_id in admins:
+        form, photo = await loads_form(m.from_id, admin_id, is_request=True)
+        if creating_form:
+            await bot.api.messages.send(peer_id=admin_id, message=f'Пользователь [id{user.id}|{user.first_name} {user.last_name}] '
+                                                                  f'заполнил анкету')
+        else:
+            await bot.api.messages.send(peer_id=admin_id,
+                                        message=f'Пользователь [id{user.id}|{user.first_name} {user.last_name}] '
+                                                f'перезаполнил ответы дочерей')
+        await bot.api.messages.send(peer_id=admin_id, message=form, attachment=photo, keyboard=keyboards.create_accept_form(form_id))
 
 
 @bot.on.private_message(StateRule(Registration.WANT_DAUGHTER), PayloadRule({"want_daughter": True}))

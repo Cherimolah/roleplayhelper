@@ -476,7 +476,7 @@ async def show_fields_edit(user_id: int, new=True):
         params['is_request'] = True
         await db.Form.create(**params)
         await db.User.update.values(editing_form=True).where(db.User.user_id == user_id).gino.status()
-    await db.User.update.values(state=service.states.Menu.SELECT_FIELD_EDIT_NUMBER).where(db.User.user_id == user_id).gino.status()
+    states.set(user_id, service.states.Menu.SELECT_FIELD_EDIT_NUMBER)
     reply = ("Выберите поле для редактирования. "
              "Когда закончите нажмите кнопку «Подтвердить изменения»\n\n")
     for i, field in enumerate(fields):

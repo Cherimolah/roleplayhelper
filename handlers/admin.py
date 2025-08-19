@@ -16,11 +16,11 @@ import messages
 from service import keyboards
 from service.states import Menu, Admin
 from service.middleware import states
-from service.custom_rules import StateRule, NumericRule, AdminRule
+from service.custom_rules import StateRule, NumericRule, AdminRule, UserFree
 from service.utils import take_off_payments, parse_cooldown, parse_reputation, create_mention, check_quest_completed, apply_reward, serialize_target_reward
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_accept": int}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_accept": int}), AdminRule(), UserFree())
 async def accept_form(m: MessageEvent):
     form_id = m.object.payload['form_accept']
     is_request = await db.select([db.Form.is_request]).where(db.Form.id == form_id).gino.scalar()
@@ -35,7 +35,7 @@ async def accept_form(m: MessageEvent):
     else:
         await db.Form.update.values(is_request=False).where(db.Form.id == form_id).gino.status()
     state = await db.select([db.User.state]).where(db.User.user_id == user_id).gino.scalar()
-    if state == "Registration.wait":
+    if str(state) == "Registration.wait":
         await db.User.update.values(state=str(Menu.MAIN)).where(db.User.user_id == user_id).gino.status()
         await bot.api.messages.send(peer_ids=user_id, message=messages.form_accepted, keyboard=await keyboards.main_menu(user_id))
     else:
@@ -51,7 +51,7 @@ async def accept_form(m: MessageEvent):
         states.set(m.user_id, f"{Admin.SELECT_PROFESSION}*{user_id}")
         await m.send_message(reply, keyboard=keyboards.another_profession_to_user(user_id))
         return
-    if not cabin:
+    elif not cabin:
         states.set(m.user_id, f"{Admin.SELECT_CABIN}*{user_id}")
         free = []
         i = 1
@@ -63,18 +63,17 @@ async def accept_form(m: MessageEvent):
         reply = f"Укажите номер кабины участника [id{user_id}|{name}]\n\n" \
                 f"Свободные номера: {', '.join(free)}"
         await m.send_message(reply, keyboard=Keyboard().get_json())
+    else:
+        states.set(m.user_id, Menu.MAIN)
+        await bot.api.messages.send(peer_id=m.user_id, message='Главное меню', keyboard=await keyboards.main_menu(m.user_id))
 
 
 @bot.on.private_message(StateRule(Admin.SELECT_PROFESSION), NumericRule(), AdminRule())
 async def set_profession_to_user(m: Message, value: int = None):
     profession_id = await db.select([db.Profession.id]).offset(value - 1).limit(1).gino.scalar()
     user_id = int(states.get(m.from_id).split("*")[1])
-    name = await db.select([db.Form.name]).where(
-        and_(db.Form.user_id == user_id, db.Form.is_request.is_(True))
-    ).gino.scalar()
-    await db.Form.update.values(profession=profession_id).where(
-        and_(db.Form.user_id == user_id, db.Form.is_request.is_(True))
-    ).gino.status()
+    name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
+    await db.Form.update.values(profession=profession_id).where(db.Form.user_id == user_id).gino.status()
     states.set(m.from_id, f"{Admin.SELECT_CABIN}*{user_id}")
     free = []
     i = 1
@@ -104,8 +103,7 @@ async def set_user_cabin(m: Message, value: int = None):
     await m.answer(reply)
 
 
-@bot.on.private_message(StateRule(Admin.SELECT_CLASS_CABIN),
-                        NumericRule(), AdminRule())
+@bot.on.private_message(StateRule(Admin.SELECT_CLASS_CABIN), NumericRule(), AdminRule())
 async def set_cabin_class(m: Message, value: int):
     user_id = int(states.get(m.from_id).split("*")[1])
     cabin_id, price = await db.select([db.Cabins.id, db.Cabins.cost]).offset(value - 1).limit(1).gino.first()
@@ -113,12 +111,7 @@ async def set_cabin_class(m: Message, value: int):
                                 balance=db.Form.balance-price,
                                 last_payment=datetime.datetime.now()).where(
         db.Form.user_id == user_id).gino.status()
-    form_id = await db.select([db.Form.id]).where(
-        and_(db.Form.user_id == user_id, db.Form.is_request.is_(True))
-    ).gino.scalar()
-    await db.Form.update.values(is_request=False).where(
-        and_(db.Form.user_id == user_id, db.Form.is_request.is_(True))
-    ).gino.status()
+    form_id = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
     asyncio.get_event_loop().create_task(take_off_payments(form_id))
     states.set(m.from_id, Menu.MAIN)
     await m.answer(messages.cabin_class_succesful, keyboard=await keyboards.main_menu(m.from_id))

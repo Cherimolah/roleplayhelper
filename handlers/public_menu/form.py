@@ -11,7 +11,7 @@ from service.serializers import fields
 from service.custom_rules import StateRule, NumericRule
 from service.states import Menu
 from service.utils import (loads_form, get_mention_from_message, show_fields_edit, soft_divide, page_fractions,
-                           parse_reputation)
+                           parse_reputation, get_admin_ids)
 import service.keyboards as keyboards
 from service.middleware import states
 from service.db_engine import db
@@ -75,7 +75,7 @@ async def ask_clear_daughter(m: Message):
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadRule({'form': 'renew_daughter'}))
 async def confirm_renew_daughter(m: MessageEvent):
     await db.Form.update.values(is_request=True, libido_bonus=0, subordination_bonus=0).where(db.Form.user_id == m.user_id).gino.status()
-    await db.User.update.values(creating_form=True).where(db.Form.user_id == m.user_id).gino.status()
+    await db.User.update.values(editing_form=True).where(db.Form.user_id == m.user_id).gino.status()
     await m.edit_message('Заполняются заново вопросы', keyboard=Keyboard().get_json())
     await q1(m)
 
@@ -106,9 +106,15 @@ async def send_form_edit(m: Message, new=True):
 @bot.on.private_message(StateRule(Menu.SELECT_FIELD_EDIT_NUMBER), PayloadRule({"form_edit": "confirm"}))
 async def confirm_edit_fields(m: Message):
     form_id = await db.select([db.Form.id]).where(and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))).gino.scalar()
-    form, photo = await loads_form(m.from_id, m.from_id, True)
-    admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
-    await bot.api.messages.send(peer_ids=admins, message=form, attachment=photo, keyboard=keyboards.create_accept_form(form_id))
+    admins = await get_admin_ids()
+    user = await m.get_user()
+    for admin_id in admins:
+        form, photo = await loads_form(m.from_id, admin_id, is_request=True)
+        await bot.api.messages.send(peer_id=admin_id,
+                                        message=f'Пользователь [id{user.id}|{user.first_name} {user.last_name}] '
+                                                f'отредактировал некоторые поля в своей анкете')
+        await bot.api.messages.send(peer_id=admin_id, message=form, attachment=photo,
+                                    keyboard=keyboards.create_accept_form(form_id))
     states.set(m.from_id, Menu.MAIN)
     await db.User.update.values(editing_form=False).where(db.User.user_id == m.from_id).gino.scalar()
     await m.answer("Новая версия анкеты успешно отправлена на проверку")
