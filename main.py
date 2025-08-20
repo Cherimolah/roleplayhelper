@@ -10,12 +10,13 @@ import handlers  # Important
 from service.db_engine import db
 from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity, update_daughter_levels, calculate_time
 from config import ADMINS
-from service.middleware import MaintainenceMiddleware, StateMiddleware, FormMiddleware, ActivityUsersMiddleware, StateMiddlewareME
+from service.middleware import MaintainenceMiddleware, StateMiddleware, FormMiddleware, ActivityUsersMiddleware, StateMiddlewareME, ActionModeMiddleware
 
 bot.labeler.message_view.register_middleware(MaintainenceMiddleware)
 bot.labeler.message_view.register_middleware(FormMiddleware)
 bot.labeler.message_view.register_middleware(StateMiddleware)
 bot.labeler.message_view.register_middleware(ActivityUsersMiddleware)
+bot.labeler.message_view.register_middleware(ActionModeMiddleware)
 bot.labeler.raw_event_view.register_middleware(StateMiddlewareME)
 
 

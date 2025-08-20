@@ -3,14 +3,13 @@ from typing import Union, Optional
 
 from vkbottle.dispatch.rules import ABCRule
 from vkbottle.bot import Message, MessageEvent
-from vkbottle.dispatch.rules.abc import T_contra
 
 from loader import states, bot
 from service.db_engine import db
 import messages
 from service.states import Menu, Admin
 import service.keyboards as keyboards
-from service.utils import get_mention_from_message, get_current_form_id, fields_content
+from service.utils import get_mention_from_message, get_current_form_id, fields_content, get_current_turn
 from config import ADMINS, CHAT_IDS
 from service.states import StateValue
 
@@ -271,3 +270,17 @@ class JudgeFree(ABCRule, ABC):
                 await event.show_snackbar(f'Вы уже руководите Экшен-режимом в чате «{chat_name}»')
             return False
         return True
+
+
+class ActionModeTurn(ABCRule, ABC):
+    async def check(self, event: Message):
+        if event.peer_id < 2000000000:
+            return False
+        action_mode = await db.select([db.ActionMode.id]).where(db.ActionMode.chat_id == event.chat_id).gino.scalar()
+        if not action_mode:
+            return False
+        turn = await get_current_turn(action_mode)
+        if turn == event.from_id:
+            return {'action_mode_id': action_mode}
+        else:
+            return False

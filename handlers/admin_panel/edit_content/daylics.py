@@ -32,10 +32,15 @@ async def set_description_daylic(m: Message, item_id: int, editing_content: bool
 
 
 @bot.on.private_message(StateRule(Admin.DAYLIC_REWARD), NumericRule(), AdminRule())
-@allow_edit_content("Daylic", text="Награда за выполнение установлена. Теперь пришлите кулдаун в формате "
-                                   "\"1 день 2 часа 3 минуты\"", state=Admin.DAYLIC_PROFESSION)
+@allow_edit_content("Daylic", state=Admin.DAYLIC_PROFESSION)
 async def set_daylic_reward(m: Message, value: int, item_id: int, editing_content: bool):
     await db.Daylic.update.values(reward=value).where(db.Daylic.id == item_id).gino.status()
+    if not editing_content:
+        reply = 'Укажите к какой профессии будет создан дейлик:\n\n'
+        professions = [x[0] for x in await db.select([db.Profession.name]).order_by(db.Profession.id.asc()).gino.all()]
+        for i, name in enumerate(professions):
+            reply += f'{i + 1}. {name}\n'
+        await m.answer(reply, keyboard=Keyboard())
 
 
 @bot.on.private_message(StateRule(Admin.DAYLIC_PROFESSION), NumericRule(), AdminRule())
@@ -54,7 +59,7 @@ async def set_daylic_profession(m: Message, value: int, item_id: int, editing_co
 
 
 @bot.on.private_message(StateRule(Admin.DAYLIC_FRACTION), PayloadRule({"withot_fraction_bonus": True}), AdminRule())
-@allow_edit_content("Daylic", text="Дейлик успешно создана без бонуса к репутации", end=True,
+@allow_edit_content("Daylic", text="Дейлик успешно создан без бонуса к репутации", end=True,
                     state=f"{Admin.SELECT_ACTION}_Daylic")
 async def save_daylic_without_bonus(m: Message, item_id: int, editing_content: bool):
     await db.Daylic.update.values(fraction_id=None, reputation=0).where(db.Daylic.id == item_id).gino.status()

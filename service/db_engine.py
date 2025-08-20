@@ -560,7 +560,8 @@ class Database(Gino):
             chat_id = Column(Integer)
             judge_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'))
             started = Column(Boolean, default=False)
-            user_step = Column(Integer, ForeignKey('users.user_id', ondelete='SET NULL'))
+            number_step = Column(Integer, default=0)
+            finished = Column(Boolean, default=False)
 
         self.ActionMode = ActionMode
 
@@ -571,6 +572,8 @@ class Database(Gino):
             action_mode_id = Column(Integer, ForeignKey('action_mode.id', ondelete='CASCADE'))
             user_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'))
             initiative = Column(Integer, default=0)
+            participate = Column(Boolean, default=False)
+            exited = Column(Boolean, default=False)
 
         self.UsersToActionMode = UsersToActionMode
 

@@ -251,3 +251,7 @@ class Judge(metaclass=StateMeta):
     REASON_DECLINE = 'reason_decline_judge'
     ADD_USERS = 'add_users'
     DELETE_USERS = 'delete_users'
+    PANEL = 'panel'
+    ADD_USERS_ACTIVE = 'active_add_users'
+    DELETE_USERS_ACTIVE = 'delete_users_active'
+    WAIT_END_ACTION_MODE = 'wait_end_action_mode'

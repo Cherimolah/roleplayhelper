@@ -3,6 +3,7 @@ import datetime
 import os
 from typing import List, Tuple, Optional, Union
 import re
+import random
 
 from sqlalchemy import and_, func
 from vkbottle_types.objects import PhotosPhotoSizes
@@ -756,10 +757,13 @@ async def get_admin_ids():
     return admins
 
 
-async def filter_users_expeditors(user_ids: list[int]) -> list[int]:
+async def filter_users_expeditors(user_ids: list[int], chat_id: int) -> list[int]:
     """
     Отфильтровывает список пользователей, у кого есть карта экспедитора
     """
+    members = await bot.api.messages.get_conversation_members(peer_id=2000000000 + chat_id)
+    member_ids = {x.member_id for x in members.items if x.member_id > 0}
+    user_ids = list(set(user_ids) & member_ids)  # users in chat
     form_ids = [x[0] for x in await db.select([db.Form.id]).where(db.Form.user_id.in_(user_ids)).gino.all()]
     form_ids = [x[0] for x in await db.select([db.Expeditor.form_id]).where(db.Expeditor.form_id.in_(form_ids)).gino.all()]
     user_ids = [x[0] for x in await db.select([db.Form.user_id]).where(db.Form.id.in_(form_ids)).gino.all()]
@@ -767,10 +771,86 @@ async def filter_users_expeditors(user_ids: list[int]) -> list[int]:
 
 
 async def update_initiative(action_mode_id: int):
-    user_ids = [x[0] for x in await db.select([db.UsersToActionMode.user_id]).where(db.UsersToActionMode.action_mode_id == action_mode_id).gino.all()]
-    perception_data = await db.select([db.Form.user_id, db.ExpeditorToAttributes.value]).select_from(
-        db.ExpeditorToAttributes.join(db.Expeditor, db.ExpeditorToAttributes.expeditor_id == db.Expeditor.id)
-        .join(db.Form, db.Form.id == db.Expeditor.form_id)
-    ).where(db.Form.user_id.in_(user_ids)).gino.all()
+    user_ids = [x[0] for x in await db.select([db.UsersToActionMode.user_id]).where(
+        db.UsersToActionMode.action_mode_id == action_mode_id).gino.all()]
+    for user_id in user_ids:
+        form_id = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
+        expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
+        perception = await db.select([db.ExpeditorToAttributes.value]).where(
+            and_(db.ExpeditorToAttributes.attribute_id == 5, db.ExpeditorToAttributes.expeditor_id == expeditor_id)
+        ).gino.scalar()
+        item_ids = [x[0] for x in await db.select([db.ActiveItemToExpeditor.item_id]).where(
+            db.ActiveItemToExpeditor.expeditor_id == expeditor_id).gino.all()]
+        items = await db.select([*db.Item]).where(db.Item.id.in_(item_ids)).gino.all()
+        item_bonus = 0
+        for item in items:
+            if item.bonus.get('type') == 'attribute' and item.bonus.get('attribute_id') == 5:
+                item_bonus += item.bonus.get('bonus', 0)
+        debuff_ids = [x[0] for x in await db.select([db.ExpeditorToDebuffs.debuff_id]).where(
+            db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()]
+        debuff_penalty = sum([x[0] for x in await db.select([db.StateDebuff.penalty]).where(
+            and_(db.StateDebuff.id.in_(debuff_ids), db.StateDebuff.attribute_id == 5)).gino.all()])
+        random_bonus = random.randint(1, 100)
+        initiative = random_bonus + perception + item_bonus + debuff_penalty
+        await db.UsersToActionMode.update.values(initiative=initiative).where(
+            and_(db.UsersToActionMode.user_id == user_id, db.UsersToActionMode.action_mode_id == action_mode_id)
+        ).gino.status()
 
+
+async def next_round(action_mode_id: int):
+    chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.id == action_mode_id).gino.scalar()
+    await db.ActionMode.update.values(number_step=0).where(db.ActionMode.id == action_mode_id).gino.status()
+    await db.UsersToActionMode.delete.where(and_(db.UsersToActionMode.action_mode_id == action_mode_id, db.UsersToActionMode.exited.is_(True))).gino.status()
+    await db.UsersToActionMode.update.values(participate=True).where(
+        db.UsersToActionMode.action_mode_id == action_mode_id).gino.all()
+    await update_initiative(action_mode_id)
+    users_data = await db.select([db.UsersToActionMode.user_id, db.Form.name]).select_from(
+        db.UsersToActionMode.join(db.User, db.UsersToActionMode.user_id == db.User.user_id)
+        .join(db.Form, db.User.user_id == db.Form.user_id)
+    ).where(db.UsersToActionMode.action_mode_id == action_mode_id).order_by(
+        db.UsersToActionMode.initiative.desc()).gino.all()
+    users = await bot.api.users.get(user_ids=[x[0] for x in users_data])
+    reply = f'Новый цикл постов\nТекущая очередь участников:\n\n'
+    for i in range(len(users)):
+        reply += f'{i + 1}. [id{users_data[i][0]}|{users_data[i][1]} / {users[i].first_name} {users[i].last_name}]\n'
+    await bot.api.messages.send(peer_id=2000000000 + chat_id, message=reply)
+    await next_step(action_mode_id)
+
+
+async def get_current_turn(action_mode_id: int) -> int | None:
+    user_ids = [x[0] for x in await db.select([db.UsersToActionMode.user_id]).where(
+        and_(db.UsersToActionMode.action_mode_id == action_mode_id,
+             db.UsersToActionMode.participate.is_(True))).order_by(db.UsersToActionMode.initiative.desc()).gino.all()]
+    number_step = await db.select([db.ActionMode.number_step]).where(db.ActionMode.id == action_mode_id).gino.scalar()
+    try:
+        return user_ids[number_step - 1]
+    except IndexError:
+        return
+
+
+async def next_step(action_mode_id: int):
+    chat_id, finished, judge_id = await db.select(
+        [db.ActionMode.chat_id, db.ActionMode.finished, db.ActionMode.judge_id]).where(
+        db.ActionMode.id == action_mode_id).gino.first()
+    if finished:
+        await db.ActionMode.delete.where(db.ActionMode.id == action_mode_id).gino.status()
+        await bot.api.messages.send(peer_id=2000000000 + chat_id, message='Экшен-режим завершен',
+                                    keyboard=keyboards.request_action_mode)
+        if states.contains(judge_id):
+            states.set(judge_id, service.states.Menu.MAIN)
+        else:
+            await db.User.update.values(state=str(service.states.Menu.MAIN)).where(db.User.user_id == judge_id).gino.status()
+        await bot.api.messages.send(peer_id=judge_id, message='Экшен режим завершен',
+                                    keyboard=await keyboards.main_menu(judge_id))
+        return
+    await db.ActionMode.update.values(number_step=db.ActionMode.number_step + 1).where(
+        db.ActionMode.id == action_mode_id).gino.scalar()
+    user_id = await get_current_turn(action_mode_id)
+    if not user_id:
+        await next_round(action_mode_id)
+        return
+    name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
+    user = (await bot.api.users.get(user_ids=[user_id]))[0]
+    reply = f'Сейчас очередь участника [id{user.id}|{name} / {user.first_name} {user.last_name}] писать свой пост'
+    await bot.api.messages.send(peer_id=2000000000 + chat_id, message=reply)
 

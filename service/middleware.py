@@ -6,11 +6,8 @@ from vkbottle import BaseMiddleware, Keyboard
 from vkbottle.bot import Message, MessageEvent
 
 from service.db_engine import db
-from service.utils import check_last_activity
+from service.utils import check_last_activity, get_current_turn
 from loader import states
-
-
-from enum import StrEnum
 
 
 class MaintainenceMiddleware(BaseMiddleware[Message], ABC):
@@ -32,7 +29,7 @@ class StateMiddleware(BaseMiddleware[Message], ABC):
         if self.event.peer_id > 2000000000:
             return
         state = await db.select([db.User.state]).where(db.User.user_id == self.event.from_id).gino.scalar()
-        if not state and self.event.text.lower() != 'начать':
+        if not state and self.event.text.lower() not in ('начать', 'заполнить заново'):
             await self.event.answer('Я забыл где ты находишься. Давай начнем сначала. Напиши «Начать»',
                                     keyboard=Keyboard())
             await self.stop()
@@ -76,7 +73,7 @@ class ActivityUsersMiddleware(BaseMiddleware[Message], ABC):
         asyncio.get_event_loop().create_task(check_last_activity(self.event.from_id))
 
 
-class StateMiddlewareME(BaseMiddleware[MessageEvent]):
+class StateMiddlewareME(BaseMiddleware[MessageEvent], ABC):
 
     async def pre(self) -> None:
         if self.event['object']['peer_id'] > 2000000000:
@@ -90,4 +87,16 @@ class StateMiddlewareME(BaseMiddleware[MessageEvent]):
         state = str(states.get(self.event['object']['user_id']))
         await db.User.update.values(state=state).where(db.User.user_id == self.event['object']['user_id']).gino.status()
         states.delete(self.event['object']['user_id'])
+
+
+class ActionModeMiddleware(BaseMiddleware[Message], ABC):
+    async def pre(self):
+        if self.event.peer_id < 2000000000:
+            return
+        action_mode_id = await db.select([db.ActionMode.id]).where(db.ActionMode.chat_id == self.event.chat_id).gino.scalar()
+        if action_mode_id:
+            user_turn = await get_current_turn(action_mode_id)
+            if user_turn != self.event.from_id:
+                await self.event.answer('В чате запущен экшен режим. Сейчас не ваша очередь писать пост')
+                self.stop()
 

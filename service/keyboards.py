@@ -372,3 +372,18 @@ judge_menu = Keyboard().add(
 ).row().add(
     Text('Назад', {'judge_menu': 'back'}), KeyboardButtonColor.NEGATIVE
 )
+
+
+action_mode_panel = Keyboard().add(
+        Text('Добавить участников', {'judge_action': 'add_users_active'}), KeyboardButtonColor.POSITIVE
+    ).row().add(
+        Text('Удалить участников', {'judge_action': 'delete_users_active'}), KeyboardButtonColor.NEGATIVE
+    ).row().add(
+    Text('Список участников', {'judge_action': 'list_users'}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Завершить экшен-режим', {'judge_action': 'finish_action_mode'}), KeyboardButtonColor.SECONDARY
+)
+
+request_action_mode = Keyboard().add(
+        Text('Запросить экшен-режим', {'action_mode': 'create_request'}), KeyboardButtonColor.PRIMARY
+    )

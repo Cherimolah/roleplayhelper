@@ -3,17 +3,15 @@ from vkbottle.dispatch.rules.base import VBMLRule, PayloadRule
 from vkbottle import Keyboard, Text, KeyboardButtonColor, Callback
 
 from loader import bot
-from service.custom_rules import AdminRule
+from service.custom_rules import AdminRule, ActionModeTurn
 from service.db_engine import db
-from service.utils import get_current_form_id
+from service.utils import get_current_form_id, next_step
+from service import keyboards
 
 
 @bot.on.chat_message(VBMLRule('/клавиатура'), AdminRule())
 async def send_keyboard(m: Message):
-    keyboard = Keyboard().add(
-        Text('Запросить экшен-режим', {'action_mode': 'create_request'}), KeyboardButtonColor.PRIMARY
-    )
-    await m.answer('Кнопка для запроса экшен-режима', keyboard=keyboard)
+    await m.answer('Кнопка для запроса экшен-режима', keyboard=keyboards.request_action_mode)
 
 
 @bot.on.chat_message(PayloadRule({'action_mode': 'create_request'}))
@@ -43,3 +41,9 @@ async def create_action_mode_request(m: Message):
                                                        f'запрашивает включение экшен-режима в чате «{chat_name}»'))[0]
         await db.ActionModeRequest.update.values(message_id=message.conversation_message_id).where(db.ActionModeRequest.id == request.id).gino.status()
     await m.answer('Запрос на включение экшен-режима отправлен судьям', keyboard=Keyboard())
+
+
+@bot.on.chat_message(ActionModeTurn())
+async def user_post(m: Message, action_mode_id: int):
+    # TODO: всякие калькуляции, проверки и т.д.
+    await next_step(action_mode_id)
