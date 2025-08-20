@@ -951,6 +951,42 @@ async def serialize_expeditor_items(expeditor_id: int) -> str:
     return reply
 
 
+async def info_item_action_time():
+    reply = 'Укажите количество циклов, которые будет действовать предмет'
+    keyboard = Keyboard().add(Text('Без ограничения', {'item_action_time': 'null'}), KeyboardButtonColor.NEGATIVE)
+    return reply, keyboard
+
+
+async def info_item_time():
+    reply = 'Укажите время действия предмета\nФормат: 1 день 2 часа 3 минуты 4 секунды'
+    keyboard = Keyboard().add(Text('Бессрочно', {'item_time': 'infinity'}), KeyboardButtonColor.NEGATIVE)
+    return reply, keyboard
+
+
+async def serialize_item_time(seconds: int):
+    if not seconds:
+        return 'бессрочно'
+    return parse_cooldown(seconds)
+
+
+async def serialize_item_action_time(count_use: int):
+    if not count_use:
+        return 'без ограничения'
+    return str(count_use)
+
+
+async def info_debuff_action_time():
+    reply = 'Укажите количество циклов, которые будет действовать предмет'
+    keyboard = Keyboard().add(Text('Без ограничения', {'debuff_action_time': 'null'}), KeyboardButtonColor.NEGATIVE)
+    return reply, keyboard
+
+
+async def info_debuff_time():
+    reply = 'Укажите время действия дебафф\nФормат: 1 день 2 часа 3 минуты 4 секунды'
+    keyboard = Keyboard().add(Text('Бессрочно', {'debuff_time': 'infinity'}), KeyboardButtonColor.NEGATIVE)
+    return reply, keyboard
+
+
 fields_content: Dict[str, Dict[str, List[Field]]] = {
     "Cabins": {
         "fields": [
@@ -1075,7 +1111,9 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field('Название', Admin.DEBUFF_NAME),
             Field('Тип', Admin.DEBUFF_TYPE, info_debuff_type, serialize_debuff_type),
             Field('Характеристика', Admin.DEBUFF_ATTRIBUTE, info_debuff_attribute, serialize_debuff_attribute),
-            Field('Штраф', Admin.DEBUFF_PENALTY)
+            Field('Штраф', Admin.DEBUFF_PENALTY),
+            Field('Количество циклов действия (шт.)', Admin.DEBUFF_ACTION_TIME, info_debuff_action_time, serialize_item_action_time),
+            Field('Время действия', Admin.DEBUFF_TIME, info_debuff_time, serialize_item_time)
         ]
     },
     'Item': {
@@ -1092,7 +1130,8 @@ fields_content: Dict[str, Dict[str, List[Field]]] = {
             Field('Необходимый уровень репутации', Admin.ITEM_REPUTATION),
             Field('Фото', Admin.ITEM_PHOTO, info_item_photo),
             Field('Бонус', Admin.ITEM_BONUS, info_item_bonus, serialize_item_bonus),
-            Field('Время использования', Admin.ITEM_ACTION_TIME)
+            Field('Количество циклов действия (шт.)', Admin.ITEM_ACTION_TIME, info_item_action_time, serialize_item_action_time),
+            Field('Время действия', Admin.ITEM_TIME, info_item_time, serialize_item_time)
         ]
     },
     'Race': {

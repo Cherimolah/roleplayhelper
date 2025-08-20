@@ -449,7 +449,8 @@ class Database(Gino):
             reputation = Column(Integer, default=0)
             photo = Column(Text)
             bonus = Column(JSON, default=[])
-            action_time = Column(Integer)
+            action_time = Column(Integer, default=0)
+            time_use = Column(Integer, default=0)
 
         self.Item = Item
 
@@ -469,6 +470,8 @@ class Database(Gino):
             type_id = Column(Integer, ForeignKey('debuff_types.id', ondelete='SET NULL'))
             attribute_id = Column(Integer, ForeignKey('attributes.id', ondelete='SET NULL'))
             penalty = Column(Integer, default=0)
+            action_time = Column(Integer, default=0)
+            time_use = Column(Integer, default=0)
 
         self.StateDebuff = StateDebuff
 

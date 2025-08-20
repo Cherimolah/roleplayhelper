@@ -9,8 +9,8 @@ from service.custom_rules import StateRule, AdminRule, NumericRule, JudgeRule
 from service.states import Admin
 from service.db_engine import db
 from service import keyboards
-from service.utils import send_content_page, allow_edit_content, FormatDataException, reload_image, soft_divide
-from service.serializers import info_item_group, info_item_bonus, info_item_type, serialize_item_bonus, info_item_fraction, info_item_photo
+from service.utils import send_content_page, allow_edit_content, FormatDataException, reload_image, soft_divide, parse_period
+from service.serializers import info_item_group, info_item_bonus, info_item_type, serialize_item_bonus, info_item_fraction, info_item_photo, info_item_action_time, info_item_time
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Item"), PayloadRule({"Item": "add"}), OrRule(JudgeRule(), AdminRule()))
@@ -428,16 +428,46 @@ async def delete_item_bonus(m: Message, value: int):
 
 
 @bot.on.private_message(StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, "action": "save_bonus"}), OrRule(JudgeRule(), AdminRule()))
-@allow_edit_content('Item', text='Укажите время использования предмета\n(в количестве шт. циклов постов)',
-                    state=Admin.ITEM_ACTION_TIME)
+@allow_edit_content('Item', state=Admin.ITEM_ACTION_TIME)
 async def save_bonus(m: Message, item_id: int, editing_content: bool):
+    if not editing_content:
+        reply, keyboard = await info_item_action_time()
+        await m.answer(reply, keyboard=keyboard)
+
+
+@bot.on.private_message(StateRule(Admin.ITEM_ACTION_TIME), PayloadRule({'item_action_time': 'null'}), OrRule(JudgeRule(), AdminRule()))
+@allow_edit_content('Item', state=Admin.ITEM_TIME)
+async def set_item_action_time_zero(m: Message, item_id: int, editing_content: bool):
+    if not editing_content:
+        reply, keyboard = await info_item_time()
+        await m.answer(reply, keyboard=keyboard)
+
+
+@bot.on.private_message(StateRule(Admin.ITEM_ACTION_TIME), NumericRule(), OrRule(JudgeRule(), AdminRule()))
+@allow_edit_content('Item', state=Admin.ITEM_TIME)
+async def set_item_action_time(m: Message, item_id: int, editing_content: bool, value: int):
+    await db.Item.update.values(action_time=int(value)).where(db.Item.id == item_id).gino.status()
+    if not editing_content:
+        reply, keyboard = await info_item_time()
+        await m.answer(reply, keyboard=keyboard)
+
+
+@bot.on.private_message(StateRule(Admin.ITEM_TIME), PayloadRule({'item_time': 'infinity'}), OrRule(JudgeRule(), AdminRule()))
+@allow_edit_content('Item', text='Предмет успешно создан', end=True)
+async def set_infinity_tem_time(m: Message, item_id: int, editing_content: bool):
     pass
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_ACTION_TIME), NumericRule(), AdminRule())
+@bot.on.private_message(StateRule(Admin.ITEM_TIME), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', text='Предмет успешно создан', end=True)
-async def set_item_action_time(m: Message, item_id: int, editing_content: bool, value: int):
-    await db.Item.update.values(action_time=int(value)).where(db.Item.id == item_id).gino.status()
+async def set_item_time(m: Message, item_id, editing_content):
+    try:
+        seconds = parse_period(m.text)
+    except:
+        raise FormatDataException('Неправильный формат записи периода')
+    if not seconds:
+        raise FormatDataException('Не указано время')
+    await db.Item.update.values(time_use=seconds).where(db.Item.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Item"), PayloadRule({"Item": "delete"}), OrRule(JudgeRule(), AdminRule()))

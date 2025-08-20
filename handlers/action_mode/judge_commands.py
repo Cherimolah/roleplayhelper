@@ -100,7 +100,7 @@ async def list_action_mode_users(m: Message):
     await m.answer(reply)
 
 
-@bot.on.private_message(StateRule(Judge.PANEL), PayloadRule({'judge_action': 'finish_action_mode'}))
+@bot.on.private_message(PayloadRule({'judge_action': 'finish_action_mode'}))
 async def finish_action_mode(m: Message):
     reply = ('Вы действительно хотите завершить экшен-режим?\n'
              'После подтверждения это действие нельзя будет отменить')

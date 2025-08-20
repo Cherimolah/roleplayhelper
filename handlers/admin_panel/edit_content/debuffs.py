@@ -1,5 +1,5 @@
 from vkbottle.bot import Message
-from vkbottle import Keyboard
+from vkbottle import Keyboard, Text, KeyboardButtonColor
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
 from vkbottle.dispatch.rules.abc import OrRule
 
@@ -8,8 +8,8 @@ from service.custom_rules import StateRule, AdminRule, NumericRule, JudgeRule
 from service.states import Admin
 from service.db_engine import db
 from service import keyboards
-from service.utils import send_content_page, allow_edit_content
-from service.serializers import info_debuff_type, info_debuff_attribute
+from service.utils import send_content_page, allow_edit_content, parse_period, FormatDataException
+from service.serializers import info_debuff_type, info_debuff_attribute, info_debuff_time, info_debuff_action_time
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_StateDebuff"), PayloadRule({"StateDebuff": "add"}), OrRule(JudgeRule(), AdminRule()))
@@ -45,9 +45,47 @@ async def debuff_attribute(m: Message, item_id: int, editing_content: bool):
 
 
 @bot.on.private_message(StateRule(Admin.DEBUFF_PENALTY), NumericRule(min_number=-200, max_number=200), OrRule(JudgeRule(), AdminRule()))
-@allow_edit_content('StateDebuff', text='Дебаф успешно создан', end=True)
+@allow_edit_content('StateDebuff', state=Admin.DEBUFF_ACTION_TIME,)
 async def debuff_penalty(m: Message, value: int, item_id: int, editing_content: bool):
     await db.StateDebuff.update.values(penalty=value).where(db.StateDebuff.id == item_id).gino.status()
+    if not editing_content:
+        reply, keyboard = await info_debuff_action_time()
+        await m.answer(reply, keyboard=keyboard)
+
+
+@bot.on.private_message(StateRule(Admin.DEBUFF_ACTION_TIME), PayloadRule({'debuff_action_time': 'null'}), OrRule(JudgeRule(), AdminRule()))
+@allow_edit_content('StateDebuff', state=Admin.DEBUFF_TIME)
+async def set_debuf_action_time_null(m: Message, item_id, editing_content):
+    if not editing_content:
+        reply, keyboard = await info_debuff_time()
+        await m.answer(reply, keyboard=keyboard)
+
+
+@bot.on.private_message(StateRule(Admin.DEBUFF_ACTION_TIME), NumericRule(), OrRule(JudgeRule(), AdminRule()))
+@allow_edit_content('StateDebuff', state=Admin.DEBUFF_TIME)
+async def set_debuf_action_time_null(m: Message, item_id, editing_content, value):
+    await db.StateDebuff.update.values(action_time=value).where(db.StateDebuff.id == item_id).gino.status()
+    if not editing_content:
+        reply, keyboard = await info_debuff_time()
+        await m.answer(reply, keyboard=keyboard)
+
+
+@bot.on.private_message(StateRule(Admin.DEBUFF_TIME), PayloadRule({'debuff_time': 'infinity'}), OrRule(JudgeRule(), AdminRule()))
+@allow_edit_content('StateDebuff', text='Дебаф успешно создан', end=True)
+async def set_infinity_debuff_time(m: Message, item_id, editing_content):
+    pass
+
+
+@bot.on.private_message(StateRule(Admin.DEBUFF_TIME), OrRule(JudgeRule(), AdminRule()))
+@allow_edit_content('StateDebuff', text='Дебаф успешно создан', end=True)
+async def set_infinity_debuff_time(m: Message, item_id, editing_content):
+    try:
+        seconds = parse_period(m.text)
+    except:
+        raise FormatDataException('Неправильный формат записи периода')
+    if not seconds:
+        raise FormatDataException('Не указано время')
+    await db.StateDebuff.update.values(time_use=seconds).where(db.StateDebuff.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_StateDebuff"), PayloadRule({"StateDebuff": "delete"}), OrRule(JudgeRule(), AdminRule()))
