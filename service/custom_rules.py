@@ -289,7 +289,7 @@ class ActionModeTurn(ABCRule, ABC):
 
 class JudgePostTurn(ABCRule, ABC):
     async def check(self, event: Message):
-        if event.peer_id < 2000000000:
+        if event.peer_id < 2000000000 or not event.text:
             return False
         action_mode = await db.select([db.ActionMode.id]).where(db.ActionMode.chat_id == event.chat_id).gino.scalar()
         if not action_mode:
@@ -304,7 +304,7 @@ class JudgePostTurn(ABCRule, ABC):
 
 class SelectConsequences(ABCRule, ABC):
     async def check(self, event: Message):
-        if event.peer_id < 2000000000:
+        if event.peer_id < 2000000000 or not event.text:
             return False
         if str(states.get(event.from_id)).startswith(str(Judge.SET_CONSEQUENCES)):
             try:

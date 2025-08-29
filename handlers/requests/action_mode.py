@@ -1,6 +1,6 @@
 from vkbottle.bot import MessageEvent, Message
 from vkbottle.dispatch.rules.base import PayloadMapRule, PayloadRule
-from vkbottle import GroupEventType, Keyboard, KeyboardButtonColor, Text
+from vkbottle import GroupEventType, Keyboard, KeyboardButtonColor, Text, VKAPIError
 from vkbottle_types.objects import MessagesForward
 from sqlalchemy import and_
 
@@ -9,7 +9,7 @@ from service.custom_rules import JudgeRule, UserFree, JudgeFree, StateRule
 from service.db_engine import db
 from service.states import Judge
 from handlers.questions import start
-from service.utils import get_mention_from_message, filter_users_expeditors, next_round, parse_period
+from service.utils import get_mention_from_message, filter_users_expeditors, parse_period
 from service import keyboards
 
 
@@ -81,6 +81,15 @@ async def confirm_action_mode(m: MessageEvent):
     request = await db.ActionModeRequest.get(request_id)
     if not request:
         await m.show_snackbar('Запрос уже неактуален')
+        return
+    try:
+        members = await bot.api.messages.get_conversation_members(peer_id=2000000000 + request.chat_id)
+        user_ids = {x.member_id for x in members.items if x.member_id > 0}
+        if m.user_id not in user_ids:
+            await m.show_snackbar('Необходимо вступить в чат для принятия судейства')
+            return
+    except VKAPIError:
+        await m.show_snackbar('Предоставьте боту права администратора в чате!')
         return
     chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=2000000000 + request.chat_id)).items[0].chat_settings.title
     data = await db.select([db.ActionModeRequest.judge_id, db.ActionModeRequest.message_id]).where(db.ActionModeRequest.chat_id == request.chat_id).gino.all()

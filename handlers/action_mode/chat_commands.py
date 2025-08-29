@@ -1,12 +1,12 @@
 from vkbottle.bot import Message
 from vkbottle.dispatch.rules.base import VBMLRule, PayloadRule
-from vkbottle import Keyboard, KeyboardButtonColor, Callback
+from vkbottle import Keyboard, KeyboardButtonColor, Callback, VKAPIError
 from sqlalchemy import and_
 
 from loader import bot
 from service.custom_rules import AdminRule, ActionModeTurn, JudgePostTurn
 from service.db_engine import db
-from service.utils import get_current_form_id, parse_actions, next_round, next_step
+from service.utils import get_current_form_id, parse_actions, next_round
 from service import keyboards
 
 
@@ -28,7 +28,16 @@ async def create_action_mode_request(m: Message):
         return
     name = await db.select([db.Form.name]).where(db.Form.id == form_id).gino.scalar()
     user = await m.get_user()
-    chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=m.peer_id)).items[0].chat_settings.title
+    try:
+        chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=m.peer_id)).items[0].chat_settings.title
+    except VKAPIError:
+        await m.answer('Предоставьте боту права администратора!')
+        return
+    try:
+        link = (await bot.api.messages.get_invite_link(peer_id=m.peer_id, visible_messages_count=1000)).link
+    except VKAPIError:
+        await m.answer('Необходимо, чтобы создатель чата открыл видимость ссылки для приглашения')
+        return
     judges = [x[0] for x in await db.select([db.User.user_id]).where(db.User.judge.is_(True)).gino.all()]
     for judge_id in judges:
         request = await db.ActionModeRequest.create(judge_id=judge_id, chat_id=m.chat_id, from_id=m.from_id)
@@ -39,7 +48,8 @@ async def create_action_mode_request(m: Message):
         )
         message = (await bot.api.messages.send(peer_id=judge_id, keyboard=keyboard,
                                                message=f'Игрок [id{m.from_id}|{name} / {user.first_name} {user.last_name}] '
-                                                       f'запрашивает включение экшен-режима в чате «{chat_name}»'))[0]
+                                                       f'запрашивает включение экшен-режима в чате «{chat_name}»\n'
+                                                       f'Ссылка на чат: {link}'))[0]
         await db.ActionModeRequest.update.values(message_id=message.conversation_message_id).where(db.ActionModeRequest.id == request.id).gino.status()
     await m.answer('Запрос на включение экшен-режима отправлен судьям', keyboard=Keyboard())
 

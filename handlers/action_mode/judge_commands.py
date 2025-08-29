@@ -168,16 +168,24 @@ async def pass_action_mode(m: Message):
     await db.ActionMode.update.values(judge_id=judge_id).where(db.ActionMode.id == action_mode_id).gino.status()
     states.set(m.from_id, Menu.MAIN)
     await db.User.update.values(state=str(Judge.PANEL)).where(db.User.user_id == judge_id).gino.status()
+    number_step = await db.select([db.ActionMode.number_step]).where(db.ActionMode.id == action_mode_id).gino.scalar()
+    chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.id == action_mode_id).gino.scalar()
+    if number_step == 0:  # Ход судьи
+        await bot.api.request('messages.changeConversationMemberRestrictions',
+                          {'peer_id': 2000000000 + chat_id, 'member_ids': m.from_id, 'action': 'ro'})
+        await bot.api.request('messages.changeConversationMemberRestrictions',
+                              {'peer_id': 2000000000 + chat_id, 'member_ids': judge_id, 'action': 'rw'})
     name_new = await db.select([db.Form.name]).where(db.Form.user_id == judge_id).gino.scalar()
     user_new = (await bot.api.users.get(user_ids=[judge_id]))[0]
     await m.answer(f'Вы передали судейство экшен-режимом пользователю [id{judge_id}|{name_new} / {user_new.first_name} {user_new.last_name}]')
     await start(m)
     name = await db.select([db.Form.name]).where(db.Form.user_id == m.from_id).gino.scalar()
     user = (await bot.api.users.get(user_ids=[m.from_id]))[0]
-    chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.id == action_mode_id).gino.scalar()
     chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=[2000000000 + chat_id])).items[0].chat_settings.title
+    link = (await bot.api.messages.get_invite_link(peer_id=2000000000 + chat_id, visible_message_count=1000)).link
     await bot.api.messages.send(peer_id=judge_id, message=f'Пользователь [id{m.from_id}|{name} / {user.first_name} {user.last_name}] '
-                                                          f'передал вам судейство экшен-режима в чате «{chat_name}»',
+                                                          f'передал вам судейство экшен-режима в чате «{chat_name}»\n'
+                                                          f'Ссылка на чат: {link}',
                                 keyboard=keyboards.action_mode_panel)
 
 
