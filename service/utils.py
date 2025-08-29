@@ -934,7 +934,7 @@ async def take_off_item(active_row_id: int):
 
 
 async def wait_disable_debuff(row_id: int):
-    row = await db.select([*db.ExpeditorToDebuffs]).where(db.ExpeditorToDebuffs.id == row_id).gino.scalar()
+    row = await db.select([*db.ExpeditorToDebuffs]).where(db.ExpeditorToDebuffs.id == row_id).gino.first()
     time_use = await db.select([db.StateDebuff.time_use]).where(db.StateDebuff.id == row.debuff_id).gino.scalar()
     if not time_use:  # Нет ограничения по времени
         return
@@ -1123,7 +1123,11 @@ async def count_difficult(post_id: int) -> int:
 async def apply_consequences(action_id: int, con_var: int):
     post_id = await db.select([db.Action.post_id]).where(db.Action.id == action_id).gino.scalar()
     action_mode_id = await db.select([db.Post.action_mode_id]).where(db.Post.id == post_id).gino.scalar()
-    user_id = await db.select([db.Post.user_id]).where(db.Post.id == post_id).gino.scalar()
+    if con_var <= 4:
+        user_id = await db.select([db.Post.user_id]).where(db.Post.id == post_id).gino.scalar()
+    else:
+        action = await db.select([db.Action.data]).where(db.Action.id == action_id).gino.scalar()
+        user_id = action['user_id']
     form_id = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
     expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
     chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.id == action_mode_id).gino.scalar()
@@ -1180,6 +1184,7 @@ async def apply_consequences(action_id: int, con_var: int):
         name = await db.select([db.Form.name]).where(db.Form.user_id == to_user_id).gino.scalar()
         user = (await bot.api.users.get(user_ids=[to_user_id]))[0]
         text = f'PvP с пользователем [id{to_user_id}|{name} / {user.first_name} {user.last_name}]'
+    user_id = await db.select([db.Post.user_id]).where(db.Post.id == post_id).gino.scalar()
     user = (await bot.api.users.get(user_ids=[user_id]))[0]
     name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
     reply = (f'Игрок [id{user_id}|{name} / {user.first_name} {user.last_name}] пытаетается совершить действие «{text}»\n'

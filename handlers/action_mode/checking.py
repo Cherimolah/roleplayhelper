@@ -10,7 +10,7 @@ from service.custom_rules import JudgeRule, StateRule, NumericRule
 from service.states import Judge
 from service.db_engine import db
 from service import keyboards
-from service.utils import next_step, show_consequences, serialize_consequence, type_difficulties, count_difficult, count_attribute, apply_consequences, apply_item, create_mention
+from service.utils import next_step, show_consequences, serialize_consequence, type_difficulties, count_difficult, count_attribute, apply_consequences, apply_item, create_mention, get_current_form_id
 
 
 async def send_check(m: Message | MessageEvent, post_id: int):
@@ -198,7 +198,13 @@ async def select_type_consequences(m: Message):
     post_id = await db.select([db.Action.post_id]).where(db.Action.id == action_id).gino.scalar()
     user_id = await db.select([db.Post.user_id]).where(db.Post.id == post_id).gino.scalar()
     form_id = await db.select([db.Form.user_id]).where(db.Form.user_id == user_id).gino.scalar()
-    expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
+    if con_var <= 4:
+        expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
+    else:
+        action = await db.select([db.Action.data]).where(db.Action.id == action_id).gino.scalar()
+        to_user_id = action['user_id']
+        to_form_id = await get_current_form_id(to_user_id)
+        expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == to_form_id).gino.scalar()
     match con_type:
         case 1:  # Получение травмы
             injuries = [x[0] for x in await db.select([db.StateDebuff.name]).where(db.StateDebuff.type_id == 1).order_by(db.StateDebuff.id.asc()).gino.all()]
@@ -532,16 +538,33 @@ async def accept_check(m: MessageEvent):
     await m.edit_message(f'Вы приняли проверку действия «{text}»')
     difficult = await db.select([db.Post.difficult]).where(db.Post.id == action.post_id).gino.scalar()
     target_percentage = ((await count_attribute(m.user_id, action.attribute_id)) + action.bonus) * type_difficulties[difficult][1]
-    x = random.randint(1, 100)
-    if x <= target_percentage * 0.8:
-        con_var = 4  # Критический успех
-    elif x <= target_percentage:
-        con_var = 3  # Успех
-    elif x >= target_percentage * 1.2:
-        con_var = 1  # Критический провал
+    if action.data.get('type') == 'action':
+        x = random.randint(1, 100)
+        if x <= target_percentage * 0.8:
+            con_var = 4  # Критический успех
+        elif x <= target_percentage:
+            con_var = 3  # Успех
+        elif x >= target_percentage * 1.2:
+            con_var = 1  # Критический провал
+        else:
+            con_var = 2  # Провал
+        await apply_consequences(action_id, con_var)
     else:
-        con_var = 2  # Провал
-    await apply_consequences(action_id, con_var)
+        opponent_percentage = ((await count_attribute(action.data.get('user_id'), action.attribute_id)) + action.bonus) * type_difficulties[difficult][1]
+        if opponent_percentage <= target_percentage * 0.8:
+            con_var = 4  # Критический успех
+            con_var_op = 5
+        elif opponent_percentage <= target_percentage:
+            con_var = 3  # Успех
+            con_var_op = 6
+        elif opponent_percentage >= target_percentage * 1.2:
+            con_var = 1  # Критический провал
+            con_var_op = 8
+        else:
+            con_var = 2  # Провал
+            con_var_op = 7
+        await apply_consequences(action_id, con_var)
+        await apply_consequences(action_id, con_var_op)
     action_mode_id = await db.select([db.Post.action_mode_id]).where(db.Post.id == action.post_id).gino.scalar()
     await db.ActionMode.update.values(check_status=False).where(db.ActionMode.id == action_mode_id).gino.status()
     await send_check(m, action.post_id)
