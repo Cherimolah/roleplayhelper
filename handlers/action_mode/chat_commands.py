@@ -56,7 +56,9 @@ async def create_action_mode_request(m: Message):
 
 @bot.on.chat_message(ActionModeTurn())
 async def user_post(m: Message, action_mode_id: int):
-    actions = await parse_actions(m.text.lower())
+    form_id = await get_current_form_id(m.from_id)
+    expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
+    actions = await parse_actions(m.text.lower(), expeditor_id)
     if not actions:
         await m.answer('Вы не указали в своем посте действия в []')
         return

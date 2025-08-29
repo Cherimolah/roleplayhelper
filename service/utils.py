@@ -951,7 +951,7 @@ async def wait_disable_debuff(row_id: int):
     await bot.api.messages.send(peer_id=user_id, message=f'Закончилось время действия дебафа «{item_name}»')
 
 
-async def parse_actions(text: str) -> list[dict]:
+async def parse_actions(text: str, expeditor_id: int) -> list[dict]:
     text = text.lower()
     matches = re.findall(action_regex, text)
     actions = []
@@ -966,8 +966,9 @@ async def parse_actions(text: str) -> list[dict]:
                       .order_by(distance.asc()).limit(1).gino.scalar())
             if not item_id:
                 continue
-            exist = await db.select([db.ExpeditorToItems.id]).where(db.ExpeditorToItems.item_id == item_id).order_by(db.ExpeditorToItems.id.asc()).gino.scalar()
-            if exist is None:
+            active_row_ids = [x[0] for x in await db.select([db.ActiveItemToExpeditor.row_item_id]).where(db.ActiveItemToExpeditor.expeditor_id == expeditor_id).gino.all()]
+            exist = await db.select([db.ExpeditorToItems.id]).where(and_(db.ExpeditorToItems.expeditor_id == expeditor_id, db.ExpeditorToItems.id.notin_(active_row_ids), db.ExpeditorToItems.item_id == item_id)).order_by(db.ExpeditorToItems.id.asc()).gino.scalar()
+            if not exist:
                 continue
             used = await db.select([db.ExpeditorToItems.count_use]).where(db.ExpeditorToItems.id == exist).gino.scalar()
             count_use = await db.select([db.Item.count_use]).where(db.Item.id == item_id).gino.scalar()

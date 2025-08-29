@@ -116,17 +116,26 @@ async def show_page_inventory(m: Message | MessageEvent, page: int, expeditor_id
     if not row_id:
         await m.answer('Далеко куда-то ушли вы')
         return
-    item_id, count_use = await db.select([db.ExpeditorToItems.item_id, db.ExpeditorToItems.count_use]).where(db.ExpeditorToItems.expeditor_id == expeditor_id).order_by(db.ExpeditorToItems.id.asc()).offset(page - 1).limit(1).gino.first()
+    item_id, count_use, row_id = await db.select([db.ExpeditorToItems.item_id, db.ExpeditorToItems.count_use, db.ExpeditorToItems.id]).where(db.ExpeditorToItems.expeditor_id == expeditor_id).order_by(db.ExpeditorToItems.id.asc()).offset(page - 1).limit(1).gino.first()
     count = await db.select([func.count(db.ExpeditorToItems.id)]).where(db.ExpeditorToItems.expeditor_id == expeditor_id).gino.scalar()
-    if count > 0:
+    item = await db.Item.get(item_id)
+    already_used = await db.select([db.ActiveItemToExpeditor.id]).where(db.ActiveItemToExpeditor.row_item_id == row_id).gino.scalar()
+    if count > 0 or (item.count_use - count_use > 0 and not already_used) or (item.type_id != 1 and count_use > 0 and not already_used):
         keyboard = Keyboard(inline=True)
     else:
         keyboard = None
+    if item.count_use - count_use > 0 and not already_used:
+        keyboard.add(Callback('Использовать', {'use_item': row_id}), KeyboardButtonColor.SECONDARY)
+    if item.type_id != 1 and count_use > 0 and not already_used:
+        if keyboard.buttons and len(keyboard.buttons[-1]) > 0:
+            keyboard.row()
+        keyboard.add(Callback('Перезарядить', {'restore_item': row_id}), KeyboardButtonColor.SECONDARY)
+    if keyboard.buttons and len(keyboard.buttons[-1]) > 0:
+        keyboard.row()
     if page > 1:
         keyboard.add(Callback('<-', {'inventory_page': page - 1}), KeyboardButtonColor.PRIMARY)
     if page < count:
         keyboard.add(Callback('->', {'inventory_page': page + 1}), KeyboardButtonColor.PRIMARY)
-    item = await db.Item.get(item_id)
     reply = (f'Название: {item.name}\n'
              f'Описание: {item.description}\n'
              f'Группа: {await serialize_item_group(item.group_id)}\n'
@@ -157,3 +166,44 @@ async def page_inventory(m: MessageEvent):
     form_id = await get_current_form_id(m.user_id)
     expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
     await show_page_inventory(m, m.payload['inventory_page'], expeditor_id)
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'use_item': int}))
+async def use_item(m: MessageEvent):
+    state = states.get(m.user_id)
+    if not state.startswith(str(Menu.SHOW_FORM)):
+        await m.show_snackbar('❌ Использовать предмет возможно только, кода вы находитесь в Меню -> Анкета')
+        return
+    row_id = m.payload['use_item']
+    row = await db.ExpeditorToItems.get(row_id)
+    if not row:
+        await m.show_snackbar('❌ Предмет уже удалён из вашего инвентаря')
+        return
+    already_used = await db.select([db.ActiveItemToExpeditor.id]).where(db.ActiveItemToExpeditor.row_item_id == row_id).gino.scalar()
+    if already_used:
+        await m.show_snackbar('❌ Предмет уже использован')
+        return
+    count_use = await db.select([db.Item.count_use]).where(db.Item.id == row.item_id).gino.scalar()
+    if count_use - row.count_use <= 0:
+        await m.show_snackbar('❌ Закончилось количество использований предмета')
+        return
+    await db.ExpeditorToItems.update.values(count_use=db.ExpeditorToItems.count_use + 1).where(db.ExpeditorToItems.id == row_id).gino.status()
+    form_id = await get_current_form_id(m.user_id)
+    expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
+    await db.ActiveItemToExpeditor.create(expeditor_id=expeditor_id, row_item_id=row_id, remained_use=count_use)
+    await m.show_snackbar('✅ Предмет успешно использован')
+    await show_page_inventory(m, 1, expeditor_id)
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'restore_item': int}))
+async def restore_item(m: MessageEvent):
+    row_id = m.payload['restore_item']
+    already_active = await db.select([db.ActiveItemToExpeditor.id]).where(db.ActiveItemToExpeditor.row_item_id == row_id).gino.scalar()
+    if already_active:
+        await m.show_snackbar('❌ Подождите, когда действвие эффекта спадёт')
+        return
+    await db.ExpeditorToItems.update.values(count_use=0).where(db.ExpeditorToItems.id == row_id).gino.status()
+    await m.show_snackbar('✅ Предмет успешно перезаряжен')
+    form_id = await get_current_form_id(m.user_id)
+    expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
+    await show_page_inventory(m, 1, expeditor_id)

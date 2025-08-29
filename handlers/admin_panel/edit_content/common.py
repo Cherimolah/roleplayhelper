@@ -159,6 +159,7 @@ async def edit_cabin_message_event(m: MessageEvent, content_type: str, table):
                 reply += f"{i + 1}. {data.name}: {item[i + 1]}\n"
             else:
                 reply += f"{i + 1}. {data.name}: {await data.serialize_func(item[i + 1])}\n"
+    states.set(m.user_id, f'{Admin.EDIT_CONTENT}_{content_type}*{item.id}')
     await m.edit_message(reply, attachment=attachment)
     await send_edit_item(m.user_id, m.payload["item_id"], content_type)
 
