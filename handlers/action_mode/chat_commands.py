@@ -60,7 +60,7 @@ async def user_post(m: Message, action_mode_id: int):
     expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
     actions = await parse_actions(m.text.lower(), expeditor_id)
     if not actions:
-        await m.answer('Вы не указали в своем посте действия в []')
+        await m.answer('Вы не указали в своем посте действия в [] или все ваши действия были пропущены из-за невозможности')
         return
     await bot.api.request('messages.changeConversationMemberRestrictions',
                           {'peer_id': m.peer_id, 'member_ids': m.from_id, 'action': 'ro'})
