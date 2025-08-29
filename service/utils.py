@@ -24,6 +24,8 @@ from service.serializers import fields_content, serialize_target_reward, parse_o
 mention_regex = re.compile(r"\[(?P<type>id|club|public)(?P<id>\d*)\|(?P<text>.+)\]")
 link_regex = re.compile(r"https:/(?P<type>/|/m.)vk.com/(?P<screen_name>\w*)")
 daughter_params_regex = re.compile(r'^(?P<libido>\d+)\s*(?P<word>(или|и))\s*(?P<subordination>\d+)$')
+action_regex = re.compile(r'\[(?!id)([^]]+)\]')
+mention_regex_cut = re.compile(r'\[id\d+\|')
 
 client = AioHTTPClientExtended()
 
@@ -78,9 +80,7 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
             f"Фракция: {fraction or 'не установлена'}\n" \
             f"Репутация: {reputation} ({rep_fraction})\n"
     if form.status == 2:
-        subordination, libido = await db.select([db.Form.subordination_level, db.Form.libido_level]).where(
-            db.Form.id == form.id
-        ).gino.first()
+        libido, subordination = await count_daughter_params(user_id)
         if not absolute_params:
             if 1 <= subordination <= 33:
                 reply += 'Уровень подчинения: Низкий\n'
@@ -123,7 +123,9 @@ async def show_expeditor(expeditor_id: int, from_user_id) -> str:
     attributes = await db.select([db.ExpeditorToAttributes.attribute_id, db.ExpeditorToAttributes.value]).where(db.ExpeditorToAttributes.expeditor_id == expeditor_id).gino.all()
     profession_bonuses = await db.select([db.ProfessionBonus.attribute_id, db.ProfessionBonus.bonus]).where(db.ProfessionBonus.profession_id == form.profession).gino.all()
     race_bonuses = await db.select([db.RaceBonus.attribute_id, db.RaceBonus.bonus]).where(db.RaceBonus.race_id == expeditor.race_id).gino.all()
-    active_items = [x[0] for x in await db.select([db.ActiveItemToExpeditor.item_id]).where(
+    active_items = [x[0] for x in await db.select([db.ExpeditorToItems.item_id]).select_from(
+        db.ActiveItemToExpeditor.join(db.ExpeditorToItems, db.ActiveItemToExpeditor.row_item_id == db.ExpeditorToItems.id)
+    ).where(
         db.ActiveItemToExpeditor.expeditor_id == expeditor_id).gino.all()]
     active_debuffs = [x[0] for x in await db.select([db.ExpeditorToDebuffs.debuff_id]).where(
         db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()]
@@ -150,7 +152,7 @@ async def show_expeditor(expeditor_id: int, from_user_id) -> str:
                 item_name, item_bonus = await db.select([db.Item.name, db.Item.bonus]).where(db.Item.id == active_item_id).gino.first()
                 for bonus in item_bonus:
                     if bonus.get('type') == 'attribute' and bonus.get('attribute_id') == attribute_id:
-                        description += f' {"+" if bonus >= 0 else "-"} {abs(bonus["bonus"])} от «{item_name}»'
+                        description += f' {"+" if bonus['bonus'] >= 0 else "-"} {abs(bonus["bonus"])} от «{item_name}»'
                         summary += bonus['bonus']
                         break
         if active_debuffs:
@@ -164,13 +166,8 @@ async def show_expeditor(expeditor_id: int, from_user_id) -> str:
         reply += f'{attribute}: {summary} ({value} базовое{description})\n'
     reply += await serialize_expeditor_debuffs(expeditor_id)
     reply += '\n\n'
-    reply += (f'Либидо: {form.libido_level}\n'
-              f'Подчинение: {form.subordination_level}\n'
-              f'Оплодотворение: {expeditor.pregnant if expeditor.pregnant else 'Отсутствует'}\n\n')
+    reply += f'Оплодотворение: {expeditor.pregnant if expeditor.pregnant else 'Отсутствует'}\n\n'
     reply += await serialize_expeditor_items(expeditor_id)
-    reply += '\n\n'
-    reply += (f'Количество доступных действий: {expeditor.count_actions}\n'
-              f'Текущий номер действия: {expeditor.action_number}')
     return reply
 
 
@@ -338,13 +335,13 @@ weeks = [
     "неделя", "недель", "недели"
 ]
 days = [
-    "день", "дня", "дней", "день"
+    "день", "дня", "дней",
 ]
 hours = [
     "час", "часа", "часов"
 ]
 minutes = [
-    "минуты", "мин", "минут", "мин", "минута"
+    "минуты", "мин", "минут", "минута"
 ]
 seconds = [
     "сек", "секунды", "секунда", "секунд", "секунду"
@@ -774,24 +771,9 @@ async def update_initiative(action_mode_id: int):
     user_ids = [x[0] for x in await db.select([db.UsersToActionMode.user_id]).where(
         db.UsersToActionMode.action_mode_id == action_mode_id).gino.all()]
     for user_id in user_ids:
-        form_id = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
-        expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
-        perception = await db.select([db.ExpeditorToAttributes.value]).where(
-            and_(db.ExpeditorToAttributes.attribute_id == 5, db.ExpeditorToAttributes.expeditor_id == expeditor_id)
-        ).gino.scalar()
-        item_ids = [x[0] for x in await db.select([db.ActiveItemToExpeditor.item_id]).where(
-            db.ActiveItemToExpeditor.expeditor_id == expeditor_id).gino.all()]
-        items = await db.select([*db.Item]).where(db.Item.id.in_(item_ids)).gino.all()
-        item_bonus = 0
-        for item in items:
-            if item.bonus.get('type') == 'attribute' and item.bonus.get('attribute_id') == 5:
-                item_bonus += item.bonus.get('bonus', 0)
-        debuff_ids = [x[0] for x in await db.select([db.ExpeditorToDebuffs.debuff_id]).where(
-            db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()]
-        debuff_penalty = sum([x[0] for x in await db.select([db.StateDebuff.penalty]).where(
-            and_(db.StateDebuff.id.in_(debuff_ids), db.StateDebuff.attribute_id == 5)).gino.all()])
+        perception = await count_attribute(user_id, 5)
         random_bonus = random.randint(1, 100)
-        initiative = random_bonus + perception + item_bonus + debuff_penalty
+        initiative = random_bonus + perception
         await db.UsersToActionMode.update.values(initiative=initiative).where(
             and_(db.UsersToActionMode.user_id == user_id, db.UsersToActionMode.action_mode_id == action_mode_id)
         ).gino.status()
@@ -800,6 +782,7 @@ async def update_initiative(action_mode_id: int):
 async def next_round(action_mode_id: int):
     chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.id == action_mode_id).gino.scalar()
     await db.ActionMode.update.values(number_step=0).where(db.ActionMode.id == action_mode_id).gino.status()
+    await db.Post.delete.where(db.Post.action_mode_id == action_mode_id).gino.status()
     await db.UsersToActionMode.delete.where(and_(db.UsersToActionMode.action_mode_id == action_mode_id, db.UsersToActionMode.exited.is_(True))).gino.status()
     await db.UsersToActionMode.update.values(participate=True).where(
         db.UsersToActionMode.action_mode_id == action_mode_id).gino.all()
@@ -809,6 +792,27 @@ async def next_round(action_mode_id: int):
         .join(db.Form, db.User.user_id == db.Form.user_id)
     ).where(db.UsersToActionMode.action_mode_id == action_mode_id).order_by(
         db.UsersToActionMode.initiative.desc()).gino.all()
+    form_ids = [x[0] for x in await db.select([db.Form.id]).where(db.Form.user_id.in_([x[0] for x in users_data])).gino.all()]
+    expeditor_ids = [x[0] for x in await db.select([db.Expeditor.id]).where(db.Expeditor.form_id.in_(form_ids)).gino.all()]
+    first_cycle = await db.select([db.ActionMode.first_cycle]).where(db.ActionMode.id == action_mode_id).gino.scalar()
+    if not first_cycle:
+        active_row_ids = [x[0] for x in await db.select([db.ActiveItemToExpeditor.id]).select_from(
+            db.ActiveItemToExpeditor.join(db.ExpeditorToItems, db.ActiveItemToExpeditor.row_item_id == db.ExpeditorToItems.id)
+            .join(db.Item, db.ExpeditorToItems.item_id == db.Item.id)
+        ).where(
+            and_(db.ActiveItemToExpeditor.expeditor_id.in_(expeditor_ids), db.Item.action_time > 0)
+        ).gino.all()]
+        await db.ActiveItemToExpeditor.update.values(remained_use=db.ActiveItemToExpeditor.remained_use - 1).where(db.ActiveItemToExpeditor.id.in_(active_row_ids)).gino.status()
+        disabled_row_ids = [x[0] for x in await db.select([db.ActiveItemToExpeditor.id]).select_from(
+            db.ActiveItemToExpeditor.join(db.ExpeditorToItems,
+                                          db.ActiveItemToExpeditor.row_item_id == db.ExpeditorToItems.id)
+            .join(db.Item, db.ExpeditorToItems.item_id == db.Item.id)
+        ).where(
+            and_(db.ActiveItemToExpeditor.expeditor_id.in_(expeditor_ids), db.Item.action_time > 0, db.ActiveItemToExpeditor.remained_use <= 0)
+        ).gino.all()]
+        for row_id in disabled_row_ids:
+            await take_off_item(row_id)
+        await db.ActionMode.update.values(first_cycle=False).where(db.ActionMode.id == action_mode_id).gino.status()
     users = await bot.api.users.get(user_ids=[x[0] for x in users_data])
     reply = f'Новый цикл постов\nТекущая очередь участников:\n\n'
     for i in range(len(users)):
@@ -822,6 +826,8 @@ async def get_current_turn(action_mode_id: int) -> int | None:
         and_(db.UsersToActionMode.action_mode_id == action_mode_id,
              db.UsersToActionMode.participate.is_(True))).order_by(db.UsersToActionMode.initiative.desc()).gino.all()]
     number_step = await db.select([db.ActionMode.number_step]).where(db.ActionMode.id == action_mode_id).gino.scalar()
+    if number_step == 0:  # Очередь судьи писать пост
+        return
     try:
         return user_ids[number_step - 1]
     except IndexError:
@@ -829,28 +835,407 @@ async def get_current_turn(action_mode_id: int) -> int | None:
 
 
 async def next_step(action_mode_id: int):
-    chat_id, finished, judge_id = await db.select(
-        [db.ActionMode.chat_id, db.ActionMode.finished, db.ActionMode.judge_id]).where(
+    chat_id, finished, judge_id, time_to_post = await db.select(
+        [db.ActionMode.chat_id, db.ActionMode.finished, db.ActionMode.judge_id, db.ActionMode.time_to_post]).where(
         db.ActionMode.id == action_mode_id).gino.first()
     if finished:
+        user_ids = [x[0] for x in await db.select([db.UsersToActionMode.user_id]).where(db.UsersToActionMode.action_mode_id == action_mode_id).gino.all()]
+        form_ids = [x[0] for x in await db.select([db.Form.id]).where(db.Form.user_id.in_(user_ids)).gino.all()]
+        expeditor_ids = [x[0] for x in await db.select([db.Expeditor.id]).where(db.Expeditor.form_id.in_(form_ids)).gino.all()]
+        row_ids = [x[0] for x in await db.select([db.ActiveItemToExpeditor.id]).select_from(
+            db.ActiveItemToExpeditor.join(db.ExpeditorToItems, db.ActiveItemToExpeditor.row_item_id == db.ExpeditorToItems.id)
+            .join(db.Item, db.ExpeditorToItems.item_id == db.Item.id)
+        ).where(
+            and_(db.ActiveItemToExpeditor.expeditor_id.in_(expeditor_ids), db.Item.action_time > 0)).gino.all()]
+        for row_id in row_ids:
+            await take_off_item(row_id)
         await db.ActionMode.delete.where(db.ActionMode.id == action_mode_id).gino.status()
         await bot.api.messages.send(peer_id=2000000000 + chat_id, message='Экшен-режим завершен',
                                     keyboard=keyboards.request_action_mode)
         if states.contains(judge_id):
             states.set(judge_id, service.states.Menu.MAIN)
-        else:
-            await db.User.update.values(state=str(service.states.Menu.MAIN)).where(db.User.user_id == judge_id).gino.status()
+        await db.User.update.values(state=str(service.states.Menu.MAIN), check_action_id=None).where(db.User.user_id == judge_id).gino.status()
         await bot.api.messages.send(peer_id=judge_id, message='Экшен режим завершен',
                                     keyboard=await keyboards.main_menu(judge_id))
         return
-    await db.ActionMode.update.values(number_step=db.ActionMode.number_step + 1).where(
+    await db.ActionMode.update.values(number_step=db.ActionMode.number_step + 1, number_check=0).where(
         db.ActionMode.id == action_mode_id).gino.scalar()
     user_id = await get_current_turn(action_mode_id)
     if not user_id:
-        await next_round(action_mode_id)
+        await db.ActionMode.update.values(number_step=0, number_check=0).where(
+            db.ActionMode.id == action_mode_id).gino.scalar()
+        await bot.api.request('messages.changeConversationMemberRestrictions',
+                              {'peer_id': 2000000000 + chat_id, 'member_ids': judge_id, 'action': 'rw'})
+        await bot.api.messages.send(peer_id=2000000000 + chat_id, message='Сейчас очередь судьи писать свой пост')
         return
     name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
     user = (await bot.api.users.get(user_ids=[user_id]))[0]
+    await bot.api.request('messages.changeConversationMemberRestrictions',
+                          {'peer_id': 2000000000 + chat_id, 'member_ids': user_id, 'action': 'rw'})
     reply = f'Сейчас очередь участника [id{user.id}|{name} / {user.first_name} {user.last_name}] писать свой пост'
     await bot.api.messages.send(peer_id=2000000000 + chat_id, message=reply)
+    post = await db.Post.create(user_id=user_id, action_mode_id=action_mode_id)
+    asyncio.get_event_loop().create_task(wait_users_post(post.id))
 
+
+async def wait_users_post(post_id: int):
+    action_mode_id, created_at = await db.select([db.Post.action_mode_id, db.Post.created_at]).where(db.Post.id == post_id).gino.first()
+    time_to_post = await db.select([db.ActionMode.time_to_post]).where(db.ActionMode.id == action_mode_id).gino.scalar()
+    if not time_to_post:
+        return  # Нет ограничения на написание поста
+    if now() < created_at + datetime.timedelta(seconds=time_to_post):  # Проверяем, что еще надо ждать
+        seconds = (created_at + datetime.timedelta(seconds=time_to_post) - now()).total_seconds()
+        await asyncio.sleep(seconds)
+    exist = await db.select([db.Post.id]).where(db.Post.id == post_id).gino.scalar()
+    if not exist:
+        return  # Экшен-режим мог закончиться либо начался новый круг
+    actions = await db.select([db.Action.id]).where(db.Action.post_id == post_id).gino.all()
+    if actions:
+        return   # Пользователь таки написал свой пост
+    chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.id == action_mode_id).gino.scalar()
+    user_id = await db.select([db.Post.user_id]).where(db.Post.id == post_id).gino.scalar()
+    turn = await get_current_turn(action_mode_id)
+    if user_id == turn:  # На всякий проверим, что очередь человека (+ прошлая проверка он ничего не написал)
+        name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
+        user = (await bot.api.users.get(user_ids=[user_id]))[0]
+        await bot.api.messages.send(peer_id=2000000000 + chat_id,
+                                    message=f'Пользователь [id{user.id}|{name} / {user.first_name} {user.last_name}] '
+                                            f'не написал свой пост, поэтому пропускает очередь')
+        await next_step(action_mode_id)
+
+
+async def wait_take_off_item(row_id: int):
+    row = await db.select([*db.ActiveItemToExpeditor]).where(db.ActiveItemToExpeditor.id == row_id).gino.first()
+    item_id = await db.select([db.ExpeditorToItems.item_id]).where(db.ExpeditorToItems.id == row.row_item_id).gino.scalar()
+    time_use = await db.select([db.Item.time_use]).where(db.Item.id == item_id).gino.scalar()
+    if not time_use:  # Нет ограничения по времени
+        return
+    if now() < row.created_at + datetime.timedelta(seconds=time_use):
+        seconds = (row.created_at + datetime.timedelta(seconds=time_use) - now()).total_seconds()
+        await asyncio.sleep(seconds)
+    exist = await db.select([db.ExpeditorToItems.id]).where(db.ExpeditorToItems.id == row_id).gino.scalar()
+    if not exist:
+        return
+    await take_off_item(row_id)
+
+
+async def take_off_item(active_row_id: int):
+    item_type, row_id, expeditor_id, item_name = await db.select([db.Item.type_id, db.ExpeditorToItems.id, db.ExpeditorToItems.expeditor_id, db.Item.name]).select_from(
+        db.ActiveItemToExpeditor.join(db.ExpeditorToItems, db.ActiveItemToExpeditor.row_item_id == db.ExpeditorToItems.id)
+        .join(db.Item, db.ExpeditorToItems.item_id == db.Item.id)
+    ).where(db.ActiveItemToExpeditor.id == active_row_id).gino.first()
+    if item_type == 1:  # Одноразовый
+        await db.ExpeditorToItems.delete.where(db.ExpeditorToItems.id == row_id).gino.status()
+    else:  # Многоразовый/постоянный
+        await db.ActiveItemToExpeditor.delete.where(db.ActiveItemToExpeditor.id == active_row_id).gino.status()
+    form_id = await db.select([db.Expeditor.form_id]).where(db.Expeditor.id == expeditor_id).gino.scalar()
+    user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
+    await bot.api.messages.send(peer_id=user_id, message=f'Закончилось время действия предмета «{item_name}»')
+
+
+async def wait_disable_debuff(row_id: int):
+    row = await db.select([*db.ExpeditorToDebuffs]).where(db.ExpeditorToDebuffs.id == row_id).gino.scalar()
+    time_use = await db.select([db.StateDebuff.time_use]).where(db.StateDebuff.id == row.debuff_id).gino.scalar()
+    if not time_use:  # Нет ограничения по времени
+        return
+    if now() < row.created_at + datetime.timedelta(seconds=time_use):
+        seconds = (row.created_at + datetime.timedelta(seconds=time_use) - now()).total_seconds()
+        await asyncio.sleep(seconds)
+    exist = await db.select([db.ExpeditorToDebuffs.id]).where(db.ExpeditorToDebuffs.id == row_id).gino.scalar()
+    if not exist:
+        return
+    form_id = await db.select([db.Expeditor.form_id]).where(db.Expeditor.id == row.expeditor_id).gino.scalar()
+    user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
+    item_name = await db.select([db.StateDebuff.name]).where(db.StateDebuff.id == row.debuff_id).gino.scalar()
+    await db.ExpeditorToDebuffs.delete.where(db.ExpeditorToDebuffs.id == row_id).gino.status()
+    await bot.api.messages.send(peer_id=user_id, message=f'Закончилось время действия дебафа «{item_name}»')
+
+
+async def parse_actions(text: str) -> list[dict]:
+    text = text.lower()
+    matches = re.findall(action_regex, text)
+    actions = []
+    for match in matches:
+        if match.startswith('использовать '):
+            item_name = match[13:].strip()
+            distance = func.levenshtein(func.lower(db.Item.name), item_name)
+            similarity = func.similarity(func.lower(db.Item.name), item_name).label('similarity')
+            item_id = (await db.select([db.Item.id])
+                       .where(db.Item.name.op('%')(item_name))
+                      .order_by(similarity.desc())
+                      .order_by(distance.asc()).limit(1).gino.scalar())
+            if not item_id:
+                continue
+            exist = await db.select([db.ExpeditorToItems.id]).where(db.ExpeditorToItems.item_id == item_id).order_by(db.ExpeditorToItems.id.asc()).gino.scalar()
+            if exist is None:
+                continue
+            used = await db.select([db.ExpeditorToItems.count_use]).where(db.ExpeditorToItems.id == exist).gino.scalar()
+            count_use = await db.select([db.Item.count_use]).where(db.Item.id == item_id).gino.scalar()
+            if count_use - used <= 0:
+                continue
+            actions.append({'type': 'use_item', 'row_id': exist})
+        elif x := re.search(mention_regex_cut, match):
+            user_id = int(x.group(0)[3:-1])
+            actions.append({'type': 'pvp', 'user_id': user_id})
+        else:
+            actions.append({'type': 'action', 'text': match})
+    return actions
+
+
+async def count_attribute(user_id: int, attribute_id: int) -> int:
+    form_id = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
+    expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
+    base = await db.select([db.ExpeditorToAttributes.value]).where(and_(db.ExpeditorToAttributes.expeditor_id == expeditor_id, db.ExpeditorToAttributes.attribute_id == attribute_id)).gino.scalar()
+    active_item_ids = [x[0] for x in await db.select([db.ExpeditorToItems.item_id]).select_from(
+        db.ActiveItemToExpeditor.join(db.ExpeditorToItems, db.ActiveItemToExpeditor.row_item_id == db.ExpeditorToItems.id)
+    ).where(db.ActiveItemToExpeditor.expeditor_id == expeditor_id).gino.all()]
+    bonuses = [x[0] for x in await db.select([db.Item.bonus]).where(db.Item.id.in_(active_item_ids)).gino.all()]
+    item_bonus = 0
+    for data in bonuses:
+        for bonus in data:
+            if bonus.get('type') == 'attribute' and bonus.get('attribute_id') == attribute_id:
+                item_bonus += bonus['bonus']
+                continue
+    active_debuff_ids = [x[0] for x in await db.select([db.ExpeditorToDebuffs.debuff_id]).where(db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()]
+    penalty_debuff = sum([x[0] for x in await db.select([db.StateDebuff.penalty]).where(and_(db.StateDebuff.id.in_(active_debuff_ids), db.StateDebuff.attribute_id == attribute_id)).gino.all()])
+    return min(200, base + item_bonus + penalty_debuff)
+
+
+types_consequences = {
+    1: 'Критический провал',
+    2: 'Провал',
+    3: 'Успех',
+    4: 'Критический успех',
+    5: 'Критический провал (противник)',
+    6: 'Провал (противник)',
+    7: 'Успех (противник)',
+    8: 'Критический успех (противник)'
+}
+
+type_difficulties = {
+    1: ['Легкая', 1.2],
+    2: ['Нормальная', 1.0],
+    3: ['Сложная', 0.8],
+    4: ['Очень сложная', 0.6],
+    5: ['Почти невозможная', 0.4],
+    6: ['Невозможная', 0.2]
+}
+
+
+async def show_consequences(action_id: int) -> str:
+    data = await db.select([db.Action.data]).where(db.Action.id == action_id).gino.scalar()
+    reply = 'Тип действия: '
+    if data['type'] == 'action':
+        reply += 'текстовое действие\n'
+        reply += f'Действие: {data["text"]}\n\n'
+    else:
+        reply += 'PvP\n'
+        user_id = data['user_id']
+        name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
+        user = (await bot.api.users.get(user_ids=[user_id]))[0]
+        reply += f'Сражение с [id{user_id}|{name} / {user.first_name} {user.last_name}]\n\n'
+    consequences = await db.select([*db.Consequence]).where(db.Consequence.action_id == action_id).gino.all()
+    data = {}
+    for con in consequences:
+        if con.type not in data:
+            data[con.type] = [con]
+        else:
+            data[con.type].append(con)
+    reply += 'Установленные последствия:\n'
+    for i in types_consequences:
+        if i in data:
+            description = ", ".join([await serialize_consequence(x.data) for x in data[i]])
+        else:
+            description = 'Не указано'
+        reply += f'{types_consequences[i]}: {description}\n'
+    return reply
+
+
+async def serialize_consequence(data: dict) -> str:
+    type_ = data['type']
+    if type_ == 'add_debuff':
+        debuff_id = data['debuff_id']
+        name = await db.select([db.StateDebuff.name]).where(db.StateDebuff.id == debuff_id).gino.scalar()
+        return f'Добавить дебаф «{name}»'
+    elif type_ == 'delete_debuff':
+        row_id = data['row_id']
+        name = await db.select([db.StateDebuff.name]).select_from(
+            db.ExpeditorToDebuffs.join(db.StateDebuff, db.ExpeditorToDebuffs.debuff_id == db.StateDebuff.id)
+        ).where(db.ExpeditorToDebuffs.id == row_id).gino.scalar()
+        return f'Удалить дебаф «{name}»'
+    elif type_ == 'delete_debuff_type':
+        debuff_type_id = data['debuff_type_id']
+        name = await db.select([db.DebuffType.name]).where(db.DebuffType.id == debuff_type_id).gino.scalar()
+        return f'Снять все дебафы типа «{name}»'
+    elif type_ == 'delete_all_debuffs':
+        return 'Снятие всех дебафов'
+    elif type_ in ('add_libido', 'add_subordination'):
+        bonus = data['bonus']
+        if type_ == 'add_libido':
+            return f'Изменение Либидо на {"+" if bonus >= 0 else ""}{bonus}'
+        else:
+            return f'Изменение Подчинение на {"+" if bonus >= 0 else ""}{bonus}'
+    elif type_ == 'set_pregnant':
+        text = data['text']
+        return f'Установить статус оплодотворение «{text}»'
+    elif type_ == 'delete_pregnant':
+        return 'Удалить статус оплодотворение'
+    elif type_ == 'add_item':
+        item_id = data['item_id']
+        name = await db.select([db.Item.name]).where(db.Item.id == item_id).gino.scalar()
+        return f'Выдать предмет «{name}»'
+    elif type == 'delete_item':
+        row_id = data['row_id']
+        name = await db.select([db.Item.name]).select_from(
+            db.ExpeditorToItems.join(db.Item, db.ExpeditorToItems.item_id == db.Item.id)
+        ).where(db.ExpeditorToItems.id == row_id).gino.scalar()
+        return f'Удалить предмет «{name}»'
+    elif type_ == 'desactivate_item':
+        row_id = data['row_id']
+        name = await db.select([db.Item.name]).select_from(
+            db.ActiveItemToExpeditor.join(db.ExpeditorToItems, db.ActiveItemToExpeditor.row_item_id == db.ExpeditorToItems.id)
+            .join(db.Item, db.ExpeditorToItems.item_id == db.Item.id)
+        ).where(db.ActiveItemToExpeditor.id == row_id).gino.scalar()
+        return f'Отключить предмет «{name}»'
+    elif type_ == 'add_attribute':
+        attribute_id = data['attribute_id']
+        bonus = data['bonus']
+        name = await db.select([db.Attribute.name]).where(db.Attribute.id == attribute_id).gino.scalar()
+        return f'Изменение «{name}» на {"+" if bonus >= 0 else ""}{bonus}'
+    else:
+        return data['text']
+
+
+async def count_available_actions(user_id: int) -> int:
+    speed = await count_attribute(user_id, 2)
+    return min(5, 1 + int(speed / 50))
+
+
+async def count_difficult(post_id: int) -> int:
+    difficult, action_mode_id, user_id = await db.select([db.Post.difficult, db.Post.action_mode_id, db.Post.user_id]).where(db.Post.id == post_id).gino.first()
+    number_check = await db.select([db.ActionMode.number_check]).where(db.ActionMode.id == action_mode_id).gino.scalar()
+    available = await count_available_actions(user_id)
+    if number_check > available:
+        return min(6, 3 + number_check - available)
+    return min(6, difficult + number_check - 1)
+
+
+async def apply_consequences(action_id: int, con_var: int):
+    post_id = await db.select([db.Action.post_id]).where(db.Action.id == action_id).gino.scalar()
+    action_mode_id = await db.select([db.Post.action_mode_id]).where(db.Post.id == post_id).gino.scalar()
+    user_id = await db.select([db.Post.user_id]).where(db.Post.id == post_id).gino.scalar()
+    form_id = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
+    expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
+    chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.id == action_mode_id).gino.scalar()
+    data = [x[0] for x in await db.select([db.Consequence.data]).where(and_(db.Consequence.action_id == action_id, db.Consequence.type == con_var)).gino.all()]
+    for con in data:
+        type = con['type']
+        match type:
+            case 'add_debuff':
+                debuff_id = con['debuff_id']
+                await db.ExpeditorToDebuffs.create(expeditor_id=expeditor_id, debuff_id=debuff_id)
+            case 'delete_debuff':
+                row_id = con['row_id']
+                await db.ExpeditorToDebuffs.delete.where(db.ExpeditorToDebuffs.id == row_id).gino.status()
+            case 'delete_debuff_type':
+                debuff_type_id = con['debuff_type_id']
+                debuff_ids = [x[0] for x in await db.select([db.ExpeditorToDebuffs.debuff_id]).where(db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()]
+                debuff_ids = [x[0] for x in await db.select([db.StateDebuff.id]).where(and_(db.StateDebuff.type_id == debuff_type_id, db.StateDebuff.id.in_(debuff_ids))).gino.all()]
+                await db.ExpeditorToDebuffs.delete.where(and_(db.ExpeditorToDebuffs.debuff_id.in_(debuff_ids), db.ExpeditorToDebuffs.expeditor_id == expeditor_id)).gino.status()
+            case 'delete_all_debuffs':
+                await db.ExpeditorToDebuffs.delete.where(db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.status()
+            case 'add_libido':
+                bonus = con['bonus']
+                await db.Form.update.values(libido_level=db.Form.libido_level + bonus).where(db.Form.id == form_id).gino.status()
+            case 'add_subordination':
+                bonus = con['bonus']
+                await db.Form.update.values(subordination_level=db.Form.subordination_level + bonus).where(db.Form.id == form_id).gino.status()
+            case 'set_pregnant':
+                text = con['text']
+                await db.Expeditor.update.values(pregnant=text).where(db.Expeditor.id == expeditor_id).gino.status()
+            case 'delete_pregnant':
+                await db.Expeditor.update.values(pregnant=None).where(db.Expeditor.id == expeditor_id).gino.status()
+            case 'add_item':
+                item_id = con['item_id']
+                await db.ExpeditorToItems.create(expeditor_id=expeditor_id, item_id=item_id)
+            case 'delete_item':
+                row_id = con['row_id']
+                await db.ExpeditorToItems.delete.where(db.ExpeditorToItems.id == row_id).gino.status()
+            case 'desactivate_item':
+                row_id = con['row_id']
+                await take_off_item(row_id)
+            case 'add_attribute':
+                bonus = con['bonus']
+                attribute_id = con['attribute_id']
+                await db.ExpeditorToAttributes.update.values(value=db.ExpeditorToAttributes.value + bonus).where(and_(db.ExpeditorToAttributes.expeditor_id == expeditor_id, db.ExpeditorToAttributes.attribute_id == attribute_id)).gino.status()
+    if not data:
+        description = 'не указаны'
+    else:
+        description = ', '.join([await serialize_consequence(x) for x in data])
+    action_data = await db.select([db.Action.data]).where(db.Action.id == action_id).gino.scalar()
+    if action_data.get('type') == 'action':
+        text = action_data['text']
+    else:
+        to_user_id = action_data['user_id']
+        name = await db.select([db.Form.name]).where(db.Form.user_id == to_user_id).gino.scalar()
+        user = (await bot.api.users.get(user_ids=[to_user_id]))[0]
+        text = f'PvP с пользователем [id{to_user_id}|{name} / {user.first_name} {user.last_name}]'
+    user = (await bot.api.users.get(user_ids=[user_id]))[0]
+    name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
+    reply = (f'Игрок [id{user_id}|{name} / {user.first_name} {user.last_name}] пытаетается совершить действие «{text}»\n'
+             f'Результат проверки: {types_consequences[con_var]}\n'
+             f'Полученные последствия: {description}')
+    await bot.api.messages.send(peer_id=2000000000 + chat_id, message=reply)
+
+
+async def apply_item(row_id: int):
+    expeditor_id, action_time, data = await db.select([db.ExpeditorToItems.expeditor_id, db.Item.action_time, db.Item.bonus]).select_from(
+        db.ExpeditorToItems.join(db.Item, db.ExpeditorToItems.item_id == db.Item.id)
+    ).where(db.ExpeditorToItems.id == row_id).gino.first()
+    await db.ExpeditorToItems.update.values(count_use=db.ExpeditorToItems.count_use + 1).where(db.ExpeditorToItems.id == row_id).gino.status()
+    await db.ActiveItemToExpeditor.create(expeditor_id=expeditor_id, remained_use=action_time, row_item_id=row_id)
+    for bonus in data:
+        if bonus['type'] == 'state':
+            if bonus.get('action', '') in ('add', 'delete'):
+                debuff_id = bonus['debuff_id']
+                if bonus['action'] == 'add':
+                    row = await db.ExpeditorToDebuffs.create(expeditor_id=expeditor_id, debuff_id=debuff_id)
+                    asyncio.get_event_loop().create_task(wait_disable_debuff(row.id))
+                else:
+                    await db.ExpeditorToDebuffs.delete.where(and_(db.ExpeditorToDebuffs.expeditor_id == expeditor_id, db.ExpeditorToDebuffs.debuff_id == debuff_id)).gino.status()
+            elif bonus.get('action', '') == 'delete_type':
+                type_id = bonus['type_id']
+                row_ids = [x[0] for x in await db.select([db.ExpeditorToDebuffs.id]).select_from(
+                    db.ExpeditorToDebuffs.join(db.StateDebuff, db.ExpeditorToDebuffs.debuff_id == db.StateDebuff.id)
+                ).where(and_(db.ExpeditorToItems.expeditor_id == expeditor_id), db.StateDebuff.type_id == type_id).gino.all()]
+                await db.ExpeditorToDebuffs.delete.where(db.ExpeditorToDebuffs.id.in_(row_ids)).gino.status()
+            elif bonus['action'] == 'delete_all':
+                await db.ExpeditorToDebuffs.delete.where(db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()
+        elif bonus['type'] == 'sex_state':
+            if bonus.get('action', '') == 'set_pregnant':
+                text = bonus['text']
+                await db.Expeditor.update.values(pregnant=text).where(db.Expeditor.id == expeditor_id).gino.status()
+            elif bonus.get('action', '') == 'delete_pregnant':
+                await db.Expeditor.update.values(pregnant=None).where(db.Expeditor.id == expeditor_id).gino.status()
+
+
+async def count_daughter_params(user_id: int) -> tuple[int, int]:
+    form_id = await get_current_form_id(user_id)
+    libido, subordination = await db.select([db.Form.libido_level, db.Form.subordination_level]).where(db.Form.id == form_id).gino.first()
+    expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
+    if not expeditor_id:
+        return libido, subordination
+    active_items_data = [x[0] for x in await db.select([db.Item.bonus]).select_from(
+        db.ActiveItemToExpeditor.join(db.ExpeditorToItems, db.ActiveItemToExpeditor.row_item_id == db.ExpeditorToItems.id)
+        .join(db.Item, db.ExpeditorToItems.item_id == db.Item.id)
+    ).where(db.ActiveItemToExpeditor.expeditor_id == expeditor_id).gino.all()]
+    for data in active_items_data:
+        for bonus in data:
+            if bonus.get('type') == 'sex_state':
+                if bonus.get('attribute') == 'libido':
+                    libido += bonus['bonus']
+                elif bonus.get('attribute') == 'subordination':
+                    subordination += bonus['bonus']
+    libido = min(100, max(0, libido))
+    subordination = min(100, max(0, subordination))
+    return libido, subordination

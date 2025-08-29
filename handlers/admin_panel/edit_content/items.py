@@ -485,6 +485,10 @@ async def select_delete_quest(m: Message):
 @bot.on.private_message(StateRule(Admin.ITEM_DELETE), NumericRule(), OrRule(JudgeRule(), AdminRule()))
 async def delete_quest(m: Message, value: int):
     item_id = await db.select([db.Item.id]).order_by(db.Item.id.asc()).offset(value - 1).limit(1).gino.scalar()
+    cons = await db.select([db.Consequence.id, db.Consequence.data]).gino.all()
+    for con_id, data in cons:
+        if data and data['type'] in ('add_item', 'delete_item', 'desactivate_item') and data['item_id'] == item_id:
+            await db.Consequence.delete.where(db.Consequence.id == con_id).gino.status()
     await db.Item.delete.where(db.Item.id == item_id).gino.status()
     states.set(m.peer_id, f"{Admin.SELECT_ACTION}_Item")
     await m.answer("Предмет успешно удален", keyboard=keyboards.gen_type_change_content("Item"))

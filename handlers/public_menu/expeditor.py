@@ -11,7 +11,7 @@ from service.custom_rules import StateRule, NumericRule
 from service.db_engine import db
 from service.utils import get_current_form_id, get_admin_ids, show_expeditor
 from service import keyboards
-from service.serializers import serialize_race_bonus, serialize_item_group, serialize_item_type
+from service.serializers import serialize_race_bonus, serialize_item_group, serialize_item_type, parse_cooldown
 
 
 @bot.on.private_message(StateRule(Menu.SHOW_FORM), PayloadRule({'form': 'new_expeditor'}))
@@ -112,10 +112,11 @@ async def show_expeditor_map(m: Message):
 
 
 async def show_page_inventory(m: Message | MessageEvent, page: int, expeditor_id: int):
-    item_id, count_use = await db.select([db.ExpeditorToItems.item_id, db.ExpeditorToItems.count_use]).where(db.ExpeditorToItems.expeditor_id == expeditor_id).order_by(db.ExpeditorToItems.id.asc()).offset(page - 1).limit(1).gino.first()
-    if not item_id:
+    row_id = await db.select([db.ExpeditorToItems.id]).where(db.ExpeditorToItems.expeditor_id == expeditor_id).order_by(db.ExpeditorToItems.id.asc()).offset(page - 1).limit(1).gino.scalar()
+    if not row_id:
         await m.answer('Далеко куда-то ушли вы')
         return
+    item_id, count_use = await db.select([db.ExpeditorToItems.item_id, db.ExpeditorToItems.count_use]).where(db.ExpeditorToItems.expeditor_id == expeditor_id).order_by(db.ExpeditorToItems.id.asc()).offset(page - 1).limit(1).gino.first()
     count = await db.select([func.count(db.ExpeditorToItems.id)]).where(db.ExpeditorToItems.expeditor_id == expeditor_id).gino.scalar()
     if count > 0:
         keyboard = Keyboard(inline=True)
@@ -131,7 +132,9 @@ async def show_page_inventory(m: Message | MessageEvent, page: int, expeditor_id
              f'Группа: {await serialize_item_group(item.group_id)}\n'
              f'Тип: {await serialize_item_type(item.type_id)}\n'
              f'Количество возможных использований: {item.count_use} раз\n'
-             f'Количество доступных использований: {item.count_use - count_use} раз')
+             f'Количество доступных использований: {item.count_use - count_use} раз\n'
+             f'Количество циклов действия: {item.action_time}\n'
+             f'Время действия: {parse_cooldown(item.time_use)}')
     if isinstance(m, Message):
         await m.answer(message=reply, keyboard=keyboard, attachment=item.photo)
     else:

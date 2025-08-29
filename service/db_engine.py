@@ -5,7 +5,7 @@ from typing import List, Tuple
 
 from gino import Gino
 from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, Boolean, TIMESTAMP, func, and_, Float, ARRAY, \
-    JSON, Date
+    JSON, Date, DateTime
 
 from config import USER, PASSWORD, HOST, DATABASE
 
@@ -67,6 +67,7 @@ class Database(Gino):
             last_activity = Column(TIMESTAMP, default=datetime.datetime.now)
             creating_expeditor = Column(Boolean, default=False)
             judge_panel = Column(Boolean, default=False)
+            check_action_id = Column(Integer, ForeignKey('actions.id', ondelete='SET NULL'))
 
         self.User = User
 
@@ -452,6 +453,8 @@ class Database(Gino):
             action_time = Column(Integer, default=0)
             time_use = Column(Integer, default=0)
 
+            _name_idx = self.Index('idx_gin_name', name, postgresql_using='gin', postgresql_ops={'name': 'gin_trgm_ops'})
+
         self.Item = Item
 
         class DebuffType(self.Model):
@@ -534,6 +537,7 @@ class Database(Gino):
             id = Column(Integer, primary_key=True)
             expeditor_id = Column(Integer, ForeignKey('expeditors.id', ondelete='CASCADE'))
             debuff_id = Column(Integer, ForeignKey('state_debuffs.id', ondelete='CASCADE'))
+            created_at = Column(DateTime(timezone=True), default=now)
 
         self.ExpeditorToDebuffs = ExpeditorToDebuffs
 
@@ -552,7 +556,9 @@ class Database(Gino):
 
             id = Column(Integer, primary_key=True)
             expeditor_id = Column(Integer, ForeignKey('expeditors.id', ondelete='CASCADE'))
-            item_id = Column(Integer, ForeignKey('items.id', ondelete='CASCADE'))
+            row_item_id = Column(Integer, ForeignKey('expeditor_items.id', ondelete='CASCADE'))
+            created_at = Column(DateTime(timezone=True), default=now)
+            remained_use = Column(Integer, default=0)
 
         self.ActiveItemToExpeditor = ActiveItemToExpeditor
 
@@ -565,6 +571,10 @@ class Database(Gino):
             started = Column(Boolean, default=False)
             number_step = Column(Integer, default=0)
             finished = Column(Boolean, default=False)
+            time_to_post = Column(Integer, default=0)
+            number_check = Column(Integer, default=0)
+            check_status = Column(Boolean, default=False)
+            first_cycle = Column(Boolean, default=True)
 
         self.ActionMode = ActionMode
 
@@ -591,6 +601,40 @@ class Database(Gino):
 
         self.ActionModeRequest = ActionModeRequest
 
+        class Post(self.Model):
+            __tablename__ = 'posts'
+
+            id = Column(Integer, primary_key=True)
+            user_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'))
+            action_mode_id = Column(Integer, ForeignKey('action_mode.id', ondelete='CASCADE'))
+            created_at = Column(DateTime(timezone=True), default=now)
+            difficult = Column(Integer, default=0)
+            decline_check = Column(Boolean, default=False)
+            started_check = Column(Boolean, default=False)
+
+        self.Post = Post
+
+        class Action(self.Model):
+            __tablename__ = 'actions'
+
+            id = Column(Integer, primary_key=True)
+            data = Column(JSON)
+            bonus = Column(Integer, default=0)
+            post_id = Column(Integer, ForeignKey('posts.id', ondelete='CASCADE'))
+            attribute_id = Column(Integer, ForeignKey('attributes.id', ondelete='CASCADE'))
+
+        self.Action = Action
+
+        class Consequence(self.Model):
+            __tablename__ = 'consequences'
+
+            id = Column(Integer, primary_key=True)
+            data = Column(JSON, default={})
+            type = Column(Integer)
+            action_id = Column(Integer, ForeignKey('actions.id', ondelete='CASCADE'))
+
+        self.Consequence = Consequence
+
     async def connect(self):
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")
         await self.gino.create_all()
@@ -598,6 +642,9 @@ class Database(Gino):
 
     async def first_load(self):
         """Загрузка первичных данных"""
+        await db.status(db.text('CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;'))
+        await db.status(db.text('CREATE EXTENSION IF NOT EXISTS pg_trgm;'))
+        await db.status(db.text(f'ALTER DATABASE {DATABASE} SET pg_trgm.similarity_threshold = 0.1;'))
         professions = await self.select([func.count(db.Profession.id)]).gino.scalar()
         if professions == 0:
             await self.Profession.create(name="Тестовая профессия", special=False)

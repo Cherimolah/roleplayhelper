@@ -11,7 +11,7 @@ from loader import bot
 from service.custom_rules import StateRule
 from service.states import Menu
 from service.db_engine import db
-from service.utils import get_current_form_id, parse_cooldown, quest_over, calculate_time, serialize_target_reward
+from service.utils import get_current_form_id, parse_cooldown, quest_over, calculate_time, serialize_target_reward, count_daughter_params
 from service.middleware import states
 from config import ADMINS, OWNER, DATETIME_FORMAT
 
@@ -20,6 +20,7 @@ async def get_available_target_ids(quest: db.Quest, user_id: int) -> List[int]:
     if not quest.target_ids:
         return []
     form = await db.select([*db.Form]).where(db.Form.user_id == user_id).gino.first()
+    libido_level, subordination_level = await count_daughter_params(user_id)
     allowed_target_ids = []
     for target_id in quest.target_ids:
         target = await db.AdditionalTarget.get(target_id)
@@ -41,10 +42,10 @@ async def get_available_target_ids(quest: db.Quest, user_id: int) -> List[int]:
             continue
         if target.daughter_params and form.status == 2:
             libido, subordination, word = target.daughter_params
-            if word and (form.libido_level >= libido or form.subordination_level >= subordination):  # ИЛИ
+            if word and (libido_level >= libido or subordination_level >= subordination):  # ИЛИ
                 allowed_target_ids.append(target_id)
                 continue
-            if not word and (form.libido_level >= libido and form.subordination_level >= subordination):  # И
+            if not word and (libido_level >= libido and subordination_level >= subordination):  # И
                 allowed_target_ids.append(target_id)
                 continue
         if target.forms and form.id in target.forms:

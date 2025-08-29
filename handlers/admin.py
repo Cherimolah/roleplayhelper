@@ -30,8 +30,12 @@ async def accept_form(m: MessageEvent):
     user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
     old_form_id = await db.select([db.Form.id]).where(and_(db.Form.user_id == user_id, db.Form.is_request.is_(False))).gino.scalar()
     if old_form_id:
-        await db.Form.delete.where(db.Form.id == old_form_id).gino.status()
-        await db.Form.update.values(id=old_form_id, is_request=False).where(db.Form.id == form_id).gino.status()
+        old_form = await db.Form.get(old_form_id)
+        values = old_form.__values__
+        del values['id']
+        del values['is_request']
+        await db.Form.delete.where(db.Form.id == form_id).gino.status()
+        await db.Form.update.values(**values).where(db.Form.id == old_form_id).gino.status()
     else:
         await db.Form.update.values(is_request=False).where(db.Form.id == form_id).gino.status()
     state = await db.select([db.User.state]).where(db.User.user_id == user_id).gino.scalar()

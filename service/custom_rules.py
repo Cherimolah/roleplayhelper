@@ -3,11 +3,12 @@ from typing import Union, Optional
 
 from vkbottle.dispatch.rules import ABCRule
 from vkbottle.bot import Message, MessageEvent
+from vkbottle.dispatch.rules.abc import T_contra
 
 from loader import states, bot
 from service.db_engine import db
 import messages
-from service.states import Menu, Admin
+from service.states import Menu, Admin, Judge
 import service.keyboards as keyboards
 from service.utils import get_mention_from_message, get_current_form_id, fields_content, get_current_turn
 from config import ADMINS, CHAT_IDS
@@ -284,3 +285,31 @@ class ActionModeTurn(ABCRule, ABC):
             return {'action_mode_id': action_mode}
         else:
             return False
+
+
+class JudgePostTurn(ABCRule, ABC):
+    async def check(self, event: Message):
+        if event.peer_id < 2000000000:
+            return False
+        action_mode = await db.select([db.ActionMode.id]).where(db.ActionMode.chat_id == event.chat_id).gino.scalar()
+        if not action_mode:
+            return False
+        number_step = await db.select([db.ActionMode.number_step]).where(db.ActionMode.id == action_mode).gino.scalar()
+        if number_step == 0:
+            judge_id = await db.select([db.ActionMode.judge_id]).where(db.ActionMode.id == action_mode).gino.scalar()
+            if judge_id == event.from_id:
+                return {'action_mode_id': action_mode}
+        return False
+
+
+class SelectConsequences(ABCRule, ABC):
+    async def check(self, event: Message):
+        if event.peer_id < 2000000000:
+            return False
+        if str(states.get(event.from_id)).startswith(str(Judge.SET_CONSEQUENCES)):
+            try:
+                _, action_id, con_group = str(states.get(event.from_id).split('*'))
+            except:
+                return False
+            return {'action_id': int(action_id), 'con_type': int(con_group)}
+        return False

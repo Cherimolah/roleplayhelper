@@ -95,6 +95,16 @@ class ActionModeMiddleware(BaseMiddleware[Message], ABC):
             return
         action_mode_id = await db.select([db.ActionMode.id]).where(db.ActionMode.chat_id == self.event.chat_id).gino.scalar()
         if action_mode_id:
+            status_check = await db.select([db.ActionMode.check_status]).where(db.ActionMode.id == action_mode_id).gino.scalar()
+            if status_check:
+                await self.event.answer('Сейчас идёт процесс проверки действия судьи. Дождитесь своей очереди писать пост')
+                self.stop()
+            number_step, judge_id = await db.select([db.ActionMode.number_step, db.ActionMode.judge_id]).where(db.ActionMode.id == action_mode_id).gino.first()
+            if number_step == 0:
+                if judge_id == self.event.from_id:
+                    return
+                await self.event.answer('Сейчас не ваша очердь писать свой пост')
+                self.stop()
             user_turn = await get_current_turn(action_mode_id)
             if user_turn != self.event.from_id:
                 await self.event.answer('В чате запущен экшен режим. Сейчас не ваша очередь писать пост')

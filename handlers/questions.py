@@ -12,7 +12,7 @@ from service.states import Registration, Menu, DaughterQuestions, Judge
 import messages
 from service.custom_rules import StateRule, NumericRule, LimitSymbols, CommandWithAnyArgs
 import service.keyboards as keyboards
-from service.utils import loads_form, reload_image, show_fields_edit, page_fractions, get_admin_ids
+from service.utils import loads_form, reload_image, show_fields_edit, page_fractions, get_admin_ids, show_consequences
 from config import OWNER, ADMINS
 
 
@@ -79,6 +79,16 @@ async def start(m: Message):
             return
         chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.judge_id == m.from_id).gino.scalar()
         if chat_id:
+            action_id = await db.select([db.User.check_action_id]).where(db.User.user_id == m.from_id).gino.scalar()
+            if action_id:
+                data = await db.select([db.Action.data]).where(db.Action.id == action_id).gino.scalar()
+                if data['type'] == 'action':
+                    keyboard = keyboards.gen_consequences()
+                else:
+                    keyboard = keyboards.gen_consequences(double=True)
+                states.set(m.from_id, f"{Judge.SET_CONSEQUENCES}*{action_id}")
+                await m.answer(await show_consequences(action_id), keyboard=keyboard)
+                return
             chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=2000000000 + chat_id)).items[0].chat_settings.title
             await m.answer(f'Вы сейчас являетесь судьей экшен-режима в чате «{chat_name}»')
             return

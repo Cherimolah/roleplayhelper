@@ -100,6 +100,10 @@ async def map_form(m: MessageEvent):
 @bot.on.private_message(StateRule(Menu.SHOW_FORM), PayloadRule({"form": "edit"}))
 @bot.on.private_message(StateRule(Menu.EDIT_FIELDS), PayloadRule({"form": "edit"}))
 async def send_form_edit(m: Message, new=True):
+    request_exist = await db.select([db.Form.id]).where(and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))).gino.scalar()
+    if request_exist:
+        await m.answer('У вас уже есть отправленная анкета на проверке!')
+        return
     await show_fields_edit(m.from_id, new)
 
 

@@ -9,7 +9,7 @@ from service.custom_rules import JudgeRule, UserFree, JudgeFree, StateRule
 from service.db_engine import db
 from service.states import Judge
 from handlers.questions import start
-from service.utils import get_mention_from_message, filter_users_expeditors, next_round
+from service.utils import get_mention_from_message, filter_users_expeditors, next_round, parse_period
 from service import keyboards
 
 
@@ -109,16 +109,41 @@ async def confirm_action_mode(m: MessageEvent):
 
 @bot.on.private_message(StateRule(Judge.ADD_USERS), PayloadRule({'action_mode': 'start'}), JudgeRule())
 @bot.on.private_message(StateRule(Judge.DELETE_USERS), PayloadRule({'action_mode': 'start'}), JudgeRule())
+async def select_time_to_post(m: Message):
+    reply = 'Укажите время на написание поста.\nФормат: 1 день 2 часа 3 минуты 4 секунды'
+    keyboard = Keyboard().add(Text('Без ограничения', {'action_mode_time_post': 'null'}), KeyboardButtonColor.NEGATIVE)
+    states.set(m.from_id, Judge.TIME_TO_POST)
+    await m.answer(reply, keyboard=keyboard)
+
+
+@bot.on.private_message(StateRule(Judge.TIME_TO_POST), PayloadRule({'action_mode_time_post': 'null'}), JudgeRule())
+@bot.on.private_message(StateRule(Judge.TIME_TO_POST), JudgeRule())
 async def start_action_mode(m: Message):
-    await db.ActionMode.update.values(started=True).where(db.ActionMode.judge_id == m.from_id).gino.scalar()
     chat_id, action_mode_id = await db.select([db.ActionMode.chat_id, db.ActionMode.id]).where(db.ActionMode.judge_id == m.from_id).gino.first()
+    if not m.payload:
+        try:
+            seconds = parse_period(m.text)
+        except:
+            await m.answer('Неправльный формат периода')
+            return
+        if not seconds:
+            await m.answer('Неправльный формат периода')
+            return
+        await db.ActionMode.update.values(time_to_post=seconds).where(db.ActionMode.id == action_mode_id).gino.status()
+    await db.ActionMode.update.values(started=True).where(db.ActionMode.judge_id == m.from_id).gino.scalar()
     chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=[2000000000 + chat_id])).items[0].chat_settings.title
     await m.answer(f'Вы успешно запустили экшен-режим в чате «{chat_name}»\n')
     judge_name = await db.select([db.Form.name]).where(db.Form.user_id == m.from_id).gino.scalar()
     judge = await m.get_user()
     await bot.api.messages.send(message=f'Судья [id{m.from_id}|{judge_name} / {judge.first_name} {judge.last_name}] '
                                         f'запустил экшен режим', peer_id=2000000000 + chat_id)
-    await next_round(action_mode_id)
+    members = await bot.api.messages.get_conversation_members(peer_id=2000000000 + chat_id)
+    member_ids = {x.member_id for x in members.items if x.member_id > 0}
+    member_ids.remove(judge.id)
+    member_ids = list(member_ids)
+    await bot.api.request('messages.changeConversationMemberRestrictions',
+                          {'peer_id': 2000000000 + chat_id, 'member_ids': ','.join(list(map(str, member_ids))), 'action': 'ro'})
+    await bot.api.messages.send(message='Сейчас очередь судьи писать свой пост', peer_id=2000000000 + chat_id)
     chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=[2000000000 + chat_id])).items[0].chat_settings.title
     reply = f'Вы находитесь в режиме управления экшен режима в чате «{chat_name}»'
     states.set(m.from_id, Judge.PANEL)

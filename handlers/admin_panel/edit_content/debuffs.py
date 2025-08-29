@@ -111,6 +111,10 @@ async def delete_quest(m: Message, value: int):
                 item_bonus.pop(i)
                 await db.Item.update.values(bonus=item_bonus).where(db.Item.id == item_id).gino.status()
                 break
+    cons = await db.select([db.Consequence.id, db.Consequence.data]).gino.all()
+    for con_id, data in cons:
+        if data and data['type'] in ('add_debuff', 'delete_debuff') and data['debuff_id'] == item_id:
+            await db.Consequence.delete.where(db.Consequence.id == con_id).gino.status()
     states.set(m.peer_id, f"{Admin.SELECT_ACTION}_StateDebuff")
     await m.answer("Дебаф успешно удален", keyboard=keyboards.gen_type_change_content("StateDebuff"))
     await send_content_page(m, "StateDebuff", 1)

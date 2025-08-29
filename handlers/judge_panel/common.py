@@ -9,6 +9,7 @@ from service.db_engine import db
 
 
 @bot.on.private_message(StateRule(Menu.MAIN), PayloadRule({'main_menu': 'judge_panel'}), JudgeRule())
+@bot.on.private_message(StateRule(Judge.SET_CONSEQUENCES), PayloadRule({'main_menu': 'judge_panel'}), JudgeRule())
 async def judge_menu(m: Message):
     states.set(m.from_id, Judge.MENU)
     await db.User.update.values(judge_panel=True).where(db.User.user_id == m.from_id).gino.status()

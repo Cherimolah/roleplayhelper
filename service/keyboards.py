@@ -375,11 +375,13 @@ judge_menu = Keyboard().add(
 
 
 action_mode_panel = Keyboard().add(
-        Text('Добавить участников', {'judge_action': 'add_users_active'}), KeyboardButtonColor.POSITIVE
-    ).row().add(
-        Text('Удалить участников', {'judge_action': 'delete_users_active'}), KeyboardButtonColor.NEGATIVE
-    ).row().add(
+    Text('Добавить участников', {'judge_action': 'add_users_active'}), KeyboardButtonColor.POSITIVE
+).row().add(
+    Text('Удалить участников', {'judge_action': 'delete_users_active'}), KeyboardButtonColor.NEGATIVE
+).row().add(
     Text('Список участников', {'judge_action': 'list_users'}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Передать судейство', {'judge_action': 'pass_judge'}), KeyboardButtonColor.PRIMARY
 ).row().add(
     Text('Завершить экшен-режим', {'judge_action': 'finish_action_mode'}), KeyboardButtonColor.SECONDARY
 )
@@ -387,3 +389,127 @@ action_mode_panel = Keyboard().add(
 request_action_mode = Keyboard().add(
         Text('Запросить экшен-режим', {'action_mode': 'create_request'}), KeyboardButtonColor.PRIMARY
     )
+
+
+def gen_difficulties(post_id: int):
+    return Keyboard().add(
+        Text('Легкая', {'difficult': 1, 'post_id': post_id}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text('Нормальная', {'difficult': 2, 'post_id': post_id}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text('Сложная', {'difficult': 3, 'post_id': post_id}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text('Очень сложная', {'difficult': 4, 'post_id': post_id}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text('Почти невозможная', {'difficult': 5, 'post_id': post_id}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text('Невозможная', {'difficult': 6, 'post_id': post_id}), KeyboardButtonColor.PRIMARY
+    )
+
+
+def gen_can_decline_check(post_id: int):
+    return Keyboard().add(
+        Text('Можно отказаться от проверки', {'can_skip': True, 'post_id': post_id}), KeyboardButtonColor.POSITIVE
+    ).row().add(
+        Text('Нельзя отказаться от проверки', {'can_skip': False, 'post_id': post_id}), KeyboardButtonColor.NEGATIVE
+    )
+
+
+def gen_consequences(double: bool = False):
+    keyboard = Keyboard().add(
+        Text('Критический провал', {'con_var': 1}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text('Провал', {'con_var': 2}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text('Успех', {'con_var': 3}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text('Критический успех', {'con_var': 4}), KeyboardButtonColor.PRIMARY
+    )
+    if double:
+        keyboard.row().add(
+            Text('Критический провал (противник)', {'con_var': 5}), KeyboardButtonColor.PRIMARY
+        ).row().add(
+            Text('Провал (противник)', {'con_var': 6}), KeyboardButtonColor.PRIMARY
+        ).row().add(
+            Text('Успех (противник)', {'con_var': 7}), KeyboardButtonColor.PRIMARY
+        ).row().add(
+            Text('Критический успех (противник)', {'con_var': 8}), KeyboardButtonColor.PRIMARY
+        )
+    keyboard.row().add(
+        Text('Панель судьи', {'main_menu': 'judge_panel'}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('Завершить проверку', {'action_check': 'finish'}), KeyboardButtonColor.NEGATIVE
+    )
+    return keyboard
+
+
+groups_consequences = Keyboard().add(
+    Text('Дебафы', {'group_consequences': 1}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Секс. состояние', {'group_consequences': 2}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Предметы', {'group_consequences': 3}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Характеристики', {'group_consequences': 4}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Другое', {'group_consequences': 5}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Удалить последствие', {'group_consequences': 'delete'}), KeyboardButtonColor.SECONDARY
+).row().add(
+    Text('Назад', {'group_consequences': 'back'}), KeyboardButtonColor.NEGATIVE
+)
+
+
+async def gen_type_consequences(group_id: int):
+    keyboard = Keyboard()
+    if group_id == 1:
+        keyboard.add(
+            Text('Получение Травмы', {'set_consequence_type': 1}), KeyboardButtonColor.PRIMARY
+        ).add(
+            Text('Получение Безумия', {'set_consequence_type': 2}), KeyboardButtonColor.PRIMARY
+        ).row().add(
+            Text('Снятие Травмы', {'set_consequence_type': 3}), KeyboardButtonColor.PRIMARY
+        ).add(
+            Text('Снятие Безумия', {'set_consequence_type': 4}), KeyboardButtonColor.PRIMARY
+        ).row().add(
+            Text('Снятие всех Травм', {'set_consequence_type': 5}), KeyboardButtonColor.PRIMARY
+        ).row().add(
+            Text('Снятие всех Безумий', {'set_consequence_type': 6}), KeyboardButtonColor.PRIMARY
+        ).row().add(
+            Text('Снятие всех дебафов', {'set_consequence_type': 7}), KeyboardButtonColor.PRIMARY
+        ).row().add(
+            Text('Назад', {'set_consequence_type': 'back'}), KeyboardButtonColor.NEGATIVE
+        )
+    elif group_id == 2:
+        keyboard.add(
+            Text('Изменение Либидо', {'set_consequence_type': 8}), KeyboardButtonColor.PRIMARY
+        ).row().add(
+            Text('Изменение Подчинения', {'set_consequence_type': 9}), KeyboardButtonColor.PRIMARY
+        ).row().add(
+            Text('Установить Оплодотворение', {'set_consequence_type': 10}), KeyboardButtonColor.PRIMARY
+        ).row().add(
+            Text('Удалить Оплодотворение', {'set_consequence_type': 11}), KeyboardButtonColor.PRIMARY
+        ).row().add(
+            Text('Назад', {'set_consequence_type': 'back'}), KeyboardButtonColor.NEGATIVE
+        )
+    elif group_id == 3:
+        keyboard.add(
+            Text('Получение предмета', {'set_consequence_type': 12}), KeyboardButtonColor.PRIMARY
+        ).row().add(
+            Text('Удаление предмета', {'set_consequence_type': 13}), KeyboardButtonColor.PRIMARY
+        ).row().add(
+            Text('Отключение предмета', {'set_consequence_type': 14}), KeyboardButtonColor.PRIMARY
+        ).row().add(
+            Text('Назад', {'set_consequence_type': 'back'}), KeyboardButtonColor.NEGATIVE
+        )
+    elif group_id == 4:
+        attributes = await db.select([db.Attribute.id, db.Attribute.name]).order_by(db.Attribute.id.asc()).gino.all()
+        for i, data in enumerate(attributes):
+            id, name = data
+            keyboard.add(
+                Text("Бонус к " + name, {'set_consequence_type': 15 + i}), KeyboardButtonColor.PRIMARY
+            ).row()
+        keyboard.row().add(
+            Text('Назад', {'set_consequence_type': 'back'}), KeyboardButtonColor.NEGATIVE
+        )
+    return keyboard
