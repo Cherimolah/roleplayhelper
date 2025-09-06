@@ -36,6 +36,8 @@ async def main_menu(user_id: int):
     ).row().add(
         Text("Квесты и ежедневные задания", {"menu": "quests and daylics"}), KeyboardButtonColor.PRIMARY
     ).row().add(
+        Text("Список локаций", {"menu": "locations"}), KeyboardButtonColor.PRIMARY
+    ).row().add(
         Text("Администрация проекта", {"menu": "staff"}), KeyboardButtonColor.NEGATIVE
     ))
     if judge:
@@ -387,8 +389,10 @@ action_mode_panel = Keyboard().add(
 )
 
 request_action_mode = Keyboard().add(
-        Text('Запросить экшен-режим', {'action_mode': 'create_request'}), KeyboardButtonColor.PRIMARY
-    )
+        Text('Запросить экшен-режим', {'action_mode': 'create_request'}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+    Text('Помощь', {'help': 'help'}), KeyboardButtonColor.PRIMARY
+)
 
 
 def gen_difficulties(post_id: int):
@@ -513,3 +517,15 @@ async def gen_type_consequences(group_id: int):
             Text('Назад', {'set_consequence_type': 'back'}), KeyboardButtonColor.NEGATIVE
         )
     return keyboard
+
+chat_settings_panel = Keyboard().add(
+    Text('Тип чата', {'chat_settings': 'chat_type'}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Количество видимых сообщений', {'chat_settings': 'visible_messages_count'}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Открыть доступ к профессии', {'chat_settings': 'add_available_professions'}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Закрыть доступ от профессии', {'chat_settings': 'delete_available_professions'}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('В главное меню', {'chat_settings': 'save'}), KeyboardButtonColor.NEGATIVE
+)

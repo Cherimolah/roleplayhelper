@@ -9,10 +9,10 @@ from sqlalchemy import and_, func
 from vkbottle_types.objects import PhotosPhotoSizes
 from vkbottle.bot import Message, MessageEvent
 import aiofiles
-from vkbottle import Keyboard, Callback, KeyboardButtonColor
+from vkbottle import Keyboard, Callback, KeyboardButtonColor, VKAPIError
 
 from service.db_engine import db, now
-from loader import bot, photo_message_uploader, states
+from loader import bot, photo_message_uploader, states, user_bot
 from service.serializers import fields, Field, RelatedTable, sex_types
 import messages
 from bot_extended import AioHTTPClientExtended
@@ -224,7 +224,15 @@ async def reload_image(attachment, name: str, delete: bool = False):
         os.mkdir("/".join(name.split("/")[:-1]))
     async with aiofiles.open(name, mode="wb") as file:
         await file.write(response)
-    photo = await photo_message_uploader.upload(name, peer_id=OWNER)
+    photo = None
+    for i in range(5):
+        try:
+            photo = await photo_message_uploader.upload(name, peer_id=OWNER)
+            break
+        except VKAPIError:
+            await asyncio.sleep(2)
+    if not photo:
+        raise Exception("Photo upload failed")
     if delete:
         os.remove(name)
     return photo
@@ -1245,3 +1253,67 @@ async def count_daughter_params(user_id: int) -> tuple[int, int]:
     libido = min(100, max(0, libido))
     subordination = min(100, max(0, subordination))
     return libido, subordination
+
+
+async def move_user(user_id: int, chat_id: int):
+    old_chat_id = await db.select([db.UserToChat.chat_id]).where(db.UserToChat.user_id == user_id).gino.scalar()
+    print(old_chat_id)
+    if not old_chat_id:
+        await db.UserToChat.create(chat_id=chat_id, user_id=user_id)
+    else:
+        await db.UserToChat.update.values(chat_id=chat_id).where(db.UserToChat.user_id == user_id).gino.status()
+        is_old_private = await db.select([db.Chat.is_private]).where(db.Chat.chat_id == old_chat_id).gino.scalar()
+        if is_old_private:
+            try:
+                await bot.api.messages.remove_chat_user(chat_id=old_chat_id, member_id=user_id)
+            except:
+                pass
+        else:
+            await bot.api.request('messages.changeConversationMemberRestrictions',
+                                  {'peer_id': old_chat_id + 2000000000, 'member_ids': user_id, 'action': 'ro'})
+    is_private, count, user_chat_id = await db.select([db.Chat.is_private, db.Chat.visible_messages, db.Chat.user_chat_id]).where(db.Chat.chat_id == chat_id).gino.first()
+    chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=[2000000000 + chat_id])).items[0].chat_settings.title
+    states.set(user_id, service.states.Menu.MAIN)
+    await db.User.update.values(state=str(service.states.Menu.MAIN)).where(db.User.user_id == user_id).gino.status()
+    if old_chat_id:
+        await bot.api.messages.send(message=f'Пользователь {await create_mention(user_id)} будет перемещен в чат «{chat_name}»',
+                                    peer_id=old_chat_id + 2000000000)
+    if not is_private:
+        await bot.api.request('messages.changeConversationMemberRestrictions',
+                              {'peer_id': chat_id + 2000000000, 'member_ids': user_id, 'action': 'rw'})
+        link = (await bot.api.messages.get_invite_link(peer_id=2000000000 + chat_id, visible_messages_count=count)).link
+        await bot.api.messages.send(message=f'Вы успешно перешли в чат «{chat_name}»\n'
+                                            f'Ссылка на чат: {link}', keyboard=await keyboards.main_menu(user_id),
+                                    peer_id=user_id)
+    else:
+        try:
+            await user_bot.api.messages.add_chat_user(chat_id=user_chat_id, user_id=user_id, visible_messages_count=count)
+        except:
+            pass
+        await bot.api.request('messages.changeConversationMemberRestrictions',
+                              {'peer_id': chat_id + 2000000000, 'member_ids': user_id, 'action': 'rw'})
+        await bot.api.messages.send(message=f'Вы успешно перешли в чат «{chat_name}»\n',
+                                    keyboard=await keyboards.main_menu(user_id), peer_id=user_id)
+
+
+async def create_cabin_chat(user_id: int):
+    cabin_number = await db.select([db.Form.cabin]).where(db.Form.user_id == user_id).gino.scalar()
+    response = await user_bot.api.messages.create_chat(title=f'RP Among Us Каюта/Кельи № {cabin_number}')
+    await asyncio.sleep(0.5)
+    group_id = (await bot.api.groups.get_by_id()).groups[0].id
+    await user_bot.api.request('bot.addBotToChat', {'peer_id': response.chat_id + 2000000000, 'bot_id': -(abs(group_id))})
+    await asyncio.sleep(0.5)
+    await user_bot.api.request('messages.setMemberRole', {'peer_id': response.chat_id + 2000000000, 'member_id': -(abs(group_id)), 'role': 'admin'})
+    await asyncio.sleep(0.5)
+    await user_bot.api.messages.edit_chat(chat_id=response.chat_id, permissions={"see_invite_link": "owner_and_admins",
+                                                                                 'invite': 'owner_and_admins',
+                                                                                 'change_info': 'owner_and_admins',
+                                                                                 'change_pin': 'owner_and_admins',
+                                                                                 'change_style': 'owner_and_admins',
+                                                                                 'use_mass_mentions': 'owner_and_admins'})
+    await asyncio.sleep(0.5)
+    await db.Chat.create(is_private=True, visible_messages=10, cabin_user_id=user_id, user_chat_id=response.chat_id, chat_id=None)
+    message = await user_bot.api.messages.send(message=f'/каюта {cabin_number}', peer_id=response.chat_id + 2000000000,
+                                           random_id=0)
+    await asyncio.sleep(0.5)
+    await user_bot.api.messages.delete(message_ids=[message], delete_for_all=True)

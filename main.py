@@ -5,7 +5,9 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import traceback
 
-from loader import bot
+from loguru import logger
+
+from loader import bot, user_bot
 import handlers  # Important
 from service.db_engine import db
 from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity, update_daughter_levels, calculate_time, wait_users_post, wait_take_off_item, wait_disable_debuff
@@ -67,6 +69,8 @@ async def on_startup():
     for debuff_id in debuff_ids:
         asyncio.get_event_loop().create_task(wait_disable_debuff(debuff_id))
 
+    asyncio.get_event_loop().create_task(polling())
+
 
 def number_error():
     i = 1
@@ -76,6 +80,16 @@ def number_error():
 
 
 err_num = number_error()
+
+
+async def polling():
+    _polling = user_bot.polling
+    logger.info("Starting {} for {!r}", type(_polling).__name__, _polling.api)
+
+    async for event in _polling.listen():
+        logger.debug("New event was received: {!r}", event)
+        for update in event.get("updates", []):
+            asyncio.get_event_loop().create_task(user_bot.router.route(update, _polling.api))
 
 
 @bot.error_handler.register_error_handler(Exception)

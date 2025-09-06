@@ -1,7 +1,6 @@
-import enum
 import json
 import typing
-from typing import Optional, Union, List
+from typing import Optional, Union
 from abc import ABC
 
 from vkbottle_types.methods.messages import MessagesCategory
@@ -15,15 +14,12 @@ from vkbottle import VKAPIError, Keyboard, ErrorHandler, Router
 from vkbottle.dispatch.views.bot import RawBotEventView, BotHandlerBasement, ABCBotMessageView, BotMessageView
 from vkbottle.tools.mini_types.bot.message_event import MessageEventMin
 from vkbottle.tools.mini_types.bot import MessageMin
-from vkbottle.tools.mini_types.base.message import BaseMessageMin
 from vkbottle.http.aiohttp import AiohttpClient
-from vkbottle_types.codegen.objects import VideoVideo, VideoVideoFull, PollsPoll
-from vkbottle_types.objects import MessagesMessageAttachment, MessagesMessage, MessagesForeignMessage
-from vkbottle_types.events.objects.group_event_objects import MessageNewObject
+from vkbottle_types.codegen.objects import BaseUserGroupFields
+from vkbottle_types.objects import MessagesGetConversationById, MessagesGetConversationByIdExtended
 from vkbottle_types.events.bot_events import MessageNew, BaseGroupEvent
 
 from aiohttp import ClientSession, ClientResponse, TCPConnector
-from pydantic import Field
 from loguru import logger
 
 
@@ -143,6 +139,27 @@ class MessagesCategoryExtended(MessagesCategory):
         except:
             pass
 
+    async def get_conversations_by_id(
+        self,
+        peer_ids: typing.List[int],
+        extended: typing.Optional[bool] = None,
+        fields: typing.Optional[typing.List[BaseUserGroupFields]] = None,
+        group_id: typing.Optional[int] = None,
+        **kwargs: typing.Any,
+    ) -> typing.Union["MessagesGetConversationById", "MessagesGetConversationByIdExtended"]:
+        responses = [await super(MessagesCategoryExtended, self).get_conversations_by_id(
+            peer_ids=peer_ids[i:i+100],
+            extended=extended,
+            fields=fields,
+            group_id=group_id,
+            **kwargs
+        ) for i in range(0, len(peer_ids), 100)]
+        items = []
+        for response in responses:
+            items.extend(response.items)
+        response = responses[0].model_copy(update={'items': items})
+        return response
+
 
 class UsersCategoryExtended(UsersCategory, ABC):
 
@@ -216,73 +233,14 @@ class RawBotEventViewExtended(RawBotEventView, ABC):
         return super().get_event_model(handler_basement, event)
 
 
-class VideoVideoTypeExtended(enum.Enum):
-    VIDEO = "video"
-    MUSIC_VIDEO = "music_video"
-    MOVIE = "movie"
-    LIVE = "live"
-    SHORT_VIDEO = "short_video"
-    VIDEO_MESSAGE = 'video_message'
-
-
-class VideoVideoExtended(VideoVideo):
-    type: typing.Optional["VideoVideoTypeExtended"] = Field(default=None)
-
-
-class VideoVideoFullExtended(VideoVideoExtended, VideoVideoFull):
-    pass
-
-
-class PollsPollExtended(PollsPoll):
-    anonymous: bool = Field(
-        default=None,
-    )
-
-
-class MessagesMessageAttachmentExtended(MessagesMessageAttachment):
-    video: Optional["VideoVideoFullExtended"] = None
-    poll: Optional["PollsPollExtended"] = None
-
-
-class MessagesForeignMessageExtended(MessagesForeignMessage):
-    attachments: Optional[List["MessagesMessageAttachmentExtended"]] = None
-    reply_message: Optional["MessagesForeignMessageExtended"] = None
-    fwd_messages: Optional[List["MessagesForeignMessageExtended"]] = None
-
-
-class MessagesMessageExtended(MessagesMessage):
-    attachments: Optional[List["MessagesMessageAttachmentExtended"]] = None
-    reply_message: Optional["MessagesForeignMessageExtended"] = None
-    fwd_messages: Optional[List["MessagesForeignMessageExtended"]] = None
-
-
-class MessageNewObjectExtended(MessageNewObject):
-    message: Optional["MessagesMessageExtended"] = None
-
-
-class MessageNewExtended(MessageNew):
-    object: MessageNewObjectExtended
-
-
-class BaseMessageMinExtended(MessagesMessageExtended, BaseMessageMin):
-    pass
-
-
-class MessageMinExtended(BaseMessageMinExtended, MessageMin):
-    pass
-
-
-MessagesForeignMessageExtended.update_forward_refs()
-
-
 def message_min(event: dict, ctx_api: "ABCAPI", replace_mention: bool = True) -> "MessageMin":
-    update = MessageNewExtended(**event)
+    update = MessageNew(**event)
 
     if update.object.message is None:
         msg = "Please set longpoll to latest version"
         raise RuntimeError(msg)
 
-    return MessageMinExtended(
+    return MessageMin(
         **update.object.message.dict(),
         client_info=update.object.client_info,
         group_id=update.group_id,

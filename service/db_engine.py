@@ -635,6 +635,46 @@ class Database(Gino):
 
         self.Consequence = Consequence
 
+        class Chat(self.Model):
+            __tablename__ = 'chats'
+
+            chat_id = Column(Integer, unique=True)
+            is_private = Column(Boolean, default=False)
+            visible_messages = Column(Integer, default=1000)
+            cabin_user_id = Column(Integer, ForeignKey('users.user_id', ondelete='SET NULL'))
+            user_chat_id = Column(Integer)
+
+        self.Chat = Chat
+
+        class UserToChat(self.Model):
+            __tablename__ = 'users_chats'
+
+            id = Column(Integer, primary_key=True)
+            user_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'))
+            chat_id = Column(Integer, ForeignKey('chats.chat_id', ondelete='CASCADE'))
+
+        self.UserToChat = UserToChat
+
+        class ChatToProfessions(self.Model):
+            __tablename__ = 'chats_to_professions'
+
+            id = Column(Integer, primary_key=True)
+            chat_id = Column(Integer, ForeignKey('chats.chat_id', ondelete='CASCADE'))
+            profession_id = Column(Integer, ForeignKey('professions.id', ondelete='CASCADE'))
+
+        self.ChatToProfessions = ChatToProfessions
+
+        class ChatRequest(self.Model):
+            __tablename__ = 'chat_requests'
+
+            id = Column(Integer, primary_key=True)
+            chat_id = Column(Integer, ForeignKey('chats.chat_id', ondelete='CASCADE'))
+            user_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'))
+            admin_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'))
+            message_id = Column(Integer)
+
+        self.ChatRequest = ChatRequest
+
     async def connect(self):
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")
         await self.gino.create_all()

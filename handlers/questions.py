@@ -7,13 +7,13 @@ from vkbottle import Keyboard, GroupEventType, Callback, KeyboardButtonColor, Te
 from sqlalchemy import and_, func
 
 from service.db_engine import db
-from loader import bot, states
+from loader import bot, states, doc_messages_uploader
 from service.states import Registration, Menu, DaughterQuestions, Judge
 import messages
 from service.custom_rules import StateRule, NumericRule, LimitSymbols, CommandWithAnyArgs
 import service.keyboards as keyboards
 from service.utils import loads_form, reload_image, show_fields_edit, page_fractions, get_admin_ids, show_consequences
-from config import OWNER, ADMINS
+from config import OWNER, ADMINS, USER_ID
 
 
 @bot.on.private_message(StateRule(Registration.WAIT))
@@ -46,23 +46,51 @@ async def api_request(m: Message):
     return f"Результат: {response}"
 
 
+@bot.on.chat_message(PayloadRule({'help': 'help'}))
+async def help(m: Message):
+    await m.answer('Справка о текстовых командах в чатах:\n\n'
+                   'Команды только для администраторов:\n'
+                   '/клавиатура - получить клавиатуру в чате\n'
+                   '/настройки - настройки приватности чатов\n'
+                   '/chat_id - узнать уникальный айди чата\n\n'
+                   'Команды для всех участников:\n'
+                   '[заказать коктейль] - заказать «Коктейль в баре»\n'
+                   '[заказать премиальный коктейль] - заказать «Премиальный коктейль в баре»\n'
+                   '[заказать бутылку дорогого алкоголя] - заказать «Бутылку дорого алкоголя»'
+                   '[запросить зарплату] - отправить запрос зарплаты администрации\n'
+                   '[сдать отчет] - отправить выполненный отчет о дейлике\n'
+                   '[совершить сделку @mention сумма] - отправить валюту другому пользователю\n'
+                   '[пожертвовать в храм сумма] - пожертвовать валюту в храм\n'
+                   '[перемещение в "Название локации"] - переместиться в нужную локацию\n'
+                   '[использовать Предмет] - использовать предмет из инвентаря (работает только в экшен-режиме)\n'
+                   '[действие] - совершить действие в экшен-режиме (будет проверка судьи)\n'
+                   '[действие @mention] - PvP с пользователем в экшен-режиме (будет проверка судьи)\n'
+                   '[отправить сообщение @mention "Текст сообщения"] - отправить сообщение пользователю')
+
+
 @bot.on.private_message(PayloadRule({"command": "start"}))
 @bot.on.private_message(text=["начать", "регистрация", "заполнить заново", 'старт', 'меню', 'start', 'menu'])
 @bot.on.private_message(command="start")
 @bot.on.private_message(PayloadRule({"menu": "home"}))
 @bot.on.private_message(StateRule(Menu.SHOP_MENU), PayloadRule({"shop": "back"}))
 @bot.on.private_message(StateRule(Judge.MENU), PayloadRule({"judge_menu": "back"}))
+@bot.on.private_message(StateRule(Menu.LOCATIONS), PayloadRule({"locations": "back"}))
 async def start(m: Message):
     user = await db.User.get(m.from_id)
     if not user:
-        await db.User.create(user_id=m.from_id, state=Registration.PERSONAL_NAME,
+        await db.User.create(user_id=m.from_id, state=Registration.USER_AGREEMENT,
                              admin=2 if m.from_id == OWNER else 1 if m.from_id in ADMINS else 0)
     form = await db.select([db.Form.id]).where(db.Form.user_id == m.from_id).gino.scalar()
     if not form:
         await db.Form.create(user_id=m.from_id)
-        states.set(m.from_id, Registration.PERSONAL_NAME)
+        states.set(m.from_id, Registration.USER_AGREEMENT)
         await db.User.update.values(creating_form=True).where(db.User.user_id == m.from_id).gino.status()
-        await m.answer(messages.hello, keyboard=Keyboard())
+        attachment = await doc_messages_uploader.upload('Дисклеймер для проекта.docx', peer_id=m.from_id)
+        await m.answer('Перед использованием функций бота, необходимо согласие с пользовательским соглашением',
+                       keyboard=Keyboard().add(
+            Text('Я согласен(-на)', {'user_agreement': 'accept'}), KeyboardButtonColor.POSITIVE)
+                       .row().add(Text('Отказаться', {'user_agreement': 'reject'}), KeyboardButtonColor.NEGATIVE),
+                       attachment=attachment)
     else:
         creating_form, editing_form, creating_expeditor = await db.select([db.User.creating_form, db.User.editing_form, db.User.creating_expeditor]).where(db.User.user_id == m.from_id).gino.first()
         if creating_form:
@@ -96,6 +124,19 @@ async def start(m: Message):
         await m.answer("Главное меню", keyboard=await keyboards.main_menu(m.from_id))
     await db.User.update.values(editing_content=False).where(db.User.user_id == m.from_id).gino.status()
     await db.User.update.values(judge_panel=False).where(db.User.user_id == m.from_id).gino.status()
+
+
+@bot.on.private_message(StateRule(Registration.USER_AGREEMENT), PayloadRule({'user_agreement': 'accept'}))
+async def user_agreement_accept(m: Message):
+    states.set(m.from_id, Registration.PERSONAL_NAME)
+    await m.answer(messages.hello, keyboard=Keyboard())
+
+
+@bot.on.private_message(StateRule(Registration.USER_AGREEMENT), PayloadRule({'user_agreement': 'reject'}))
+async def user_agreement_reject(m: Message):
+    await db.User.delete.where(db.User.user_id == m.from_id).gino.status()
+    await m.answer('К сожалению, мы не можем продолжить дальнейшую работу',
+                   keyboard=Keyboard().add(Text('Начать', {'command': 'start'}), KeyboardButtonColor.PRIMARY))
 
 
 @bot.on.private_message(StateRule(Registration.PERSONAL_NAME), LimitSymbols(50))
@@ -364,17 +405,15 @@ async def want_daughter(m: Message):
                        is_notification=True)
     form_id = await db.select([db.Form.id]).where(db.Form.user_id == m.from_id).gino.scalar()
     user = await m.get_user()
-    admins = await get_admin_ids()
-    for admin_id in admins:
-        form, photo = await loads_form(m.from_id, admin_id, is_request=True)
-        if creating_form:
-            await bot.api.messages.send(peer_id=admin_id, message=f'Пользователь [id{user.id}|{user.first_name} {user.last_name}] '
-                                                                  f'заполнил анкету')
-        else:
-            await bot.api.messages.send(peer_id=admin_id,
-                                        message=f'Пользователь [id{user.id}|{user.first_name} {user.last_name}] '
-                                                f'перезаполнил ответы дочерей')
-        await bot.api.messages.send(peer_id=admin_id, message=form, attachment=photo, keyboard=keyboards.create_accept_form(form_id))
+    form, photo = await loads_form(m.from_id, USER_ID, is_request=True)
+    if creating_form:
+        await bot.api.messages.send(peer_id=USER_ID, message=f'Пользователь [id{user.id}|{user.first_name} {user.last_name}] '
+                                                              f'заполнил анкету')
+    else:
+        await bot.api.messages.send(peer_id=USER_ID,
+                                    message=f'Пользователь [id{user.id}|{user.first_name} {user.last_name}] '
+                                            f'перезаполнил ответы дочерей')
+    await bot.api.messages.send(peer_id=USER_ID, message=form, attachment=photo, keyboard=keyboards.create_accept_form(form_id))
 
 
 @bot.on.private_message(StateRule(Registration.WANT_DAUGHTER), PayloadRule({"want_daughter": True}))

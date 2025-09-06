@@ -19,6 +19,7 @@ class StateMeta(type):
 
 
 class Registration(metaclass=StateMeta):
+    USER_AGREEMENT = 'user_agreement'
     PERSONAL_NAME = "name"
     PROFESSION = "profession"
     AGE = "age"
@@ -88,6 +89,8 @@ class Menu(metaclass=StateMeta):
     CABINS_MENU = "cabins_menu"
     DAUGHTER_QUEST_MENU = 'daughter_quest_menu'
     CONFIRM_NEW_EXPEDITOR = "confirm_new_editor"
+    LOCATIONS = 'locations'
+    SELECT_CABIN = "select_cabin"
 
 
 class Admin(metaclass=StateMeta):
@@ -247,6 +250,11 @@ class Admin(metaclass=StateMeta):
     DELETE_JUDGE = 'delete_judge'
     ENTER_NEW_JUDGE = 'enter_new_judge'
     ENTER_OLD_JUDGE = 'enter_old_judge'
+    CHAT_SETTINGS = 'chat_settings'
+    CHAT_SELECT_TYPE = 'chat_select_type'
+    CHAT_SET_VISIBLE_MESSAGES_COUNT = 'chat_set_visible_messages_count'
+    CHAT_ADD_PROFESSION = 'chat_add_profession'
+    CHAT_DELETE_PROFESSION = 'chat_delete_profession'
 
 
 class Judge(metaclass=StateMeta):

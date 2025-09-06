@@ -8,16 +8,16 @@ from vkbottle.dispatch.rules.base import PayloadMapRule, PayloadRule
 from sqlalchemy import and_
 import openpyxl
 from vkbottle import DocMessagesUploader, Callback, KeyboardButtonColor, Keyboard, GroupEventType
-from sqlalchemy.sql.schema import Column
 
-from loader import bot
+from loader import bot, user_bot
 from service.db_engine import db
 import messages
 from service import keyboards
 from service.states import Menu, Admin
 from service.middleware import states
 from service.custom_rules import StateRule, NumericRule, AdminRule, UserFree
-from service.utils import take_off_payments, parse_cooldown, parse_reputation, create_mention, check_quest_completed, apply_reward, serialize_target_reward
+from service.utils import take_off_payments, parse_reputation, create_mention, check_quest_completed, apply_reward, serialize_target_reward, create_cabin_chat, move_user
+from config import HALL_CHAT_ID
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_accept": int}), AdminRule(), UserFree())
@@ -42,6 +42,12 @@ async def accept_form(m: MessageEvent):
     if str(state) == "Registration.wait":
         await db.User.update.values(state=str(Menu.MAIN)).where(db.User.user_id == user_id).gino.status()
         await bot.api.messages.send(peer_ids=user_id, message=messages.form_accepted, keyboard=await keyboards.main_menu(user_id))
+        try:
+            await user_bot.api.friends.add(user_id=user_id, text='Автоматическое приглашение на станцию\n'
+                                                             'Чтобы попасть в каюту примите заявку в друзья')
+        except:
+            pass
+        await move_user(user_id, HALL_CHAT_ID)
     else:
         await bot.api.messages.send(peer_ids=user_id, message="Заявка на редактирование анкеты была принята", is_notification=True)
     name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
@@ -98,7 +104,13 @@ async def set_user_cabin(m: Message, value: int = None):
         await m.answer("Данная комната уже занята")
         return
     user_id = int(states.get(m.from_id).split("*")[1])
+    if user_id != m.from_id:  # Для того, чтобы админы могли сами себе подтвердить анкету
+        response = await user_bot.api.friends.are_friends(user_ids=[user_id])
+        if response[0].friend_status != 3:
+            await m.answer('Пользователь не находится у административного аккаунта в друзьях')
+            return
     await db.Form.update.values(cabin=value).where(db.Form.user_id == user_id).gino.status()
+    await create_cabin_chat(user_id)
     states.set(m.from_id, f"{Admin.SELECT_CLASS_CABIN}*{user_id}")
     cabins = await db.select([db.Cabins.name]).gino.all()
     reply = messages.cabin_class

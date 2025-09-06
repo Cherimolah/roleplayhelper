@@ -7,3 +7,4 @@ from . import quests
 from . import daylics
 from . import settings
 from . import daughter_quests
+from . import locations

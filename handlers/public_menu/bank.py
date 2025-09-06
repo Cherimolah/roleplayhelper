@@ -115,10 +115,7 @@ async def set_amount_transfer(m: Message, value: int = None):
     if value < 1:
         await m.answer(messages.error_small_amount)
         return
-    if value % 2 == 0:
-        commission = value // 2
-    else:
-        commission = value // 2 + 1
+    commission = soft_divide(value, 2)
     tax = 0 if value <= 25 else 100 + commission
     balance = (await db.select([db.Form.balance]).where(db.Form.user_id == m.from_id).gino.scalar())
     if balance < value + tax:

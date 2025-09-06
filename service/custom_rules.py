@@ -3,7 +3,7 @@ from typing import Union, Optional
 
 from vkbottle.dispatch.rules import ABCRule
 from vkbottle.bot import Message, MessageEvent
-from vkbottle.dispatch.rules.abc import T_contra
+from vkbottle_types.objects import MessagesMessageActionStatus
 
 from loader import states, bot
 from service.db_engine import db
@@ -51,7 +51,7 @@ class NumericRule(ABCRule[Message], ABC):
     async def check(self, event: Message):
         try:
             int(event.text)
-        except:
+        except ValueError:
             await event.answer('Не удаётся преобразовать в целое число')
             return False
         if self.min_number <= int(event.text) <= self.max_number:
@@ -313,3 +313,24 @@ class SelectConsequences(ABCRule, ABC):
                 return False
             return {'action_id': int(action_id), 'con_type': int(con_group)}
         return False
+
+
+invites = [
+    MessagesMessageActionStatus.CHAT_INVITE_USER_BY_MESSAGE_REQUEST,
+    MessagesMessageActionStatus.CHAT_INVITE_USER_BY_LINK,
+    MessagesMessageActionStatus.CHAT_INVITE_USER
+]
+
+
+class ChatInviteMember(ABCRule, ABC):
+    async def check(self, event: Message):
+        if event.peer_id > 2000000000 and event.action and event.action.type in invites:
+            return True
+
+
+class FromUserRule(ABCRule, ABC):
+
+    def __init__(self, from_id: int):
+        self.from_id = from_id
+    async def check(self, event: Message):
+        return event.from_id == self.from_id
