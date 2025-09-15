@@ -83,6 +83,7 @@ async def set_chat_type(m: Message):
         if not user_chat_id:
             members = (await bot.api.messages.get_conversation_members(peer_id=m.peer_id)).items
             member_ids = {x.member_id for x in members if x.member_id > 0}
+            print(member_ids)
             if USER_ID not in member_ids:
                 await m.answer('Необходимо добавить аккаунт юзер-бота в этот чат!')
                 return
