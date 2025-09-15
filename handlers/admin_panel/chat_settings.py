@@ -81,12 +81,11 @@ async def set_chat_type(m: Message):
     if is_private:
         user_chat_id = await db.select([db.Chat.user_chat_id]).where(db.Chat.chat_id == chat_id).gino.scalar()
         if not user_chat_id:
-            members = (await bot.api.messages.get_conversation_members(peer_id=m.peer_id)).items
-            member_ids = {x.member_id for x in members if x.member_id > 0}
-            print(member_ids)
-            if USER_ID not in member_ids:
-                await m.answer('Необходимо добавить аккаунт юзер-бота в этот чат!')
-                return
+            # members = (await bot.api.messages.get_conversation_members(peer_id=m.peer_id)).items
+            # member_ids = {x.member_id for x in members if x.member_id > 0}
+            # if USER_ID not in member_ids:
+            #     await m.answer('Необходимо добавить аккаунт юзер-бота в этот чат!')
+            #     return
             await m.answer('Проверяется связь и возможность добавлять пользователей....')
             message = (await bot.api.messages.send(message=f'/приват {chat_id}', peer_id=chat_id + 2000000000))[0]
             await asyncio.sleep(3)
