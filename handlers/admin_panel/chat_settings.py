@@ -86,6 +86,7 @@ async def set_chat_type(m: Message):
             # if USER_ID not in member_ids:
             #     await m.answer('Необходимо добавить аккаунт юзер-бота в этот чат!')
             #     return
+            print(m.chat_id)
             await m.answer('Проверяется связь и возможность добавлять пользователей....')
             message = (await bot.api.messages.send(message=f'/приват {chat_id}', peer_id=chat_id + 2000000000))[0]
             await asyncio.sleep(3)
