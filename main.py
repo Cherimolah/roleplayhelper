@@ -72,14 +72,6 @@ async def on_startup():
 
     asyncio.get_event_loop().create_task(polling())
 
-    reply, photo = await loads_form(473105648, 486697492)
-    keyboard = Keyboard(inline=True).add(
-        Callback('Принять', {"form_accept": 16}), KeyboardButtonColor.POSITIVE
-    ).row().add(
-        Callback('Отклонить', {'form_decline': 16}), KeyboardButtonColor.NEGATIVE
-    )
-    await bot.api.messages.send(peer_id=486697492, message=reply, attachment=photo, keyboard=keyboard)
-
 
 def number_error():
     i = 1
