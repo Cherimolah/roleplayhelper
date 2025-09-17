@@ -6,11 +6,12 @@ from datetime import datetime, timedelta, timezone
 import traceback
 
 from loguru import logger
+from vkbottle import Keyboard, Callback, KeyboardButtonColor
 
 from loader import bot, user_bot
 import handlers  # Important
 from service.db_engine import db
-from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity, update_daughter_levels, calculate_time, wait_users_post, wait_take_off_item, wait_disable_debuff
+from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity, update_daughter_levels, calculate_time, wait_users_post, wait_take_off_item, wait_disable_debuff, loads_form
 from config import ADMINS
 from service.middleware import MaintainenceMiddleware, StateMiddleware, FormMiddleware, ActivityUsersMiddleware, StateMiddlewareME, ActionModeMiddleware
 
@@ -70,6 +71,11 @@ async def on_startup():
         asyncio.get_event_loop().create_task(wait_disable_debuff(debuff_id))
 
     asyncio.get_event_loop().create_task(polling())
+
+    # reply, photo = await loads_form(473105648, 486697492)
+    # keyboard = Keyboard(inline=True).add(
+    #     Callback('Принять', {})
+    # )
 
 
 def number_error():

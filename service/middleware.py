@@ -76,6 +76,8 @@ class ActivityUsersMiddleware(BaseMiddleware[Message], ABC):
 class StateMiddlewareME(BaseMiddleware[MessageEvent], ABC):
 
     async def pre(self) -> None:
+        if self.event['type'] != 'message_event':
+            return
         if self.event['object']['peer_id'] > 2000000000:
             return
         state = await db.select([db.User.state]).where(db.User.user_id == self.event['object']['user_id']).gino.scalar()
