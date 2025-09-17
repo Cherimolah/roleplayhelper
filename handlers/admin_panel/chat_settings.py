@@ -11,6 +11,7 @@ from service.states import Admin
 from service import keyboards
 from handlers.questions import start
 from config import USER_ID, GROUP_ID
+from service.utils import create_mention
 
 
 @bot.on.chat_message(AdminRule(), VBMLRule('/настройки'), UserFree())
@@ -203,3 +204,8 @@ async def set_cabin_number(m: Message, cabin_number: int):
     message = (await bot.api.messages.send(message=f'/приват {m.chat_id}', peer_id=m.peer_id))[0]
     await asyncio.sleep(2)
     await bot.api.messages.delete(cmids=[message.conversation_message_id], peer_id=m.peer_id, delete_for_all=True)
+    success = await db.select([db.Chat.user_chat_id]).where(db.Chat.chat_id == m.chat_id).gino.scalar()
+    if success:
+        await m.answer(f'Каюта успешно зарегистрирована пользователю {await create_mention(user_id)}')
+    else:
+        await m.answer('ВОзникла какая-то ошибка')
