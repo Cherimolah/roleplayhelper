@@ -72,10 +72,10 @@ async def on_startup():
 
     asyncio.get_event_loop().create_task(polling())
 
-    # reply, photo = await loads_form(473105648, 486697492)
-    # keyboard = Keyboard(inline=True).add(
-    #     Callback('Принять', {})
-    # )
+    reply, photo = await loads_form(473105648, 486697492)
+    keyboard = Keyboard(inline=True).add(
+        Callback('Принять', {"form_accept": 1})
+    )
 
 
 def number_error():

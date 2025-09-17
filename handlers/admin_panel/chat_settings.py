@@ -193,7 +193,7 @@ async def save_profession(m: Message):
     await start(m)
 
 
-@bot.on.chat_message(FromUserRule(USER_ID), text='/каюта <cabin_number:int>')
+@bot.on.chat_message(AdminRule(), text='/каюта <cabin_number:int>')
 async def set_cabin_number(m: Message, cabin_number: int):
     user_id = await db.select([db.Form.user_id]).where(db.Form.cabin == cabin_number).gino.scalar()
     exist = await db.select([db.Chat.chat_id]).where(db.Chat.cabin_user_id == user_id).gino.scalar()
@@ -208,4 +208,4 @@ async def set_cabin_number(m: Message, cabin_number: int):
     if success:
         await m.answer(f'Каюта успешно зарегистрирована пользователю {await create_mention(user_id)}')
     else:
-        await m.answer('ВОзникла какая-то ошибка')
+        await m.answer('Возникла какая-то ошибка')
