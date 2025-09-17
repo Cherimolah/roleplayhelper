@@ -405,15 +405,17 @@ async def want_daughter(m: Message):
                        is_notification=True)
     form_id = await db.select([db.Form.id]).where(db.Form.user_id == m.from_id).gino.scalar()
     user = await m.get_user()
-    form, photo = await loads_form(m.from_id, USER_ID, is_request=True)
-    if creating_form:
-        await bot.api.messages.send(peer_id=USER_ID, message=f'Пользователь [id{user.id}|{user.first_name} {user.last_name}] '
-                                                              f'заполнил анкету')
-    else:
-        await bot.api.messages.send(peer_id=USER_ID,
-                                    message=f'Пользователь [id{user.id}|{user.first_name} {user.last_name}] '
-                                            f'перезаполнил ответы дочерей')
-    await bot.api.messages.send(peer_id=USER_ID, message=form, attachment=photo, keyboard=keyboards.create_accept_form(form_id))
+    admins = await get_admin_ids()
+    for admin_id in admins:
+        form, photo = await loads_form(m.from_id, admin_id, is_request=True)
+        if creating_form:
+            await bot.api.messages.send(peer_id=admin_id, message=f'Пользователь [id{user.id}|{user.first_name} {user.last_name}] '
+                                                                  f'заполнил анкету')
+        else:
+            await bot.api.messages.send(peer_id=admin_id,
+                                        message=f'Пользователь [id{user.id}|{user.first_name} {user.last_name}] '
+                                                f'перезаполнил ответы дочерей')
+        await bot.api.messages.send(peer_id=admin_id, message=form, attachment=photo, keyboard=keyboards.create_accept_form(form_id))
 
 
 @bot.on.private_message(StateRule(Registration.WANT_DAUGHTER), PayloadRule({"want_daughter": True}))
