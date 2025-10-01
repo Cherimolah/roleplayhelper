@@ -1,3 +1,10 @@
+"""
+Модуль улучшающий взаимодействие с апи VK и VKBottle.
+Здесь создаются миксины с классами VKBottle
+Заменяет обычные методы классов VKBottle а кастомные, так что можно просто использовать их как обычно
+Также добавляет некоторые полезные фичи: словарь в message.payload и логи исключений
+"""
+
 import json
 import typing
 from typing import Optional, Union
@@ -22,8 +29,13 @@ from vkbottle_types.events.bot_events import MessageNew, BaseGroupEvent
 from aiohttp import ClientSession, ClientResponse, TCPConnector
 from loguru import logger
 
+from service.db_engine import db
+
 
 class MessagesCategoryExtended(MessagesCategory):
+    """
+    Класс кастомных методов для работы с апи группы messages
+    """
 
     async def send(
             self,
@@ -51,14 +63,30 @@ class MessagesCategoryExtended(MessagesCategory):
             disable_mentions=True,
             intent=None,
             subscribe_id=None,
+            is_notification=None,
             **kwargs
     ) -> typing.Union[int, typing.List[MessagesSendUserIdsResponseItem]]:
+        """
+        Метод для отправки сообщений. Разбивает сообщения по 4096 символов. Добавляет фотографии и клавиатуру
+        к последнему сообщению. Также устанавливает random_id = 0, и использует передачу peer_ids чтобы возвращать
+        объекты сообщений
+
+        Добавляется кастомный параметр is_notification, который отправляет сообщение только, если у пользователя включены уведомления от бота
+        Используется для сервисных оповещений от бота
+        """
         if user_id:
             peer_ids = [user_id]
             del user_id
         if peer_id:
             peer_ids = [peer_id]
             del peer_id
+        if is_notification:
+            for peer_id in peer_ids:
+                enabled = await db.select([db.User.notification_enabled]).where(db.User.user_id == peer_id).gino.scalar()
+                if not enabled:
+                    peer_ids.remove(peer_id)
+            if not peer_ids:
+                return None
         if message is None:
             message = ""  # Set iterable
         if isinstance(random_id, str):  # Compatible
@@ -83,6 +111,9 @@ class MessagesCategoryExtended(MessagesCategory):
             member_id: typing.Optional[int] = None,
             **kwargs
     ) -> int:
+        """
+        Удаляет пользователя из чата, отключает вызов исключения
+        """
         try:
             return await super().remove_chat_user(chat_id, user_id, member_id, **kwargs)
         except VKAPIError:
@@ -106,6 +137,10 @@ class MessagesCategoryExtended(MessagesCategory):
             keyboard: typing.Optional[str] = None,
             **kwargs
     ) -> bool:
+        """
+        Метод пытается отредактировать сообщение, если вызывается исключение (сообщение старое / вк решил, что мы много
+        редактируем), то отправляет новое сообщение
+        """
         try:
             response = await super().edit(peer_id=peer_id, message=message, lat=lat, long=long,
                                           attachment=attachment, keep_forward_messages=keep_forward_messages,
@@ -133,6 +168,9 @@ class MessagesCategoryExtended(MessagesCategory):
             cmids: typing.Optional[typing.List[int]] = None,
             **kwargs
     ) -> typing.Dict[str, int]:
+        """
+        Удаляет сообщение, отключает вызов исключения
+        """
         try:
             return await super().delete(message_ids=message_ids, spam=spam, group_id=group_id,
                                         delete_for_all=delete_for_all, peer_id=peer_id, cmids=cmids, **kwargs)
@@ -147,6 +185,9 @@ class MessagesCategoryExtended(MessagesCategory):
         group_id: typing.Optional[int] = None,
         **kwargs: typing.Any,
     ) -> typing.Union["MessagesGetConversationById", "MessagesGetConversationByIdExtended"]:
+        """
+        Возвращает список бесед бота, обходит лимит в количество бесед за один запрос
+        """
         responses = [await super(MessagesCategoryExtended, self).get_conversations_by_id(
             peer_ids=peer_ids[i:i+100],
             extended=extended,
@@ -162,6 +203,9 @@ class MessagesCategoryExtended(MessagesCategory):
 
 
 class UsersCategoryExtended(UsersCategory, ABC):
+    """
+    Класс для кастомных методов апи группы users
+    """
 
     async def get(
             self,
@@ -172,6 +216,9 @@ class UsersCategoryExtended(UsersCategory, ABC):
             ] = None,
             **kwargs
     ) -> typing.List[UsersUserFull]:
+        """
+        Возвращает информацию о пользователе, обходит лимит по количеству пользователей за один запрос
+        """
         if isinstance(user_ids, list):
             responses = [await super(UsersCategoryExtended, self).get(user_ids=user_ids[i:i + 1000], fields=fields,
                                                                       name_case=name_case, **kwargs)
@@ -182,6 +229,9 @@ class UsersCategoryExtended(UsersCategory, ABC):
 
 
 class APICategoriesExtended(APICategories, ABC):
+    """
+    Миксин, чтобы подгрузить кастомные классы категорий
+    """
     @property
     def messages(self) -> messages.MessagesCategory:
         return MessagesCategoryExtended(self.api_instance)
@@ -192,10 +242,16 @@ class APICategoriesExtended(APICategories, ABC):
 
 
 class APIExtended(APICategoriesExtended, API):
+    """
+    Миксин для подгрузки кастомных классов категорий в класс API. Может показаться, что он пустой, но так надо.
+    """
     pass
 
 
 class MessageEventMinExtended(MessageEventMin):
+    """
+    Класс для кастомных методов у объекта MessageEvent
+    """
 
     async def edit_message(
             self,
@@ -210,6 +266,9 @@ class MessageEventMinExtended(MessageEventMin):
             keyboard: Optional[str] = None,
             **kwargs,
     ) -> int:
+        """
+        Метод редактирует сообщение, если устарело отправляет новое
+        """
         if isinstance(keyboard, Keyboard):
             keyboard = keyboard.get_json()
         try:
@@ -224,16 +283,24 @@ class MessageEventMinExtended(MessageEventMin):
 
 
 class RawBotEventViewExtended(RawBotEventView, ABC):
+    """
+    Кастомный view для сырых ивентов. Нужно, чтобы создавался объект MessageEventExtended с кастомным методам
+    редактирования (см. выше)
+    """
 
     def get_event_model(
             self, handler_basement: "BotHandlerBasement", event: dict
     ) -> typing.Union[dict, "BaseGroupEvent"]:
         if handler_basement.dataclass == MessageEventMin:
-            return MessageEventMinExtended(**event)
+            return MessageEventMinExtended(**event)  # Здесь собственно и создается кастомный объект сырых ивентов
         return super().get_event_model(handler_basement, event)
 
 
 def message_min(event: dict, ctx_api: "ABCAPI", replace_mention: bool = True) -> "MessageMin":
+    """
+    Функция создает MessageMin, она нужна в ABCBotMessageViewExtended (кастомный MessageView).
+    Код скопирован из VKBottle
+    """
     update = MessageNew(**event)
 
     if update.object.message is None:
@@ -250,21 +317,34 @@ def message_min(event: dict, ctx_api: "ABCAPI", replace_mention: bool = True) ->
 
 
 class ABCBotMessageViewExtended(ABCBotMessageView, ABC):
+    """
+    Кастомный MessageView, нужен, чтобы изменить объект MessageMin
+    """
     @staticmethod
     async def get_message(
             event: dict, ctx_api: Union["API", "ABCAPI"], replace_mention: bool
     ) -> "MessageMin":
-        message = message_min(event, ctx_api, replace_mention)
+        """
+        Заменяет payload со строки на словарь для удобства использования
+        """
+        message = message_min(event, ctx_api, replace_mention)  # Создаем обычный MessageMin
         if isinstance(message.payload, str):
-            message.payload = json.loads(message.payload)
+            message.payload = json.loads(message.payload)  # Изменяем payload со строки на словарь
         return message
 
 
 class BotMessageViewExtended(ABCBotMessageViewExtended, BotMessageView):
+    """
+    Миксин для загрузки кастомного MessageView, он пустой это нормально
+    """
     pass
 
 
 class AioHTTPClientExtended(AiohttpClient, ABC):
+    """
+    Расширение класса AiohttpClient. Так как по каким-то причинам aiohttp не хочет принимать TLS сертификат vk.ru
+    здесь отключается его проверка
+    """
 
     async def request_raw(
             self,
@@ -273,6 +353,9 @@ class AioHTTPClientExtended(AiohttpClient, ABC):
             data: Optional[dict] = None,
             **kwargs,
     ) -> "ClientResponse":
+        """
+        Метод делает HTTPS запрос по ссылке с отключенной проверкой TLS сертфиката
+        """
         connector = TCPConnector(ssl=False)
         if not self.session:
             self.session = ClientSession(
@@ -285,20 +368,15 @@ class AioHTTPClientExtended(AiohttpClient, ABC):
             return response
 
 
-class ErrorHandlerExtended(ErrorHandler):
-    async def handle(self, error: Exception, *args, **kwargs):
-        handler = self.lookup_handler(type(error)) or self.undefined_error_handler
-
-        if not handler:
-            if self.raise_exceptions:
-                raise error
-            logger.exception(error)
-            return
-        return await handler(error, *args, **kwargs)
-
-
 class RouterExtended(Router):
+    """
+    Расширение для класса Router, нужен чтобы вызывать метод обработки исключений с кастомными аргументами
+    """
     async def route(self, event: dict, ctx_api: "ABCAPI") -> None:
+        """
+        Метод прокидывающий приходящий ивент по хендлерам.
+        Если в ходе обработки проиходит ошибка вызывается обработчик ошибок (см. main.exception)
+        """
         logger.debug("Routing update {}", event)
 
         for view in self.views.values():

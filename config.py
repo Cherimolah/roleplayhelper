@@ -8,25 +8,22 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN").split(",")
-USER_TOKENS = os.environ.get("USER_TOKENS").split(",")
+BOT_TOKEN = os.environ.get("BOT_TOKEN").split(",")  # Токен бота VK API
 
-USER = os.environ.get("PG_USER")
-HOST = os.environ.get("HOST")
-PASSWORD = os.environ.get("PASSWORD")
-DATABASE = os.environ.get("DATABASE")
+USER = os.environ.get("PG_USER")  # Пользователь базы данных
+HOST = os.environ.get("HOST")  # Хост для подключения к базе данных
+PASSWORD = os.environ.get("PASSWORD")  # Пароль пользователя для базы данных
+DATABASE = os.environ.get("DATABASE")  # Название базы данных
 
-OWNER = int(os.environ.get("OWNER"))
-ADMINS = list(map(int, os.environ.get("ADMINS").split(",")))
+OWNER = int(os.environ.get("OWNER"))  # Айди страницы ВК владельца бота
+ADMINS = list(map(int, os.environ.get("ADMINS").split(",")))  # Айдишники страниц ВК администраторов бота
 
-DATETIME_FORMAT = os.environ.get("DATETIME_FORMAT")
+DATETIME_FORMAT = os.environ.get("DATETIME_FORMAT")  # Формат представления дат
 
-SYSTEMD_NAME = os.environ.get("SYSTEMD_NAME")
+SYSTEMD_NAME = os.environ.get("SYSTEMD_NAME")  # Название службы systemd (см. использование в README)
 
-CHAT_IDS = list(map(int, os.environ.get("CHAT_IDS").split(",")))
+USER_BOT_TOKEN = os.getenv('USER_BOT_TOKEN')  # Токен пользователя юзер-бота
+USER_ID = int(os.getenv('USER_ID'))  # Айди пользователя юзер-бота
+GROUP_ID = int(os.getenv('GROUP_ID'))  # Айди группы, к которой подключен бот
 
-USER_BOT_TOKEN = os.getenv('USER_BOT_TOKEN')
-USER_ID = int(os.getenv('USER_ID'))
-GROUP_ID = int(os.getenv('GROUP_ID'))
-
-HALL_CHAT_ID = int(os.getenv('HALL_CHAT_ID'))
+HALL_CHAT_ID = int(os.getenv('HALL_CHAT_ID'))  # Айди чата, который будет стартовым при регистрации пользователя

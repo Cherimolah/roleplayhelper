@@ -104,11 +104,6 @@ async def set_user_cabin(m: Message, value: int = None):
         await m.answer("Данная комната уже занята")
         return
     user_id = int(states.get(m.from_id).split("*")[1])
-    if user_id != m.from_id:  # Для того, чтобы админы могли сами себе подтвердить анкету
-        response = await user_bot.api.friends.are_friends(user_ids=[user_id])
-        if response[0].friend_status != 3:
-            await m.answer('Пользователь не находится у административного аккаунта в друзьях')
-            return
     await db.Form.update.values(cabin=value).where(db.Form.user_id == user_id).gino.status()
     await create_cabin_chat(user_id)
     states.set(m.from_id, f"{Admin.SELECT_CLASS_CABIN}*{user_id}")

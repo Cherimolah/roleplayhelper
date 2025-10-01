@@ -139,7 +139,7 @@ async def create_donate_command(m: Message, match: tuple[str]):
 
 
 @bot.on.chat_message(ChatInviteMember())
-async def test(m: Message):
+async def test(m: Message, member_id: int):
     if m.action.type == MessagesMessageActionStatus.CHAT_INVITE_USER:
         member_id = m.action.member_id
     elif m.action.type == MessagesMessageActionStatus.CHAT_INVITE_USER_BY_LINK:

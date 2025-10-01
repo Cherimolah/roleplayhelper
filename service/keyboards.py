@@ -1,9 +1,15 @@
+"""
+В этом модуле статические клавиатуры и некоторые функции генераторы клавиатур, которые либо шаблонные либо много где используются
+"""
 from vkbottle import Keyboard, Text, KeyboardButtonColor, Callback
 
 from service.db_engine import db
 from service.utils import get_current_form_id
 
+# Клавиатура для пропуска профессии при регистрации
 another_profession = Keyboard().add(Text("Другая", {"profession": "another_profession"}), KeyboardButtonColor.NEGATIVE)
+
+# Сексуальные ориентации
 orientations = Keyboard().add(Text("Гетеро", {"orientation": 0}), KeyboardButtonColor.PRIMARY).row().add(
     Text("Би", {"orientation": 1}), KeyboardButtonColor.PRIMARY).row().add(
     Text("Гомо", {"orientation": 2}), KeyboardButtonColor.PRIMARY
@@ -11,6 +17,9 @@ orientations = Keyboard().add(Text("Гетеро", {"orientation": 0}), Keyboard
 
 
 def create_accept_form(form_id: int):
+    """
+    Создает клавиатуру для принятия/отклонения анкеты администратором
+    """
     form_accept = Keyboard(one_time=False, inline=True).add(
         Callback("Подтвердить", {"form_accept": form_id}), KeyboardButtonColor.POSITIVE
     ).add(
@@ -20,10 +29,16 @@ def create_accept_form(form_id: int):
 
 
 def get_skip_button(field: str):
+    """
+    Создает клавиатуру для пропуска какого-то поля пр регистрации
+    """
     return Keyboard().add(Text("Пропустить", {field: "skip"}), KeyboardButtonColor.SECONDARY)
 
 
 async def main_menu(user_id: int):
+    """
+    Возвращает клавиатуру основного меню
+    """
     admin, judge = await db.select([db.User.admin, db.User.judge]).where(db.User.user_id == user_id).gino.first()
     keyboard = (Keyboard().add(
         Text("Анкета", {"menu": "form"}), KeyboardButtonColor.PRIMARY
@@ -51,14 +66,17 @@ async def main_menu(user_id: int):
     return keyboard
 
 
+# Клавиатура для указания причины отклонения анкеты администратором
 reason_decline_form = Keyboard().add(
     Text("Без причины", {"reason_decline": "Null"}), KeyboardButtonColor.NEGATIVE
 )
 
+# Клавиатруа, чтобы пользователь смог заново пройти регистрацию, если его анкету отклонили
 fill_quiz = Keyboard().add(
     Text("Заполнить заново", {"command": "start"}), KeyboardButtonColor.PRIMARY
 )
 
+# Клавиатура админ-панели
 admin_menu = Keyboard().add(
     Text("Редактирование анкет", {"admin_menu": "edit_form"}), KeyboardButtonColor.SECONDARY
 ).add(
@@ -77,6 +95,7 @@ admin_menu = Keyboard().add(
     Text("В главное меню", {"admin_menu": "back"}), KeyboardButtonColor.NEGATIVE
 )
 
+# Клавиатура управления пользователями в админ-панели
 manage_admins = Keyboard().add(
     Text("Добавить администратора", {"manage_admins": "add_admin"}), KeyboardButtonColor.PRIMARY
 ).add(
@@ -89,6 +108,7 @@ manage_admins = Keyboard().add(
     Text("Назад", {"manage_admins": "back"}), KeyboardButtonColor.NEGATIVE
 )
 
+# Клавиатура для выбора типа контента в админ-панели
 manage_content = Keyboard().add(
     Text('Карты экспедитора', {'edit_content': 'Expeditor'}), KeyboardButtonColor.SECONDARY
 ).row().add(
@@ -125,6 +145,9 @@ manage_content = Keyboard().add(
 
 
 def gen_type_change_content(item):
+    """
+    Создает клавиатуру для CRUD с определенным типом контента
+    """
     return Keyboard().add(
         Text("Добавить", {item: "add"}), KeyboardButtonColor.POSITIVE
     ).add(
@@ -135,6 +158,9 @@ def gen_type_change_content(item):
 
 
 async def generate_form_activity(user_id):
+    """
+    Создает клавиатуру в меню Анкета
+    """
     form_activity = Keyboard().add(
         Text("Поиск анкеты пользователя", {"form": "search"}), KeyboardButtonColor.SECONDARY
     ).row().add(
@@ -169,30 +195,15 @@ async def generate_form_activity(user_id):
     )
     return form_activity
 
-form_search = Keyboard().add(
-    Text("Назад", {"form_search": "back"}), KeyboardButtonColor.NEGATIVE
-)
-
-next_form = Keyboard(inline=True).add(
-    Callback("->", {"form": "next"}), KeyboardButtonColor.PRIMARY
-)
-
-previous_form = Keyboard(inline=True).add(
-    Callback("<-", {"form": "previous"}), KeyboardButtonColor.PRIMARY
-)
-
-how_edit_form = Keyboard().add(
-    Text("Поменять некоторые поля", {"form_edit": "edit_fields"}), KeyboardButtonColor.PRIMARY
-).row().add(
-    Text("Назад", {"form_edit": "back"}), KeyboardButtonColor.NEGATIVE
-)
-
+# Клавиатура для принятия изменений в редактирований анкеты
 confirm_edit_form = Keyboard().add(
     Text("Подтвердить изменения", {"form_edit": "confirm"}), KeyboardButtonColor.POSITIVE
 ).row().add(
     Text("Отменить изменения", {"form_edit": "decline"}), KeyboardButtonColor.NEGATIVE
 )
 
+
+# Клавиатура в меню Банк
 bank = Keyboard().add(
     Text("Баланс кошелька", {"bank_menu": "balance"}), KeyboardButtonColor.PRIMARY
 ).add(
@@ -209,6 +220,7 @@ bank = Keyboard().add(
     Text("Назад", {"menu": "home"}), KeyboardButtonColor.NEGATIVE
 )
 
+# Клавиатура в меню Магазин
 shop_menu = Keyboard().add(
     Text("Услуги", {"shop": "services"}), KeyboardButtonColor.PRIMARY
 ).add(
@@ -221,6 +233,7 @@ shop_menu = Keyboard().add(
     Text("Назад", {"shop": "back"}), KeyboardButtonColor.NEGATIVE
 )
 
+# Клавиатура в меню Магазина декора
 shop_cabins_menu = Keyboard().add(
     Text("Декор", {"shop_cabins": "decor"}), KeyboardButtonColor.PRIMARY
 ).add(
@@ -229,6 +242,7 @@ shop_cabins_menu = Keyboard().add(
     Text("Назад", {"shop_cabins": "back"}), KeyboardButtonColor.NEGATIVE
 )
 
+# Клавиатура для создания пожертвований
 donate_menu = Keyboard().add(
     Text("Пожертвовать", {"bank": "create_donate"}), KeyboardButtonColor.PRIMARY
 ).row().add(
@@ -237,6 +251,9 @@ donate_menu = Keyboard().add(
 
 
 async def get_settings_menu(user_id: int) -> Keyboard:
+    """
+    Создает клавиатуру для меню Настройки с учетом текущих настроек бота
+    """
     notifications_enabled, freeze, admin = (
         await db.select([db.User.notification_enabled, db.Form.freeze, db.User.admin])
         .select_from(db.User.join(db.Form, db.User.user_id == db.Form.user_id))
@@ -268,6 +285,7 @@ async def get_settings_menu(user_id: int) -> Keyboard:
     )
     return settings_menu
 
+# Клавиатура для изменения таймингов в меню настройки
 timing_keyboard = Keyboard().add(
     Text("Время до заморозки", {"timing": "freeze"}), KeyboardButtonColor.PRIMARY
 ).row().add(
@@ -278,6 +296,9 @@ timing_keyboard = Keyboard().add(
 
 
 def another_profession_to_user(user_id: int):
+    """
+    Создает клавиатуру
+    """
     return Keyboard().add(Text("Другая", {"skip_profession": user_id}), KeyboardButtonColor.NEGATIVE)
 
 

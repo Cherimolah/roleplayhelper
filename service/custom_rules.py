@@ -1,3 +1,6 @@
+"""
+Модуль с кастомными правилами для хедлеров
+"""
 from abc import ABC
 from typing import Union, Optional
 
@@ -11,11 +14,14 @@ import messages
 from service.states import Menu, Admin, Judge
 import service.keyboards as keyboards
 from service.utils import get_mention_from_message, get_current_form_id, fields_content, get_current_turn
-from config import ADMINS, CHAT_IDS
+from config import ADMINS
 from service.states import StateValue
 
 
 class StateRule(ABCRule[Message], ABC):
+    """
+    Класс проверки состояния игрока. Возвращает True если игрок находится в правильном состоянии (см. использование в README)
+    """
 
     def __init__(self, state: str | StateValue):
         self.state = str(state)
@@ -35,11 +41,16 @@ class StateRule(ABCRule[Message], ABC):
             return True
         if not user_state:
             return False
-        state = user_state.split("*")[0]
+        state = user_state.split("*")[0]  # В state хранится некоторая полезная информация, отделяется от названия стейта символом *
         return self.state == state
 
 
 class NumericRule(ABCRule[Message], ABC):
+    """
+    Класс для проверки того, что в сообщении введено целое число в нужном диапазоне
+    по умолчанию от 1 до бесконечности.
+    Используется где необходимо установить числовые данные / выбрать позицию из списка
+    """
 
     def __init__(self, min_number: Optional[int] = 1, max_number: Optional[int] = None):
         self.min_number = min_number
@@ -61,6 +72,10 @@ class NumericRule(ABCRule[Message], ABC):
 
 
 class LimitSymbols(ABCRule[Message], ABC):
+    """
+    Класс проверяющий длину сообщения на превышение лимита.
+    Используется для того, чтобы ограничить количество символов в некоторых полях в анкете
+    """
 
     def __init__(self, max_limit: int = 4095, min_limit: int = 1):
         self.max_limit = max_limit
@@ -74,6 +89,10 @@ class LimitSymbols(ABCRule[Message], ABC):
 
 
 class AdminRule(ABCRule, ABC):
+    """
+    Класс проверяющий, на то, что пользователь отправивший сообщений был администратором / владельцем
+    Используется там, где функции бота доступны только администраторам
+    """
 
     async def check(self, event: MessageEvent):
         admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
@@ -85,6 +104,10 @@ class AdminRule(ABCRule, ABC):
 
 
 class ValidateAccount(ABCRule[Message], ABC):
+    """
+    Класс проверяющий, что пользователь не является банкротом и его анкета не заморожена
+    Используется, для того чтобы нельзя было будучи банкротом совершать сделки
+    """
 
     async def check(self, m: Message):
         if isinstance(m, Message):
@@ -105,6 +128,10 @@ class ValidateAccount(ABCRule[Message], ABC):
 
 
 class CommandWithAnyArgs(ABCRule, ABC):
+    """
+    Класс который, получает все аргументы из /команды
+    Используется для команд /апи /скл
+    """
 
     def __init__(self, command: str):
         prefixes = ["/", "!", ""]
@@ -119,12 +146,17 @@ class CommandWithAnyArgs(ABCRule, ABC):
 
 class UserSpecified(ABCRule[Message], ABC):
 
+    """
+    Класс, который возвращает айди формы и пользователя, который указан в сообщении
+    Используется, где нужно указывать пользователя
+    """
+
     def __init__(self, state: str = None):
         self.state = state
 
     async def check(self, m: Message):
         state = states.get(m.from_id)
-        # Говнокод, я просто уже не помню нахуя юзера из стейта вытаскивать
+        # Тут исключение для стейта leader_fractions уже не помню зачем
         if len(state.split("*")) == 2 and state.split("*")[0] != "leader_fractions":
             form_id = int(state.split("*")[1])
             user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
@@ -144,6 +176,10 @@ class UserSpecified(ABCRule[Message], ABC):
 
 
 class ManyUsersSpecified(ABCRule[Message], ABC):
+
+    """
+    Класс для того, чтобы получить из сообщения указания на нескольких пользователей
+    """
 
     async def check(self, event: Message):
         state = states.get(event.from_id)
@@ -167,6 +203,11 @@ content_types = list(fields_content.keys())
 
 class EditContent(ABCRule[Message], ABC):
 
+    """
+    Класс для того, чтобы вытащить тип контента и таблицу, где контент будет редактироваться если стейт Admin.EDIT_CONTENT
+    Используется при выборе объекта, который хотим отредактирвоать
+    """
+
     async def check(self, m: Message):
         if isinstance(m, Message):
             state = (await db.select([db.User.state]).where(db.User.user_id == m.from_id).gino.scalar()).split("*")[0]
@@ -181,6 +222,10 @@ class EditContent(ABCRule[Message], ABC):
 
 
 class SelectContent(ABCRule[Message], ABC):
+    """
+    Класс для того, чтобы вытащить тип контента и таблицу, где контент будет редактироваться если стейт Admin.SELECT_ACTION
+    Используется при выборе действия после выбора объекта редактирования
+    """
 
     async def check(self, m: Message):
         if isinstance(m, Message):
@@ -197,22 +242,34 @@ class SelectContent(ABCRule[Message], ABC):
 
 class ChatAction(ABCRule[Message], ABC):
 
+    """
+    Класс, проверяющий, что сообщение в чате и в нем введена команда [команда]
+    Используется для простейших команд в тексте в квадратных скобках (без аргументов)
+    """
+
     def __init__(self, command: str):
         self.command = command
 
     async def check(self, m: Message):
-        if m.chat_id in CHAT_IDS and f"{{{self.command}}}" in m.text.lower():
+        if m.chat_id > 0 and f"[{self.command}]" in m.text.lower():
             return True
         return False
 
 
 class DaughterRule(ABCRule[Message], ABC):
+    """
+    Проверка на то, что пользователь является дочерью
+    Используется для проверки доступа к функциям для дочерей
+    """
     async def check(self, event: Message):
         status = await db.select([db.Form.status]).where(db.Form.user_id == event.from_id).gino.scalar()
         return status == 2
 
 
 class ExpeditorRequestAvailable(ABCRule[MessageEvent], ABC):
+    """
+    Проверка на то, что запрос на создание карты экспедитора еще актуален
+    """
     async def check(self, m: MessageEvent):
         if not m.payload.get('request_expeditor_id'):
             return False
@@ -229,6 +286,9 @@ class ExpeditorRequestAvailable(ABCRule[MessageEvent], ABC):
 
 
 class JudgeRule(ABCRule, ABC):
+    """
+    Проверка на то, что пользователь является судьей
+    """
     async def check(self, event: Message | MessageEvent):
         if isinstance(event, Message):
             is_judge = await db.select([db.User.judge]).where(db.User.user_id == event.from_id).gino.scalar()
@@ -238,6 +298,9 @@ class JudgeRule(ABCRule, ABC):
 
 
 class UserFree(ABCRule, ABC):
+    """
+    Проверка на то, что пользователь не создает анкеты / контента / карты экспедитора / не включена панель судьи
+    """
     async def check(self, event: Message | MessageEvent):
         if isinstance(event, Message):
             user_id = event.from_id
@@ -255,6 +318,9 @@ class UserFree(ABCRule, ABC):
 
 
 class JudgeFree(ABCRule, ABC):
+    """
+    Проверка на то, что судья не судит какой-то экшен режим
+    """
     async def check(self, event: Message | MessageEvent):
         if isinstance(event, Message):
             user_id = event.from_id
@@ -274,6 +340,10 @@ class JudgeFree(ABCRule, ABC):
 
 
 class ActionModeTurn(ABCRule, ABC):
+    """
+    Класс, который возвращает номер очереди участника в экшен режиме
+    Используется для проверки того, что соблюдается очередность постов участников в экшен-режиме
+    """
     async def check(self, event: Message):
         if event.peer_id < 2000000000:
             return False
@@ -288,6 +358,9 @@ class ActionModeTurn(ABCRule, ABC):
 
 
 class JudgePostTurn(ABCRule, ABC):
+    """
+    Класс для проверки того, что сейчас очередь судьи писать пост в экшен-режиме
+    """
     async def check(self, event: Message):
         if event.peer_id < 2000000000 or not event.text:
             return False
@@ -302,19 +375,6 @@ class JudgePostTurn(ABCRule, ABC):
         return False
 
 
-class SelectConsequences(ABCRule, ABC):
-    async def check(self, event: Message):
-        if event.peer_id < 2000000000 or not event.text:
-            return False
-        if str(states.get(event.from_id)).startswith(str(Judge.SET_CONSEQUENCES)):
-            try:
-                _, action_id, con_group = str(states.get(event.from_id).split('*'))
-            except:
-                return False
-            return {'action_id': int(action_id), 'con_type': int(con_group)}
-        return False
-
-
 invites = [
     MessagesMessageActionStatus.CHAT_INVITE_USER_BY_MESSAGE_REQUEST,
     MessagesMessageActionStatus.CHAT_INVITE_USER_BY_LINK,
@@ -323,12 +383,29 @@ invites = [
 
 
 class ChatInviteMember(ABCRule, ABC):
+    """
+    Класс для проверки того, что кто-то вступил в чат
+    Используется
+    """
     async def check(self, event: Message):
+        m = event
         if event.peer_id > 2000000000 and event.action and event.action.type in invites:
-            return True
+            if m.action.type == MessagesMessageActionStatus.CHAT_INVITE_USER:
+                member_id = m.action.member_id
+            elif m.action.type == MessagesMessageActionStatus.CHAT_INVITE_USER_BY_LINK:
+                member_id = m.from_id
+            else:
+                return False
+            return {'member_id': member_id}
+        return False
 
 
 class FromUserRule(ABCRule, ABC):
+
+    """
+    Класс для проверки от кого пришло сообщение
+    Сейчас используется для принятия сообщений юзерботом от имени группы
+    """
 
     def __init__(self, from_id: int):
         self.from_id = from_id

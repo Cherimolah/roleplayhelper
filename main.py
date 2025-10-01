@@ -84,6 +84,9 @@ err_num = number_error()
 
 
 async def polling():
+    """
+    Функция поллинга для юзер бота
+    """
     _polling = user_bot.polling
     logger.info("Starting {} for {!r}", type(_polling).__name__, _polling.api)
 
