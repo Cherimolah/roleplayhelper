@@ -63,7 +63,6 @@ class MessagesCategoryExtended(MessagesCategory):
             disable_mentions=True,
             intent=None,
             subscribe_id=None,
-            is_notification=None,
             **kwargs
     ) -> typing.Union[int, typing.List[MessagesSendUserIdsResponseItem]]:
         """
@@ -80,13 +79,6 @@ class MessagesCategoryExtended(MessagesCategory):
         if peer_id:
             peer_ids = [peer_id]
             del peer_id
-        if is_notification:
-            for peer_id in peer_ids:
-                enabled = await db.select([db.User.notification_enabled]).where(db.User.user_id == peer_id).gino.scalar()
-                if not enabled:
-                    peer_ids.remove(peer_id)
-            if not peer_ids:
-                return None
         if message is None:
             message = ""  # Set iterable
         if isinstance(random_id, str):  # Compatible
