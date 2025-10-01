@@ -200,9 +200,6 @@ async def take_quest(m: MessageEvent):
     cooldown = calculate_time(quest, now)
     if cooldown:
         asyncio.get_event_loop().create_task(quest_over(cooldown, form_id, quest_id))
-    if quest.closed_at:
-        seconds = (quest.closed_at - datetime.datetime.now()).total_seconds()
-        asyncio.get_event_loop().create_task(quest_over(seconds, form_id, quest_id))
     states.set(m.user_id, Menu.SHOW_QUESTS)
     await db.QuestHistory.create(quest_id=quest_id, form_id=form_id)
     await m.send_message("После завершения квеста нажмите на кнопку завершения. Вы можете выйти и вернутся "
