@@ -194,7 +194,7 @@ async def move_to_location(m: Message, match: tuple[str]):
 
 @bot.on.message(RegexRule(message_pattern))
 @bot.on.message(RegexRule(message_pattern_link))
-async def transmitter(m: Message, match: tuple[str]):
+async def transmitter(m: Message, match: tuple[str, str]):
     user_id, message = match
     if not user_id.isdigit():
         response = await bot.api.utils.resolve_screen_name(user_id)

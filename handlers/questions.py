@@ -1,3 +1,4 @@
+import asyncio
 import json
 from collections import namedtuple
 
@@ -48,7 +49,7 @@ async def api_request(m: Message):
 
 @bot.on.chat_message(PayloadRule({'help': 'help'}))
 async def help(m: Message):
-    await m.answer('Справка о текстовых командах в чатах:\n\n'
+    message = await m.answer('Справка о текстовых командах в чатах:\n\n'
                    'Команды только для администраторов:\n'
                    '/клавиатура - получить клавиатуру в чате\n'
                    '/настройки - настройки приватности чатов\n'
@@ -66,6 +67,8 @@ async def help(m: Message):
                    '[действие] - совершить действие в экшен-режиме (будет проверка судьи)\n'
                    '[действие @mention] - PvP с пользователем в экшен-режиме (будет проверка судьи)\n'
                    '[отправить сообщение @mention "Текст сообщения"] - отправить сообщение пользователю')
+    await asyncio.sleep(30)
+    await bot.api.messages.delete(cmids=[message.conversation_message_id], peer_id=m.peer_id, delete_for_all=True)
 
 
 @bot.on.private_message(PayloadRule({"command": "start"}))
