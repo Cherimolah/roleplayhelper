@@ -17,6 +17,7 @@ from service.utils import move_user, create_mention, get_current_form_id, soft_d
 
 
 moving_pattern = re.compile(r'\[перемещение в "([^"]+)"\]', re.IGNORECASE)
+moving_pattern2 = re.compile(r'\[перемещение в (.+)\]', re.IGNORECASE)
 donate_pattern = re.compile(r'\[пожертвовать в храм (\d+)\]', re.IGNORECASE)
 deal_pattern = re.compile(r"\[совершить сделку \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)
 deal_pattern_link = re.compile(r"\[совершить сделку https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)
@@ -140,12 +141,6 @@ async def create_donate_command(m: Message, match: tuple[str]):
 
 @bot.on.chat_message(ChatInviteMember())
 async def test(m: Message, member_id: int):
-    if m.action.type == MessagesMessageActionStatus.CHAT_INVITE_USER:
-        member_id = m.action.member_id
-    elif m.action.type == MessagesMessageActionStatus.CHAT_INVITE_USER_BY_LINK:
-        member_id = m.from_id
-    else:
-        return
     if member_id < 0:
         return
     chat_allowed = await db.select([db.UserToChat.chat_id]).where(db.UserToChat.user_id == member_id).gino.scalar()
@@ -155,16 +150,28 @@ async def test(m: Message, member_id: int):
 
 
 @bot.on.message(RegexRule(moving_pattern))
+@bot.on.message(RegexRule(moving_pattern2))
 async def move_to_location(m: Message, match: tuple[str]):
     find_name = match[0]
-    peer_ids = [2000000000 + x[0] for x in await db.select([db.Chat.chat_id]).gino.all() if x[0] is not None]
-    chat_names = [x.chat_settings.title.lower() for x in (await bot.api.messages.get_conversations_by_id(peer_ids=peer_ids)).items]
-    extract = process.extractOne(find_name, chat_names)
-    if not extract:
-        await m.answer('Не удалось найти подходящий чат')
-        return
-    chat_name = extract[0]
-    chat_id = peer_ids[chat_names.index(chat_name)] - 2000000000
+    if find_name.lower().startswith('каюта '):
+        try:
+            number = int(find_name[6:])
+        except ValueError as e:
+            print(e)
+            return
+        user_id = await db.select([db.Form.user_id]).where(db.Form.cabin == number).gino.scalar()
+        chat_id = await db.select([db.Chat.chat_id]).where(db.Chat.cabin_user_id == user_id).gino.scalar()
+    else:
+        peer_ids = [2000000000 + x[0] for x in await db.select([db.Chat.chat_id]).gino.all() if x[0] is not None]
+        chat_names = [x.chat_settings.title.lower() for x in (await bot.api.messages.get_conversations_by_id(peer_ids=peer_ids)).items]
+        extract = process.extractOne(find_name, chat_names)
+        if not extract:
+            await m.answer('Не удалось найти подходящий чат')
+            return
+        chat_name = extract[0]
+        chat_id = peer_ids[chat_names.index(chat_name)] - 2000000000
+    chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=[2000000000 + chat_id])).items[
+        0].chat_settings.title
     is_private = await db.select([db.Chat.is_private]).where(db.Chat.chat_id == chat_id).gino.scalar()
     if is_private:
         owner_cabin = await db.select([db.Chat.cabin_user_id]).where(db.Chat.chat_id == chat_id).gino.scalar()
@@ -183,7 +190,7 @@ async def move_to_location(m: Message, match: tuple[str]):
             keyboard = Keyboard(inline=True).add(
                 Callback('Разрешить', {'chat_action': 'accept', 'request_id': request.id}), KeyboardButtonColor.POSITIVE
             ).row().add(
-                Callback('Отклонить', {'chat_action': 'accept', 'request_id': request.id}), KeyboardButtonColor.NEGATIVE
+                Callback('Отклонить', {'chat_action': 'decline', 'request_id': request.id}), KeyboardButtonColor.NEGATIVE
             )
             message = (await bot.api.messages.send(peer_id=admin_id, message=reply, keyboard=keyboard))[0]
             await db.ChatRequest.update.values(message_id=message.conversation_message_id).where(db.ChatRequest.id == request.id).gino.status()
