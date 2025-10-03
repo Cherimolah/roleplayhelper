@@ -16,8 +16,8 @@ from handlers.public_menu.quests import send_ready_quest
 from service.utils import move_user, create_mention, get_current_form_id, soft_divide
 
 
-moving_pattern = re.compile(r'\[перемещение в "([^"]+)"\]', re.IGNORECASE)
-moving_pattern2 = re.compile(r'\[перемещение в (.+)\]', re.IGNORECASE)
+moving_pattern = re.compile(r'\[\s*перемещение в "([^"]+)"\s*\]', re.IGNORECASE)
+moving_pattern2 = re.compile(r'\[\s*перемещение в (.+)\s*\]', re.IGNORECASE)
 donate_pattern = re.compile(r'\[пожертвовать в храм (\d+)\]', re.IGNORECASE)
 deal_pattern = re.compile(r"\[совершить сделку \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)
 deal_pattern_link = re.compile(r"\[совершить сделку https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)
@@ -153,7 +153,7 @@ async def test(m: Message, member_id: int):
 @bot.on.message(RegexRule(moving_pattern2))
 async def move_to_location(m: Message, match: tuple[str]):
     find_name = match[0]
-    if find_name.lower().startswith('каюта '):
+    if find_name.lower().startswith('каюта '):  # Алиас для написания каюты
         try:
             number = int(find_name[6:])
         except ValueError as e:
