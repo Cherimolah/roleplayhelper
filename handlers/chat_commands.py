@@ -153,7 +153,7 @@ async def test(m: Message, member_id: int):
 @bot.on.message(RegexRule(moving_pattern2))
 async def move_to_location(m: Message, match: tuple[str]):
     find_name = match[0]
-    if find_name.lower().startswith('каюта '):  # Алиас для написания каюты
+    if find_name.lower().startswith('каюта ') or find_name.lower().startswith('каюту '):  # Алиас для написания каюты
         try:
             number = int(find_name[6:])
         except ValueError as e:
