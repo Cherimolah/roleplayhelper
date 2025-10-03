@@ -157,7 +157,7 @@ async def test(m: Message, member_id: int):
 @bot.on.message(RegexRule(moving_pattern))
 async def move_to_location(m: Message, match: tuple[str]):
     find_name = match[0]
-    peer_ids = [2000000000 + x[0] for x in await db.select([db.Chat.chat_id]).gino.all()]
+    peer_ids = [2000000000 + x[0] for x in await db.select([db.Chat.chat_id]).gino.all() if x[0] is not None]
     chat_names = [x.chat_settings.title.lower() for x in (await bot.api.messages.get_conversations_by_id(peer_ids=peer_ids)).items]
     extract = process.extractOne(find_name, chat_names)
     if not extract:
