@@ -161,7 +161,7 @@ async def move_to_location(m: Message, match: tuple[str]):
             return
         user_id = await db.select([db.Form.user_id]).where(db.Form.cabin == number).gino.scalar()
         chat_id = await db.select([db.Chat.chat_id]).where(db.Chat.cabin_user_id == user_id).gino.scalar()
-    elif find_name.lower().startswith('холл'):
+    elif find_name.lower() == 'холл':
         chat_id = HALL_CHAT_ID
     else:
         peer_ids = [2000000000 + x[0] for x in await db.select([db.Chat.chat_id]).gino.all() if x[0] is not None]
