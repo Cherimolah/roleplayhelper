@@ -1,13 +1,12 @@
 import re
 
 from vkbottle.bot import Message
-from vkbottle.dispatch.rules.base import RegexRule
 from vkbottle import Keyboard, Callback, KeyboardButtonColor
 from vkbottle_types.objects import UtilsDomainResolvedType
 from fuzzywuzzy import process
 
 from loader import bot
-from service.custom_rules import ChatAction, AdminRule, ChatInviteMember
+from service.custom_rules import ChatAction, AdminRule, ChatInviteMember, RegexRule
 from service.db_engine import db
 from handlers.public_menu.bank import ask_salary
 from handlers.public_menu.daylics import send_ready_daylic

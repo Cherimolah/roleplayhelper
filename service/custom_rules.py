@@ -1,6 +1,7 @@
 """
 Модуль с кастомными правилами для хедлеров
 """
+import re
 from abc import ABC
 from typing import Union, Optional
 
@@ -411,3 +412,17 @@ class FromUserRule(ABCRule, ABC):
         self.from_id = from_id
     async def check(self, event: Message):
         return event.from_id == self.from_id
+
+
+class RegexRule(ABCRule, ABC):
+    """
+    Класс фильтр по регулярному выражению. В отличие от VKBottle он использует re.search() вместо re.match()
+    """
+    def __init__(self, regexp):
+        self.regexp = regexp
+
+    async def check(self, event: Message):
+        match = re.search(self.regexp, event.text)
+        if match is not None:
+            return {'match': match.groups()}
+        return False
