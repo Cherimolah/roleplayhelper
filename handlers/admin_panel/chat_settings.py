@@ -196,8 +196,8 @@ async def save_profession(m: Message):
 @bot.on.chat_message(AdminRule(), text='/каюта <cabin_number:int>')
 async def set_cabin_number(m: Message, cabin_number: int):
     user_id = await db.select([db.Form.user_id]).where(db.Form.cabin == cabin_number).gino.scalar()
-    exist = await db.select([db.Chat.chat_id]).where(db.Chat.cabin_user_id == user_id).gino.scalar()
-    if exist:
+    exist = await db.select([db.Chat.visible_messages]).where(db.Chat.cabin_user_id == user_id).gino.scalar()
+    if exist is not None:
         await db.Chat.update.values(chat_id=m.chat_id).where(db.Chat.cabin_user_id == user_id).gino.scalar()
     else:
         await db.Chat.create(chat_id=m.chat_id, cabin_user_id=user_id, visible_messages=10, is_private=True)

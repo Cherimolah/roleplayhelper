@@ -72,6 +72,11 @@ async def on_startup():
 
     asyncio.get_event_loop().create_task(polling())
 
+    user_chat_ids = await db.select([db.Chat.user_chat_id, db.Chat.cabin_user_id]).where(db.Chat.chat_id.is_(None)).gino.all()
+    for user_chat_id, cabin_user_id in user_chat_ids:
+        cabin_number = await db.select([db.Form.cabin]).where(db.Form.user_id == cabin_user_id).gino.scalar()
+        await user_bot.api.messages.send(peer_id=2000000000 + user_chat_id, message=f'/каюта {cabin_number}', random_id=0)
+
 
 def number_error():
     i = 1

@@ -10,7 +10,7 @@ from gino import Gino
 from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, Boolean, TIMESTAMP, func, and_, Float, ARRAY, \
     JSON, Date, DateTime
 
-from config import USER, PASSWORD, HOST, DATABASE
+from config import USER, PASSWORD, HOST, DATABASE, HALL_CHAT_ID
 
 
 def now():
@@ -908,6 +908,10 @@ class Database(Gino):
         races = await self.select([func.count(self.Race.id)]).gino.scalar()
         if races == 0:
             await self.Race.create(name='Человек')
+
+        chats = await db.select([func.count(db.Chat.chat_id)]).gino.scalar()
+        if chats == 0 and HALL_CHAT_ID:
+            await db.Chat.create(chat_id=HALL_CHAT_ID)
 
         if not os.path.exists('data'):
             os.mkdir('data')

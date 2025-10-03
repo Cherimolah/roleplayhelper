@@ -1257,7 +1257,6 @@ async def count_daughter_params(user_id: int) -> tuple[int, int]:
 
 async def move_user(user_id: int, chat_id: int):
     old_chat_id = await db.select([db.UserToChat.chat_id]).where(db.UserToChat.user_id == user_id).gino.scalar()
-    print(old_chat_id)
     if not old_chat_id:
         await db.UserToChat.create(chat_id=chat_id, user_id=user_id)
     else:
