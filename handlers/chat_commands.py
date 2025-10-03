@@ -1,7 +1,6 @@
 import re
 
 from vkbottle.bot import Message
-from vkbottle_types.objects import MessagesMessageActionStatus
 from vkbottle.dispatch.rules.base import RegexRule
 from vkbottle import Keyboard, Callback, KeyboardButtonColor
 from vkbottle_types.objects import UtilsDomainResolvedType
@@ -14,6 +13,7 @@ from handlers.public_menu.bank import ask_salary
 from handlers.public_menu.daylics import send_ready_daylic
 from handlers.public_menu.quests import send_ready_quest
 from service.utils import move_user, create_mention, get_current_form_id, soft_divide
+from config import HALL_CHAT_ID
 
 
 moving_pattern = re.compile(r'\[\s*перемещение в "([^"]+)"\s*\]', re.IGNORECASE)
@@ -161,6 +161,8 @@ async def move_to_location(m: Message, match: tuple[str]):
             return
         user_id = await db.select([db.Form.user_id]).where(db.Form.cabin == number).gino.scalar()
         chat_id = await db.select([db.Chat.chat_id]).where(db.Chat.cabin_user_id == user_id).gino.scalar()
+    elif find_name.lower().startswith('холл'):
+        chat_id = HALL_CHAT_ID
     else:
         peer_ids = [2000000000 + x[0] for x in await db.select([db.Chat.chat_id]).gino.all() if x[0] is not None]
         chat_names = [x.chat_settings.title.lower() for x in (await bot.api.messages.get_conversations_by_id(peer_ids=peer_ids)).items]
@@ -213,7 +215,7 @@ async def transmitter(m: Message, match: tuple[str, str]):
         user_id = int(user_id)
     exist = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
     if not exist:
-        await m.answer('У указанного пользователя отсутсвует анкета')
+        await m.answer('У указанного пользователя отсутствует анкета')
         return
     message = (f'Новое сообщение от пользователя {await create_mention(m.from_id)}:\n'
                f'«{message}»')
