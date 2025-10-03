@@ -156,22 +156,27 @@ async def move_to_location(m: Message, match: tuple[str]):
     if find_name.lower().startswith('каюта ') or find_name.lower().startswith('каюту '):  # Алиас для написания каюты
         try:
             number = int(find_name[6:])
-        except ValueError as e:
-            print(e)
+        except ValueError:
+            await m.answer('Неверный номер каюты')
             return
         user_id = await db.select([db.Form.user_id]).where(db.Form.cabin == number).gino.scalar()
         chat_id = await db.select([db.Chat.chat_id]).where(db.Chat.cabin_user_id == user_id).gino.scalar()
-    elif find_name.lower() == 'холл':
+    elif find_name.lower() == 'холл':  # Алиас для холла
         chat_id = HALL_CHAT_ID
     else:
         peer_ids = [2000000000 + x[0] for x in await db.select([db.Chat.chat_id]).gino.all() if x[0] is not None]
-        chat_names = [x.chat_settings.title.lower() for x in (await bot.api.messages.get_conversations_by_id(peer_ids=peer_ids)).items]
-        extract = process.extractOne(find_name, chat_names)
-        if not extract:
-            await m.answer('Не удалось найти подходящий чат')
-            return
-        chat_name = extract[0]
-        chat_id = peer_ids[chat_names.index(chat_name)] - 2000000000
+        chat_names = [(x.chat_settings.title.lower(), x.peer.id) for x in (await bot.api.messages.get_conversations_by_id(peer_ids=peer_ids)).items]
+        for chat_name, peer_id in chat_names:
+            if chat_name == find_name.lower():
+                chat_id = peer_id - 2000000000
+                break
+        else:
+            extract = process.extractOne(find_name, chat_names)
+            if not extract:
+                await m.answer('Не удалось найти подходящий чат')
+                return
+            chat_name = extract[0]
+            chat_id = peer_ids[chat_names.index(chat_name)] - 2000000000
     chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=[2000000000 + chat_id])).items[
         0].chat_settings.title
     is_private = await db.select([db.Chat.is_private]).where(db.Chat.chat_id == chat_id).gino.scalar()
