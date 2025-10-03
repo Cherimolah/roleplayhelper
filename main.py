@@ -75,8 +75,7 @@ async def on_startup():
     await asyncio.sleep(5)
     user_chat_ids = await db.select([db.Chat.user_chat_id, db.Chat.cabin_user_id]).where(db.Chat.chat_id.is_(None)).gino.all()
     for user_chat_id, cabin_user_id in user_chat_ids:
-        cabin_number = await db.select([db.Form.cabin]).where(db.Form.user_id == cabin_user_id).gino.scalar()
-        await user_bot.api.messages.send(peer_id=2000000000 + user_chat_id, message=f'/каюта {cabin_number}', random_id=0)
+        await user_bot.api.messages.add_chat_user(chat_id=user_chat_id, user_id=32650977, visible_messages_count=1000)
 
 
 def number_error():
