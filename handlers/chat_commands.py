@@ -170,6 +170,8 @@ async def move_to_location(m: Message, match: tuple[str]):
                 chat_id = peer_id - 2000000000
                 break
         else:
+            await m.answer('Не удалось найти подходящий чат')
+            return
             extract = process.extractOne(find_name, chat_names)
             if not extract:
                 await m.answer('Не удалось найти подходящий чат')

@@ -145,7 +145,7 @@ async def show_daughter_target_page(page: int = 1) -> tuple[str, Keyboard | None
     count = await db.select([func.count(db.DaughterTarget.id)]).gino.scalar()
     for i in range(len(data)):
         name, params = data[i]
-        if not params:
+        if not params:  # В базе могут быть не до конца созданные доп. цели
             continue
         reply += f'{(page - 1) * 15 + i + 1}. {name} / {params[0]} {"и" if params[1] == 0 else "или"} {params[2]}\n'
     keyboard = Keyboard(inline=True)
