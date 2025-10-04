@@ -19,7 +19,7 @@ from config import ADMINS
 from service.states import StateValue
 
 
-class StateRule(ABCRule[Message], ABC):
+class StateRule(ABCRule[Message]):
     """
     Класс проверки состояния игрока. Возвращает True если игрок находится в правильном состоянии (см. использование в README)
     """
@@ -46,7 +46,7 @@ class StateRule(ABCRule[Message], ABC):
         return self.state == state
 
 
-class NumericRule(ABCRule[Message], ABC):
+class NumericRule(ABCRule[Message]):
     """
     Класс для проверки того, что в сообщении введено целое число в нужном диапазоне
     по умолчанию от 1 до бесконечности.
@@ -72,7 +72,7 @@ class NumericRule(ABCRule[Message], ABC):
                            f"{self.max_number if self.max_number != float('inf') else 'бесконечности'}")
 
 
-class LimitSymbols(ABCRule[Message], ABC):
+class LimitSymbols(ABCRule[Message]):
     """
     Класс проверяющий длину сообщения на превышение лимита.
     Используется для того, чтобы ограничить количество символов в некоторых полях в анкете
@@ -89,7 +89,7 @@ class LimitSymbols(ABCRule[Message], ABC):
         return True
 
 
-class AdminRule(ABCRule, ABC):
+class AdminRule(ABCRule):
     """
     Класс проверяющий, на то, что пользователь отправивший сообщений был администратором / владельцем
     Используется там, где функции бота доступны только администраторам
@@ -104,7 +104,7 @@ class AdminRule(ABCRule, ABC):
             return event.from_id in admins
 
 
-class ValidateAccount(ABCRule[Message], ABC):
+class ValidateAccount(ABCRule[Message]):
     """
     Класс проверяющий, что пользователь не является банкротом и его анкета не заморожена
     Используется, для того чтобы нельзя было будучи банкротом совершать сделки
@@ -128,7 +128,7 @@ class ValidateAccount(ABCRule[Message], ABC):
         return True
 
 
-class CommandWithAnyArgs(ABCRule, ABC):
+class CommandWithAnyArgs(ABCRule):
     """
     Класс который, получает все аргументы из /команды
     Используется для команд /апи /скл
@@ -145,7 +145,7 @@ class CommandWithAnyArgs(ABCRule, ABC):
         return False
 
 
-class UserSpecified(ABCRule[Message], ABC):
+class UserSpecified(ABCRule[Message]):
 
     """
     Класс, который возвращает айди формы и пользователя, который указан в сообщении
@@ -176,7 +176,7 @@ class UserSpecified(ABCRule[Message], ABC):
         return {"form": (form_id, user_id)}
 
 
-class ManyUsersSpecified(ABCRule[Message], ABC):
+class ManyUsersSpecified(ABCRule[Message]):
 
     """
     Класс для того, чтобы получить из сообщения указания на нескольких пользователей
@@ -202,7 +202,7 @@ class ManyUsersSpecified(ABCRule[Message], ABC):
 content_types = list(fields_content.keys())
 
 
-class EditContent(ABCRule[Message], ABC):
+class EditContent(ABCRule[Message]):
 
     """
     Класс для того, чтобы вытащить тип контента и таблицу, где контент будет редактироваться если стейт Admin.EDIT_CONTENT
@@ -222,7 +222,7 @@ class EditContent(ABCRule[Message], ABC):
         return False
 
 
-class SelectContent(ABCRule[Message], ABC):
+class SelectContent(ABCRule[Message]):
     """
     Класс для того, чтобы вытащить тип контента и таблицу, где контент будет редактироваться если стейт Admin.SELECT_ACTION
     Используется при выборе действия после выбора объекта редактирования
@@ -241,7 +241,7 @@ class SelectContent(ABCRule[Message], ABC):
         return False
 
 
-class ChatAction(ABCRule[Message], ABC):
+class ChatAction(ABCRule[Message]):
 
     """
     Класс, проверяющий, что сообщение в чате и в нем введена команда [команда]
@@ -257,7 +257,7 @@ class ChatAction(ABCRule[Message], ABC):
         return False
 
 
-class DaughterRule(ABCRule[Message], ABC):
+class DaughterRule(ABCRule[Message]):
     """
     Проверка на то, что пользователь является дочерью
     Используется для проверки доступа к функциям для дочерей
@@ -267,7 +267,7 @@ class DaughterRule(ABCRule[Message], ABC):
         return status == 2
 
 
-class ExpeditorRequestAvailable(ABCRule[MessageEvent], ABC):
+class ExpeditorRequestAvailable(ABCRule[MessageEvent]):
     """
     Проверка на то, что запрос на создание карты экспедитора еще актуален
     """
@@ -286,7 +286,7 @@ class ExpeditorRequestAvailable(ABCRule[MessageEvent], ABC):
         return {'user': user, 'name': name, 'form_id': form_id, 'expeditor_id': expeditor_id}
 
 
-class JudgeRule(ABCRule, ABC):
+class JudgeRule(ABCRule):
     """
     Проверка на то, что пользователь является судьей
     """
@@ -298,7 +298,7 @@ class JudgeRule(ABCRule, ABC):
         return is_judge
 
 
-class UserFree(ABCRule, ABC):
+class UserFree(ABCRule):
     """
     Проверка на то, что пользователь не создает анкеты / контента / карты экспедитора / не включена панель судьи
     """
@@ -318,7 +318,7 @@ class UserFree(ABCRule, ABC):
         return True
 
 
-class JudgeFree(ABCRule, ABC):
+class JudgeFree(ABCRule):
     """
     Проверка на то, что судья не судит какой-то экшен режим
     """
@@ -340,7 +340,7 @@ class JudgeFree(ABCRule, ABC):
         return True
 
 
-class ActionModeTurn(ABCRule, ABC):
+class ActionModeTurn(ABCRule):
     """
     Класс, который возвращает номер очереди участника в экшен режиме
     Используется для проверки того, что соблюдается очередность постов участников в экшен-режиме
@@ -358,7 +358,7 @@ class ActionModeTurn(ABCRule, ABC):
             return False
 
 
-class JudgePostTurn(ABCRule, ABC):
+class JudgePostTurn(ABCRule):
     """
     Класс для проверки того, что сейчас очередь судьи писать пост в экшен-режиме
     """
@@ -383,7 +383,7 @@ invites = [
 ]
 
 
-class ChatInviteMember(ABCRule, ABC):
+class ChatInviteMember(ABCRule):
     """
     Класс для проверки того, что кто-то вступил в чат
     Используется
@@ -401,7 +401,7 @@ class ChatInviteMember(ABCRule, ABC):
         return False
 
 
-class FromUserRule(ABCRule, ABC):
+class FromUserRule(ABCRule):
 
     """
     Класс для проверки от кого пришло сообщение
@@ -414,7 +414,7 @@ class FromUserRule(ABCRule, ABC):
         return event.from_id == self.from_id
 
 
-class RegexRule(ABCRule, ABC):
+class RegexRule(ABCRule):
     """
     Класс фильтр по регулярному выражению. В отличие от VKBottle он использует re.search() вместо re.match()
     """

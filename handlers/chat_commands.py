@@ -30,6 +30,12 @@ async def get_peer_id(m: Message):
 
 
 @bot.on.chat_message(ChatAction('заказать коктейль'), blocking=False)
+@bot.on.chat_message(ChatAction('взять коктейль'), blocking=False)
+@bot.on.chat_message(ChatAction('купить коктейль'), blocking=False)
+@bot.on.chat_message(ChatAction('налей коктейль'), blocking=False)
+@bot.on.chat_message(ChatAction('хочу коктейль'), blocking=False)
+@bot.on.chat_message(ChatAction('заказать напиток'), blocking=False)
+@bot.on.chat_message(ChatAction('сделай коктейль'), blocking=False)
 async def order_cocktail(m: Message):
     price = await db.select([db.Shop.price]).where(db.Shop.id == 1).gino.scalar()
     balance = await db.select([db.Form.balance]).where(db.Form.user_id == m.from_id).gino.scalar()
@@ -41,6 +47,12 @@ async def order_cocktail(m: Message):
 
 
 @bot.on.chat_message(ChatAction('заказать премиальный коктейль'), blocking=False)
+@bot.on.chat_message(ChatAction('премиум коктейль'), blocking=False)
+@bot.on.chat_message(ChatAction('взять дорогой коктейль'), blocking=False)
+@bot.on.chat_message(ChatAction('купить премиальный коктейль'), blocking=False)
+@bot.on.chat_message(ChatAction('хочу премиальный напиток'), blocking=False)
+@bot.on.chat_message(ChatAction('заказать элитный коктейль'), blocking=False)
+@bot.on.chat_message(ChatAction('элитный коктейль'), blocking=False)
 async def order_premium_cocktail(m: Message):
     price = await db.select([db.Shop.price]).where(db.Shop.id == 2).gino.scalar()
     balance = await db.select([db.Form.balance]).where(db.Form.user_id == m.from_id).gino.scalar()
@@ -52,6 +64,12 @@ async def order_premium_cocktail(m: Message):
 
 
 @bot.on.chat_message(ChatAction('заказать бутылку дорогого алкоголя'), blocking=False)
+@bot.on.chat_message(ChatAction('купить дорогую бутылку'), blocking=False)
+@bot.on.chat_message(ChatAction('взять алкоголь'), blocking=False)
+@bot.on.chat_message(ChatAction('хочу алкоголь'), blocking=False)
+@bot.on.chat_message(ChatAction('заказать бутылку'), blocking=False)
+@bot.on.chat_message(ChatAction('заказать элитный алкоголь'), blocking=False)
+@bot.on.chat_message(ChatAction('купить дорогой алкоголь'), blocking=False)
 async def order_expensive_alcohol(m: Message):
     price = await db.select([db.Shop.price]).where(db.Shop.id == 3).gino.scalar()
     balance = await db.select([db.Form.balance]).where(db.Form.user_id == m.from_id).gino.scalar()
@@ -63,12 +81,23 @@ async def order_expensive_alcohol(m: Message):
 
 
 @bot.on.chat_message(ChatAction('запросить зарплату'), blocking=False)
+@bot.on.chat_message(ChatAction('получить зарплату'), blocking=False)
+@bot.on.chat_message(ChatAction('выдать зарплату'), blocking=False)
+@bot.on.chat_message(ChatAction('хочу зарплату'), blocking=False)
+@bot.on.chat_message(ChatAction('зарплата'), blocking=False)
+@bot.on.chat_message(ChatAction('начислить зарплату'), blocking=False)
+@bot.on.chat_message(ChatAction('дай деньги'), blocking=False)
 async def ask_salary_command(m: Message):
     return await ask_salary(m)
 
 
 @bot.on.chat_message(ChatAction('сдать отчёт'), blocking=False)
-@bot.on.chat_message(ChatAction('сдать отчет'), blocking=False)
+@bot.on.chat_message(ChatAction('отчет готов'), blocking=False)
+@bot.on.chat_message(ChatAction('отправить отчет'), blocking=False)
+@bot.on.chat_message(ChatAction('вот отчет'), blocking=False)
+@bot.on.chat_message(ChatAction('выполнить отчет'), blocking=False)
+@bot.on.chat_message(ChatAction('закончить отчет'), blocking=False)
+@bot.on.chat_message(ChatAction('сдать дейлик'), blocking=False)
 async def ask_salary_command(m: Message):
     daylic = await db.select([db.Form.activated_daylic]).where(db.Form.user_id == m.from_id).gino.scalar()
     if daylic:
@@ -83,6 +112,20 @@ async def ask_salary_command(m: Message):
 
 @bot.on.chat_message(RegexRule(deal_pattern), blocking=False)
 @bot.on.chat_message(RegexRule(deal_pattern_link), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[перевести деньги https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[отправить деньги https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[перевести валюту https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[сделка с https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[передать деньги https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[отдать сумму https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[перечислить сумму https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[перевести деньги \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[отправить деньги \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[сделка с \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[передать деньги \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[отдать сумму \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[перечислить сумму \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[перевести валюту \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)), blocking=False)
 async def create_transaction(m: Message, match: tuple[str]):
     user_id = match[0]
     if not user_id.isdigit():
@@ -122,6 +165,12 @@ async def create_transaction(m: Message, match: tuple[str]):
 
 
 @bot.on.chat_message(RegexRule(donate_pattern), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r'\[отдать в храм (\d+)\]', re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r'\[внести пожертвование (\d+)\]', re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r'\[жертва храму (\d+)\]', re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r'\[подношение храму (\d+)\]', re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r'\[сделать пожертвование (\d+)\]', re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r'\[отдать сумму в храм (\d+)\]', re.IGNORECASE)), blocking=False)
 async def create_donate_command(m: Message, match: tuple[str]):
     amount = int(match[0])
     form_id = await get_current_form_id(m.from_id)
@@ -150,6 +199,13 @@ async def test(m: Message, member_id: int):
 
 @bot.on.message(RegexRule(moving_pattern))
 @bot.on.message(RegexRule(moving_pattern2))
+@bot.on.message(RegexRule(re.compile(r'\[\s*переместиться в (.+)\s*\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[\s*перейти в (.+)\s*\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[\s*идти в (.+)\s*\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[\s*отправиться в (.+)\s*\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[\s*телепорт в (.+)\s*\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[\s*хочу в (.+)\s*\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[\s*локация (.+)\s*\]', re.IGNORECASE)))
 async def move_to_location(m: Message, match: tuple[str]):
     find_name = match[0]
     if find_name.lower().startswith('каюта ') or find_name.lower().startswith('каюту '):  # Алиас для написания каюты
@@ -209,6 +265,18 @@ async def move_to_location(m: Message, match: tuple[str]):
 
 @bot.on.message(RegexRule(message_pattern))
 @bot.on.message(RegexRule(message_pattern_link))
+@bot.on.message(RegexRule(re.compile(r'\[написать сообщение \[id(\d+)\|[^\]]+\] "([^"]+)"\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[написать \[id(\d+)\|[^\]]+\] "([^"]+)"\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[сказать \[id(\d+)\|[^\]]+\] "([^"]+)"\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[отправь текст \[id(\d+)\|[^\]]+\] "([^"]+)"\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[сообщение для \[id(\d+)\|[^\]]+\] "([^"]+)"\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[передать сообщение \[id(\d+)\|[^\]]+\] "([^"]+)"\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[написать сообщение https://vk.com/(\w*) "([^"]+)"\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[написать https://vk.com/(\w*) "([^"]+)"\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[сказать https://vk.com/(\w*) "([^"]+)"\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[отправь текст https://vk.com/(\w*) "([^"]+)"\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[сообщение для https://vk.com/(\w*) "([^"]+)"\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[передать сообщение https://vk.com/(\w*) "([^"]+)"\]', re.IGNORECASE)))
 async def transmitter(m: Message, match: tuple[str, str]):
     user_id, message = match
     if not user_id.isdigit():

@@ -964,8 +964,14 @@ async def parse_actions(text: str, expeditor_id: int) -> list[dict]:
     matches = re.findall(action_regex, text)
     actions = []
     for match in matches:
+        aliases = ('использовать ', "применить ", "активировать ", "задействовать ", "юзнуть ", "достать ")
+        for alias in aliases:
+            if match.startswith(alias):
+                break
+        else:
+            continue
         if match.startswith('использовать '):
-            item_name = match[13:].strip()
+            item_name = match[len(alias):].strip()
             distance = func.levenshtein(func.lower(db.Item.name), item_name)
             similarity = func.similarity(func.lower(db.Item.name), item_name).label('similarity')
             item_id = (await db.select([db.Item.id])
