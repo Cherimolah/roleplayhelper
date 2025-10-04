@@ -1,4 +1,14 @@
+"""
+Здесь список всех состояний используемых в боте, для удобства разбитых на классы
+
+Классы, хранящие стейты обязаны иметь метакласс StateMeta, а поля стейтов знаяение строки,
+рекомендуется, чтобы строки были уникальными, так как стейт определяется по сравнению строк
+"""
 class StateValue(str):
+    """
+    Класс для обозначения стейта игроков
+    Ставится в метаклассе StateMeta автоматически вместо обычных строк
+    """
     def __new__(cls, value, owner_name):
         obj = super().__new__(cls, value)
         obj.owner_name = owner_name
@@ -9,6 +19,16 @@ class StateValue(str):
 
 
 class StateMeta(type):
+    """
+    Метакласс, который преобразовывает поля класса стейтов из строк в StateValue()
+
+    Нужно для того, чтобы заменить значение строки в названии стейта.
+    Допустим мы хотим поле Registration.USER_AGREEMENT сохранить в базу данных
+    это переменная имеет значение 'user_agreement', но это не очень правильно, лучше это превратить в
+    'Registration.user_agreement' и уже такое значение сохранить в базу данных.
+    Именно это и делает этот метакласс - подменяет строки на StateValue(), который в свою очередь имеет метод __str__,
+    возвращающий строку с названием класса, а не просто значением стейта
+    """
     def __new__(mcs, name, bases, attrs):
         new_attrs = {}
         for k, v in attrs.items():
@@ -19,6 +39,9 @@ class StateMeta(type):
 
 
 class Registration(metaclass=StateMeta):
+    """
+    Вопросы при регистрации
+    """
     USER_AGREEMENT = 'user_agreement'
     PERSONAL_NAME = "name"
     PROFESSION = "profession"
@@ -40,6 +63,9 @@ class Registration(metaclass=StateMeta):
 
 
 class DaughterQuestions(metaclass=StateMeta):
+    """
+    Вопросы для дочерей при регистрации
+    """
     Q1 = "q1"
     Q2 = "q2"
     Q3 = "q3"
@@ -51,11 +77,17 @@ class DaughterQuestions(metaclass=StateMeta):
 
 
 class ExpeditorQuestions(metaclass=StateMeta):
+    """
+    Вопросы при регистрации карты экспедитора
+    """
     sex = 'sex'
     race = 'race'
 
 
 class Menu(metaclass=StateMeta):
+    """
+    Состояние публичного (основного меню)
+    """
     MAIN = "main_menu"
     SHOW_FORM = "show_form"
     SEARCH_FORM = "search_form"
@@ -94,6 +126,11 @@ class Menu(metaclass=StateMeta):
 
 
 class Admin(metaclass=StateMeta):
+    """
+    Состояния для админ-панели
+    Для создания/редактирования объектов рекомендуется использовать стиль {название класса}_{поле}.
+    Например, Admin.DAYLIC_REWARD. Здесь: DAYLIC - класс дейликов, REWARD - поле награда
+    """
     MENU = "admin_menu"
     REASON_DECLINE = "reason_decline"
     SELECT_PROFESSION = "select_profession"
@@ -258,6 +295,9 @@ class Admin(metaclass=StateMeta):
 
 
 class Judge(metaclass=StateMeta):
+    """
+    Состояния для судейства экшен-режима
+    """
     MENU = 'judge_menu'
     REASON_DECLINE = 'reason_decline_judge'
     ADD_USERS = 'add_users'

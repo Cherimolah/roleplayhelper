@@ -2,7 +2,6 @@
 Модуль с кастомными правилами для хедлеров
 """
 import re
-from abc import ABC
 from typing import Union, Optional
 
 from vkbottle.dispatch.rules import ABCRule

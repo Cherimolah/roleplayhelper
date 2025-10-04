@@ -1,3 +1,9 @@
+"""
+В этом модуле хранятся функции сериализации контента из базы данных
+Использование см. в README
+
+Можно посмотреть внизу на словарь fields_content , чтобы понять какая функция для какого поля используется
+"""
 from typing import Optional, Union, List, Dict, Callable
 import datetime
 import json
@@ -6,7 +12,7 @@ from collections import Counter
 from vkbottle import Keyboard, Text, KeyboardButtonColor, Callback
 from sqlalchemy import func, and_
 
-from service.db_engine import db, Attribute
+from service.db_engine import db
 from service import keyboards
 from config import DATETIME_FORMAT
 from loader import bot
@@ -14,6 +20,19 @@ from service.states import Admin, Registration
 
 
 class Field:
+    """
+    Класс Field это основной класс, который используется для столбцов базы данных
+
+    name: название на русском, которое будет выводится при выводе объекта
+    state: необходимое состояние, которое установится при редактировании этого поля
+    info_func: асинхронная функция, без аргументов, которая будет возвращать tuple[str, Keyboard()] - текст описания
+    того, что должно быть в значении этого поля и клавиатура
+    Например, нужно выбрать необходимую фракцию. Функция вытягивает из базы все фракции и вовзвращает в тексте строкой,
+    также возвращает клавиатуру с кнопкой "Без фракции", если это поле необязательно
+    serialize_func: асинхронная функция, принимающая один аргумент - значение поля из базы данных, возвращает строку -
+    сериализованное поле. Например, предмет имеет тип "Одноразовый", но значение в базе "1" (айди типа одноразовый).
+    Функция будет принимать айди типа, находить название типа в баз данных и возвращать читаемое название
+    """
 
     def __init__(self, name: str, state: str, info_func: Callable = None, serialize_func: Callable = None):
         self.name = name
@@ -23,6 +42,13 @@ class Field:
 
 
 class RelatedTable(Field):
+    """
+    Класс используемый для сериализации поля, как и Field
+
+    Отличие в том, что функция serialize_func при сериализации объекта будет принимать вместо значения поля - айди объекта
+    Используется, когда нужно сериализовать вместе с объектом дополнительно некоторые связанные объекты.
+    Например при сериализации расы, будет полезно вывести пользователю все бонусы, которые она даёт.
+    """
     pass
 
 
@@ -50,9 +76,15 @@ fields_admin = (Field("Имя", Registration.PERSONAL_NAME), Field("Должно
 
 
 class FormatDataException(Exception):
+    """
+    Исключение связанное с неправильным вводом данных. Это исключение обрабатывается в utils.allow_edit_content()
+    Когда пользователь ввел неверные данные необходимо вызвать исключение, тогда отправится сообщение о недопустимом
+    формате данных
+    """
     pass
 
 
+# Уровни репутации во фракции
 fraction_levels = {
     100: "Лидер фракции",
     90: "Верный(-ая) соратник(-ца)",
@@ -93,6 +125,9 @@ def parse_orientation(number: int) -> str:
 
 
 def parse_cooldown(cooldown: Optional[Union[int, float]]) -> Optional[str]:
+    """
+    Форматирует количество секунд в текст
+    """
     if not cooldown:
         return 'не установлено'
     days = int(cooldown // 86400)
@@ -986,8 +1021,14 @@ async def info_debuff_time():
     keyboard = Keyboard().add(Text('Бессрочно', {'debuff_time': 'infinity'}), KeyboardButtonColor.NEGATIVE)
     return reply, keyboard
 
-
-fields_content: Dict[str, Dict[str, List[Field]]] = {
+# Словарь со всеми типами контента
+# Ключом в словаре должна являться строка - название аттрибута объекта db (прямо как в Database.__init__() объявлен)
+# По этому ключу будет получен класс таблицы из db
+# Значение названия таблицы словарь с полем fields (обязательно) и name (необязательно)
+# Значением ключа fields является list[Union[Field, RelatedTable]]
+# Необходимо указывать поля Field строго в том порядке в котором они идут в базе данных
+# Важно указывать поля RelatedTable в конце списка, чтобы не нарушать очередность полей Field
+fields_content: Dict[str, Dict[str, List[Union[Field, RelatedTable]]]] = {
     "Cabins": {
         "fields": [
             Field("Название", Admin.NAME_CABIN),

@@ -1,3 +1,6 @@
+"""
+В этом модуле находятся мидлвари обрабатывающие сообщения до и после хендлеров
+"""
 import asyncio
 import datetime
 from abc import ABC
@@ -11,6 +14,9 @@ from loader import states
 
 
 class MaintainenceMiddleware(BaseMiddleware[Message], ABC):
+    """
+    Мидлварь для остановки обработки сообщений во время включения режима тех. обслуживания
+    """
 
     async def pre(self) -> None:
         if self.event.peer_id > 2_000_000_000:
@@ -24,6 +30,12 @@ class MaintainenceMiddleware(BaseMiddleware[Message], ABC):
 
 
 class StateMiddleware(BaseMiddleware[Message], ABC):
+    """
+    Мидлварь, который загружает в словарь states текущий стейт пользователя
+    После обработки выгружает стейт в базу данных
+    Необходимо, чтобы каждый хендлер при фильтрации не стучался в базу данных,
+    а быстро забирал значение из памяти
+    """
 
     async def pre(self) -> None:
         if self.event.peer_id > 2000000000:
@@ -44,6 +56,10 @@ class StateMiddleware(BaseMiddleware[Message], ABC):
 
 
 class FormMiddleware(BaseMiddleware[Message], ABC):
+    """
+    Хендлер, который проверяет, что state у игрока существует.
+    Иногда он может стать пустым
+    """
 
     async def pre(self):
         if self.event.peer_id > 2_000_000_000:
@@ -57,6 +73,9 @@ class FormMiddleware(BaseMiddleware[Message], ABC):
 
 
 class ActivityUsersMiddleware(BaseMiddleware[Message], ABC):
+    """
+    Мидлварь для записи активности пользователей и разморозки их анкеты после неактивности
+    """
 
     async def pre(self) -> None:
         if self.event.peer_id > 2_000_000_000:
@@ -74,6 +93,9 @@ class ActivityUsersMiddleware(BaseMiddleware[Message], ABC):
 
 
 class StateMiddlewareME(BaseMiddleware[MessageEvent], ABC):
+    """
+    То же что и StateMiddleware только для MessageEvent
+    """
 
     async def pre(self) -> None:
         if self.event['type'] != 'message_event':
@@ -92,6 +114,9 @@ class StateMiddlewareME(BaseMiddleware[MessageEvent], ABC):
 
 
 class ActionModeMiddleware(BaseMiddleware[Message], ABC):
+    """
+    Мидлварь для проверки того, что игрок написал в свою очередь пост во время экшен-режима
+    """
     async def pre(self):
         if self.event.peer_id < 2000000000:
             return

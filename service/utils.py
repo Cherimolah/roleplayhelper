@@ -1,3 +1,6 @@
+"""
+Модуль, хранящий очень или не очень полезные функции, используемые много где
+"""
 import asyncio
 import datetime
 import os
@@ -21,16 +24,25 @@ import service.keyboards as keyboards
 from config import OWNER, ADMINS
 from service.serializers import fields_content, serialize_target_reward, parse_orientation, fraction_levels, parse_cooldown, FormatDataException, serialize_expeditor_debuffs, serialize_expeditor_items
 
+# Регулярные выражения для поиска упоминаний и ссылок
 mention_regex = re.compile(r"\[(?P<type>id|club|public)(?P<id>\d*)\|(?P<text>.+)\]")
 link_regex = re.compile(r"https:/(?P<type>/|/m.)vk.com/(?P<screen_name>\w*)")
 daughter_params_regex = re.compile(r'^(?P<libido>\d+)\s*(?P<word>(или|и))\s*(?P<subordination>\d+)$')
 action_regex = re.compile(r'\[(?!id)([^]]+)\]')
 mention_regex_cut = re.compile(r'\[id\d+\|')
 
+# Кастомный клиент с отключенной проверкой ssl (подробнее в AioHTTPClientExtended.__help__)
 client = AioHTTPClientExtended()
 
 
 def get_max_size_url(sizes: List[PhotosPhotoSizes]) -> str:
+    """
+    Получает список размеров фотографии и возвращает ссылку на самую большую
+    Т.к. вк использует свой формат объектов фотографии, который никому не понятен, чтобы найти картинку наилучшего
+    качества, можно просто перебрать все варианты
+
+    Используется для загрузки фотографии от пользователя
+    """
     square = 0
     index = 0
     for i, size in enumerate(sizes):
@@ -42,6 +54,15 @@ def get_max_size_url(sizes: List[PhotosPhotoSizes]) -> str:
 
 async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, form_id: int = None, absolute_params: bool = False) -> Tuple[
     str, Optional[str]]:
+    """
+    Функция, которая сериализует анкету пользователя
+
+    user_id: айди пользователя, чью анкету хотим вывести
+    from_user_id: от какого лица просматривается анкета. Это необходимо так как разные игроки могут по разному видеть
+    репутации других игроков
+    is_request: True - чтобы получить анкету, которая была еще не принята. Используется, когда надо отправить анкету,
+    которую пользователь отправил на проверку (после регистрации или редактирования). По умолчанию отправляется уже принятая (проверенная) анкета
+    """
     if form_id:
         form = await db.select([*db.Form]).where(db.Form.id == form_id).gino.first()
     elif is_request:
@@ -104,6 +125,11 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
 
 
 async def show_expeditor(expeditor_id: int, from_user_id) -> str:
+    """
+    Похоже как и loads_form() только выводит информацию о карте экспедитора
+    expeditor_id: айди экспедитора из таблицы db.Expeditor
+    from_user_id: айди пользователя, кто просматривает карту. Необходимо для правильного отображения репутации
+    """
     expeditor = await db.Expeditor.get(expeditor_id)
     form = await db.Form.get(expeditor.form_id)
     user_id = form.user_id
@@ -129,6 +155,8 @@ async def show_expeditor(expeditor_id: int, from_user_id) -> str:
         db.ActiveItemToExpeditor.expeditor_id == expeditor_id).gino.all()]
     active_debuffs = [x[0] for x in await db.select([db.ExpeditorToDebuffs.debuff_id]).where(
         db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()]
+
+    # Здесь идет поиск всех бафов и дебафов, которые есть у игрока
     for attribute_id, value in attributes:
         attribute = await db.select([db.Attribute.name]).where(db.Attribute.id == attribute_id).gino.scalar()
         profession_bonus = 0
@@ -172,12 +200,20 @@ async def show_expeditor(expeditor_id: int, from_user_id) -> str:
 
 
 async def create_mention(user_id: int):
+    """
+    Утилита создающая упоминание из айди игрока
+    """
     user = (await bot.api.users.get(user_id))[0]
     nickname = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
     return f"[id{user.id}|{user.first_name} {user.last_name} / {nickname}]"
 
 
 async def parse_ids(m: Message) -> List[int]:
+    """
+    Утилита, которая находит айди пользователя(-ей), котоыре указаны в сообщении.
+    Если было переслано сообщение то возвращает айди чьё сообщение было переслано.
+    Если пересланных не было ищет упоминания и ссылки, из них извлекает айди пользователей
+    """
     if m.reply_message:
         return [m.reply_message.from_id]
     if m.fwd_messages:
@@ -202,6 +238,11 @@ async def parse_ids(m: Message) -> List[int]:
 
 
 async def get_mention_from_message(m: Message, many_users=False) -> Optional[Union[int, List[int]]]:
+    """
+    Функция обертка над parse_ids(), она дополнительно может вытащить айди пользователей по их имени персонажа.
+
+    many_users: флаг одного пользователя вытащить или нескольких. Если одного возвращается int, если нескольких - list[int]
+    """
     user_ids = [x for x in await parse_ids(m) if x > 0]
     names = m.text.split("\n")
     for name in names:
@@ -218,6 +259,10 @@ async def get_mention_from_message(m: Message, many_users=False) -> Optional[Uni
 
 
 async def reload_image(attachment, name: str, delete: bool = False):
+    """
+    Функция, для "перезагрузки изображения". Т.к. айди фотографий пользователей со временем могут стать для бота
+    недоступны, рекомендуется скачать и загрузить фото от лица бота
+    """
     photo_url = get_max_size_url(attachment.photo.sizes)
     response = await client.request_content(photo_url)
     if not os.path.exists("/".join(name.split("/")[:-1])):
@@ -239,6 +284,13 @@ async def reload_image(attachment, name: str, delete: bool = False):
 
 
 def parse_daughter_params(text: str) -> tuple[int, int, int]:
+    """
+    Парсит параметры дочерей для установки этого значения в доп. целях у дочерей
+
+    Строка должна состоять из 3 значений: уровень либидо, правило, уровень подчинения.
+    Правилом может быть "или" или "и".
+    Например: "1 или 20" , "5 и 10"
+    """
     match = re.fullmatch(daughter_params_regex, text.lower())
     if not match:
         raise FormatDataException('Неправильный формат данных. Можно указать только один фильтр')
@@ -251,6 +303,13 @@ def parse_daughter_params(text: str) -> tuple[int, int, int]:
 
 
 async def send_mailing(sleep, message_id, mailing_id):
+    """
+    Делает рассылку через отведенное количество секунд
+
+    sleep: количество секунд, через которое необходимо сделать рассылку
+    message_id: айди сообщение, которое будет переслано
+    mailing_id: айди рассылки из db.Mailing
+    """
     await asyncio.sleep(sleep)
     user_ids = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
     for i in range(0, len(user_ids), 100):
@@ -260,6 +319,9 @@ async def send_mailing(sleep, message_id, mailing_id):
 
 
 async def take_off_payments(form_id: int):
+    """
+    Функция, которая снимает арендную плату за проживание один раз в неделю. Работает в бэклоге
+    """
     while True:
         info = await db.select([db.Form.balance, db.Form.freeze]).where(db.Form.id == form_id).gino.first()
         if not info:  # Анкета удалена
@@ -301,6 +363,10 @@ async def take_off_payments(form_id: int):
 
 
 async def send_page_users(m: Union[Message, MessageEvent], page: int = 1):
+    """
+    Функция, которая выводит список пользователей с их роялми.
+    Используется в админ панели -> управление администраторами
+    """
     users = await db.select([db.User.user_id, db.User.admin, db.User.judge]).order_by(db.User.admin.desc()).order_by(db.User.judge.desc()).order_by(
         db.User.user_id.asc()).offset((page - 1) * 15).limit(15).gino.all()
     user_ids = [x[0] for x in users]
@@ -330,9 +396,13 @@ async def send_page_users(m: Union[Message, MessageEvent], page: int = 1):
 
 
 async def get_current_form_id(user_id: int) -> int:
+    """
+    Функция, которая возвращает айди анкету по айди пользователя
+    """
     return await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
 
 
+# Здесь указаны варианты написания временных промежутков. Они используются в parse_period()
 years = [
     "год", "года", "лет"
 ]
@@ -357,6 +427,11 @@ seconds = [
 
 
 def parse_period(text: str) -> Optional[int]:
+    """
+    Функция для того чтобы преобразовать текст в количество секунд.
+    Напримр, для указания того, сколько времени будет на выполнение дейлика, пользователь может написать "1 день",
+    функция преобразует такую строку в 86400 секунд
+    """
     params = text.lower().split(" ")
     last_number = 0
     total = 0
@@ -387,6 +462,9 @@ def parse_period(text: str) -> Optional[int]:
 
 
 async def quest_over(seconds, form_id, quest_id):
+    """
+    Функция-таймер, которая по истечению времени выпишет штраф игроку, если он не выполнил квест
+    """
     if not seconds:
         return
     await asyncio.sleep(seconds)
@@ -405,6 +483,13 @@ async def quest_over(seconds, form_id, quest_id):
 
 
 def calculate_time(quest: db.Quest, starts_at: datetime.datetime) -> int | None:
+    """
+    Функция необходима, чтобы вычислить сколько времени остается на выполнение дейлика у игрока
+    Так как у дейлика есть время, когда он в принципе заканчивается и время, которое дается на выполнение.
+    Нельзя выполнять дейлик, когда он уже завершился.
+
+    Функция высчитывает сколько секунд остается до ближайшего события (конец дейлика / время на выполнение)
+    """
     if not quest.closed_at:
         if quest.execution_time:
             ends_at = starts_at + datetime.timedelta(seconds=quest.execution_time)
@@ -422,6 +507,10 @@ def calculate_time(quest: db.Quest, starts_at: datetime.datetime) -> int | None:
 
 
 async def check_quest_completed(form_id: int) -> bool:
+    """
+    Проверяет все ли элементы квеста (сам квест и доп. цели к нему) выполнены
+    Необходимо, чтобы понять можно ли квест удалять из активного у игрока или нет
+    """
     quest_id, target_ids = await db.select([db.QuestToForm.quest_id, db.QuestToForm.active_targets]).where(
         db.QuestToForm.form_id == form_id
     ).gino.first()
@@ -440,6 +529,10 @@ async def check_quest_completed(form_id: int) -> bool:
 
 
 def calculate_wait_time(hours: int = 0, minutes: int = 0, seconds: int = 0) -> float:
+    """
+    Функция, которая расчитывает сколько секунд до следующего тайминга.
+    Примерно как вы ставите будильник, если времени сейчас уже поздно, то следующий звонок завтра
+    """
     today = now()
     expected = datetime.datetime(today.year, today.month, today.day, hours, minutes, seconds, tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
     if today > expected:
@@ -448,15 +541,20 @@ def calculate_wait_time(hours: int = 0, minutes: int = 0, seconds: int = 0) -> f
 
 
 async def send_daylics():
+    """
+    Функция, которая записывает новый дейлик пользователям и рассылает уведомление о новом дейлике
+    """
     await asyncio.sleep(5)  # Wait for initialize gino
     while True:
+        # Считаем время до следующего обновления.
+        # Обновление дейлика происходит раз в 3 дня в 00 часов по Москве
         last_daylic = await db.select([db.Metadata.last_daylic_date]).gino.scalar()
         if not last_daylic:
             seconds = calculate_wait_time(hours=23, minutes=59, seconds=59)
         else:
             next_time = last_daylic + datetime.timedelta(days=3)
             seconds = (next_time - now()).total_seconds()
-        await asyncio.sleep(seconds)
+        await asyncio.sleep(seconds)  #
         data = await db.select([db.Form.id, db.Form.user_id]).where(db.Form.is_request.is_(False)).gino.all()
         for form_id, user_id in data:
             profession_id = await db.select([db.Form.profession]).where(db.Form.id == form_id).gino.scalar()
@@ -476,6 +574,12 @@ async def send_daylics():
 
 
 async def show_fields_edit(user_id: int, new=True):
+    """
+    Отправляет анкету, отредактированный пользователем вариант
+    Используется, когда пользователь редактирует свою анкету, выводить промежуточный вариант
+
+    new: флаг, если True - создаст новую анкету
+    """
     if new:
         form = dict(await db.select([*db.Form]).where(db.Form.user_id == user_id).gino.first())
         params = {k: v for k, v in form.items() if k not in ("id", "is_request")}
@@ -491,6 +595,9 @@ async def show_fields_edit(user_id: int, new=True):
 
 
 async def page_content(table_name, page: int) -> Tuple[str, Optional[Keyboard]]:
+    """
+    Функция для пагинации по типу контента в админ панели -> редактирование контента
+    """
     table = getattr(db, table_name)
     names = [x[0] for x in
              await db.select([table.name]).order_by(table.id.asc()).offset((page - 1) * 15).limit(15).gino.all()]
