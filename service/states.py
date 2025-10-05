@@ -20,6 +20,9 @@ class StateValue(str):
     def __add__(self, other):
         return self.__str__() + other.__str__()
 
+    def __repr__(self):
+        return self.__str__()
+
 
 class StateMeta(type):
     """

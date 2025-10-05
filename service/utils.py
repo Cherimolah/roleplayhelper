@@ -711,7 +711,7 @@ async def send_edit_item(user_id: int, item_id: int, item_type: str):
             else:
                 reply += f"{i + 1}. {data.name}: {await data.serialize_func(item[i + 1])}\n"
     keyboard = keyboards.get_edit_content(item_type)
-    await db.User.update.values(state=f"{service.states.Admin.EDIT_CONTENT}_{item_type}*{item.id}").where(db.User.user_id == user_id).gino.status()
+    states.set(user_id, f"{service.states.Admin.EDIT_CONTENT}_{item_type}*{item.id}")
     await bot.api.messages.send(message=reply, keyboard=keyboard.get_json(), peer_id=user_id, attachment=attachment)
 
 
