@@ -684,7 +684,7 @@ def allow_edit_content(content_type: str, end: bool = False, text: str = None, s
                     await m.answer(text, keyboard=keyboard)
                 if end:
                     await send_content_page(m, content_type, 1)
-                    states.set(m.from_id, service.states.Admin.SELECT_ACTION + "_" + content_type)
+                    states.set(m.from_id, str(service.states.Admin.SELECT_ACTION) + "_" + content_type)
             return data
 
         return wrapper

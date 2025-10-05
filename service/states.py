@@ -17,6 +17,9 @@ class StateValue(str):
     def __str__(self):
         return f"{self.owner_name}.{super().__str__()}"
 
+    def __add__(self, other):
+        return self.__str__() + other.__str__()
+
 
 class StateMeta(type):
     """
