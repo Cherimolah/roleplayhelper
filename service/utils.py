@@ -313,8 +313,7 @@ async def send_mailing(sleep, message_id, mailing_id):
     await asyncio.sleep(sleep)
     user_ids = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
     for i in range(0, len(user_ids), 100):
-        await bot.api.messages.send(peer_ids=user_ids[i:i + 100], forward_messages=message_id, random_id=0,
-                                    is_notification=True)
+        await bot.api.messages.send(peer_ids=user_ids[i:i + 100], forward_messages=message_id, is_notification=True)
     await db.Mailings.delete.where(db.Mailings.id == mailing_id).gino.status()
 
 
@@ -622,6 +621,9 @@ async def page_content(table_name, page: int) -> Tuple[str, Optional[Keyboard]]:
 
 
 async def send_content_page(m: Union[Message, MessageEvent], table_name: str, page: int):
+    """
+
+    """
     reply, keyboard = await page_content(table_name, page)
     if isinstance(m, Message):
         await m.answer(messages.select_action, keyboard=keyboards.gen_type_change_content(table_name))

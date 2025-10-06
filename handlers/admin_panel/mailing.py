@@ -28,8 +28,7 @@ async def write_new_mailing(m: Message):
 
 @bot.on.private_message(StateRule(Admin.WRITE_MAILING), AdminRule())
 async def create_mailing(m: Message):
-    message = (await bot.api.messages.get_by_id(m.id)).items[0]
-    mailing = await db.Mailings.create(message_id=message.id)
+    mailing = await db.Mailings.create(message_id=m.id)
     keyboard = Keyboard().add(
         Text("Разослать сейчас", {"mailing": "send_now"}), KeyboardButtonColor.NEGATIVE
     )
@@ -44,11 +43,10 @@ async def send_now_mailing(m: Message):
     user_ids = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
     states.set(m.from_id, Admin.MENU)
     for i in range(0, len(user_ids), 100):
-        await bot.api.messages.send(peer_ids=user_ids[i:i+100], forward_messages=message_id, random_id=0,
-                                    is_notification=True)
+        await bot.api.messages.send(peer_ids=user_ids[i:i+100], forward_messages=message_id, is_notification=True)
     await db.Mailings.delete.where(db.Mailings.id == mailing_id).gino.status()
     await m.answer(messages.sent_mailing)
-    await m.answer("Главное меню", keyboard=await keyboards.main_menu(m.from_id))
+    await m.answer("Админ-панель", keyboard=keyboards.admin_menu)
 
 
 @bot.on.private_message(StateRule(Admin.TIME_MAILING), AdminRule())

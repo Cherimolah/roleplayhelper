@@ -29,8 +29,6 @@ from vkbottle_types.events.bot_events import MessageNew, BaseGroupEvent
 from aiohttp import ClientSession, ClientResponse, TCPConnector
 from loguru import logger
 
-from service.db_engine import db
-
 
 class MessagesCategoryExtended(MessagesCategory):
     """
@@ -86,7 +84,7 @@ class MessagesCategoryExtended(MessagesCategory):
             random_id = 0
         count = int(len(message) // 4096)
         msgs = []
-        for number, i in enumerate(range(0, len(message), 4096)):
+        for number, i in enumerate(range(0, len(message) + 1, 4096)):
             if number < count:
                 params = {k: v for k, v in locals().items() if k not in ('self', 'message', 'attachment', 'keyboard')}
                 msgs.append(await super().send(message=message[i:i + 4096], **params))
