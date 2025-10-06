@@ -760,8 +760,8 @@ async def check_last_activity(user_id: int):
     last_activity: datetime.datetime = await db.select([db.User.last_activity]).where(
         db.User.user_id == user_id).gino.scalar()
     time_to_freeze: int = await db.select([db.Metadata.time_to_freeze]).gino.scalar()  # Can be updated after sleeping
-    freeze = await db.select([db.Form.freeze]).where(db.Form.user_id == user_id).gino.scalar()
-    if (datetime.datetime.now() - last_activity).total_seconds() >= time_to_freeze and not freeze:
+    freeze, is_request = await db.select([db.Form.freeze, db.Form.is_request]).where(db.Form.user_id == user_id).gino.first()
+    if (datetime.datetime.now() - last_activity).total_seconds() >= time_to_freeze and not freeze and not is_request:
         await db.Form.update.values(freeze=True).where(db.Form.user_id == user_id).gino.status()
         await bot.api.messages.send(message="❗ В связи с отсутствием вашей активности в течение "
                                             f"{parse_cooldown(time_to_freeze)} ваша анкета автоматически заморожена",
@@ -778,12 +778,11 @@ async def check_last_activity(user_id: int):
         last_activity: datetime.datetime = await db.select([db.User.last_activity]).where(
             db.User.user_id == user_id).gino.scalar()
         time_to_delete: int = await db.select([db.Metadata.time_to_delete]).gino.scalar()
-        is_exists = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
         freeze = await db.select([db.Form.freeze]).where(db.Form.user_id == user_id).gino.scalar()
         if last_activity and freeze and (
-                datetime.datetime.now() - last_activity).total_seconds() >= time_to_delete and is_exists:
-            await bot.api.messages.send(message=f"❗ В связми с отсутствием вашей активности в течение "
-                                                f"{parse_cooldown(time_to_delete)} ваша анкета автоматичкески удалена",
+                datetime.datetime.now() - last_activity).total_seconds() >= time_to_delete and not is_request:
+            await bot.api.messages.send(message=f"❗ В связи с отсутствием вашей активности в течение "
+                                                f"{parse_cooldown(time_to_delete)} ваша анкета автоматически удалена",
                                         peer_id=user_id, is_notification=True)
             name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
             await db.Form.delete.where(db.Form.user_id == user_id).gino.status()
