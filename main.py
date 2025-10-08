@@ -6,7 +6,6 @@ from datetime import datetime, timedelta, timezone
 import traceback
 
 from loguru import logger
-from vkbottle import Keyboard, KeyboardButtonColor, Callback
 
 from loader import bot, user_bot
 import handlers  # Important
