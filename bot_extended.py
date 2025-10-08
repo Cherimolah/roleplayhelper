@@ -93,8 +93,9 @@ class MessagesCategoryExtended(MessagesCategory):
                 params = {k: v for k, v in locals().items() if k not in ('self', 'message', 'attachment', 'keyboard')}
                 msgs.append(await super().send(message=message[i:i + 4096], **params))
             else:
-                params = {k: v for k, v in locals().items() if k not in ('self', 'message')}
-                msgs.append(await super().send(message=message[i:i + 4096], **params))
+                params = {k: v for k, v in locals().items() if k not in ('self', 'message', 'msgs', 'params')}
+                params['message'] = message[i:i + 4096]
+                msgs.append(await super().send(**params))
         msgs = [y for x in msgs for y in x]
         return msgs
 
@@ -347,7 +348,7 @@ def message_min(event: dict, ctx_api: "ABCAPI", replace_mention: bool = True) ->
         msg = "Please set longpoll to latest version"
         raise RuntimeError(msg)
 
-    return MessageMin(
+    return MessageMinExtended(
         **update.object.message.dict(),
         client_info=update.object.client_info,
         group_id=update.group_id,
