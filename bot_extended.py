@@ -84,7 +84,11 @@ class MessagesCategoryExtended(MessagesCategory):
             random_id = 0
         count = int(len(message) // 4096)
         msgs = []
-        for number, i in enumerate(range(0, len(message) + 1, 4096)):
+        if len(message) == 0:
+            params = {k: v for k, v in locals().items() if k not in ('self', 'message')}
+            msgs.append(await super().send(**params))
+            return msgs
+        for number, i in enumerate(range(0, len(message), 4096)):
             if number < count:
                 params = {k: v for k, v in locals().items() if k not in ('self', 'message', 'attachment', 'keyboard')}
                 msgs.append(await super().send(message=message[i:i + 4096], **params))
@@ -284,6 +288,52 @@ class RawBotEventViewExtended(RawBotEventView, ABC):
         if handler_basement.dataclass == MessageEventMin:
             return MessageEventMinExtended(**event)  # Здесь собственно и создается кастомный объект сырых ивентов
         return super().get_event_model(handler_basement, event)
+
+
+class MessageMinExtended(MessageMin, ABC):
+    async def answer(
+            self,
+            message: str = None,
+            attachment: Optional[str] = None,
+            random_id: Optional[int] = 0,
+            lat: Optional[float] = None,
+            long: Optional[float] = None,
+            reply_to: Optional[int] = None,
+            forward_messages: Optional[list[int]] = None,
+            forward: Optional[str] = None,
+            sticker_id: Optional[int] = None,
+            keyboard: Optional[str] = None,
+            template: Optional[str] = None,
+            payload: Optional[str] = None,
+            content_source: Optional[str] = None,
+            dont_parse_links: Optional[bool] = None,
+            disable_mentions: Optional[bool] = None,
+            intent: Optional[str] = None,
+            subscribe_id: Optional[int] = None,
+            **kwargs
+    ) -> "MessagesSendUserIdsResponseItem":
+        """
+        Этот метод нужен, чтобы VKBottle сам не резал сообщения, т.к. он их нарезает неправильно
+        """
+
+        data = self.ctx_api.messages.get_set_params(locals())
+        deprecated_params = ("peer_id", "user_id", "domain", "chat_id", "user_ids")
+        deprecated = [k for k in data if k in deprecated_params]
+        if deprecated:
+            logger.warning(
+                "Params like peer_id or user_id is deprecated in Message.answer()."
+                "Use API.messages.send() instead"
+            )
+            for k in deprecated:
+                data.pop(k, None)
+
+        if message is None:
+            message = ""
+        elif not isinstance(message, str):
+            message = str(message)
+
+        response = (await self.ctx_api.messages.send(peer_ids=[self.peer_id], **data))[0]  # type: ignore
+        return response
 
 
 def message_min(event: dict, ctx_api: "ABCAPI", replace_mention: bool = True) -> "MessageMin":
