@@ -33,10 +33,10 @@ async def on_startup():
     await db.connect()
     mailings = await db.Mailings.query.gino.all()
     for mail in mailings:
-        if not mail.send_at:
+        if not mail.send_at or mail.send_at < datetime.now():
             continue
         delta = mail.send_at - datetime.now()
-        asyncio.get_event_loop().create_task(send_mailing(delta.seconds, mail.text, mail.id))
+        asyncio.get_event_loop().create_task(send_mailing(delta.total_seconds(), mail.message_id, mail.id))
     form_ids = [x[0] for x in await db.select([db.Form.id]).gino.all()]
     for form_id in form_ids:
         asyncio.get_event_loop().create_task(take_off_payments(form_id))
