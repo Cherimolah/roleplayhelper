@@ -155,14 +155,6 @@ class UserSpecified(ABCRule[Message]):
         self.state = state
 
     async def check(self, m: Message):
-        state = states.get(m.from_id)
-        # Тут исключение для стейта leader_fractions уже не помню зачем
-        if len(state.split("*")) == 2 and state.split("*")[0] != "leader_fractions":
-            form_id = int(state.split("*")[1])
-            user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
-            return {"form": (form_id, user_id)}
-        if len(state.split("*")) > 2:
-            return False
         user_id = await get_mention_from_message(m)
         if not user_id:
             await m.answer("Пользователь не указан")

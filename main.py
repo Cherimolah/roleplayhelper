@@ -6,7 +6,6 @@ from datetime import datetime, timedelta, timezone
 import traceback
 
 from loguru import logger
-from vkbottle import Keyboard, KeyboardButtonColor, Callback
 
 from loader import bot, user_bot
 import handlers  # Important
@@ -71,11 +70,6 @@ async def on_startup():
         asyncio.get_event_loop().create_task(wait_disable_debuff(debuff_id))
 
     asyncio.get_event_loop().create_task(polling())
-
-    form, photo = await loads_form(328243329, 486697492, True)
-    await bot.api.messages.send(peer_id=486697492, message=form, attachment=photo,
-                                keyboard=Keyboard(inline=True).add(Callback("Принять", {'form_accept': 28}), KeyboardButtonColor.POSITIVE)
-                                .row().add(Callback('Отклонить', {'form_decline': 28}), KeyboardButtonColor.NEGATIVE))
 
 
 def number_error():
