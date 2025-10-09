@@ -17,7 +17,7 @@ from vkbottle_types.methods import messages
 from vkbottle.api.api import API, ABCAPI
 from vkbottle_types.responses.messages import MessagesSendUserIdsResponseItem
 from vkbottle_types.responses.users import UsersUserFull
-from vkbottle import VKAPIError, Keyboard, ErrorHandler, Router
+from vkbottle import VKAPIError, Keyboard, Router
 from vkbottle.dispatch.views.bot import RawBotEventView, BotHandlerBasement, ABCBotMessageView, BotMessageView
 from vkbottle.tools.mini_types.bot.message_event import MessageEventMin
 from vkbottle.tools.mini_types.bot import MessageMin
@@ -28,6 +28,8 @@ from vkbottle_types.events.bot_events import MessageNew, BaseGroupEvent
 
 from aiohttp import ClientSession, ClientResponse, TCPConnector
 from loguru import logger
+
+from service.db_engine import db
 
 
 class MessagesCategoryExtended(MessagesCategory):
@@ -61,6 +63,7 @@ class MessagesCategoryExtended(MessagesCategory):
             disable_mentions=True,
             intent=None,
             subscribe_id=None,
+            is_notification=None,
             **kwargs
     ) -> typing.Union[int, typing.List[MessagesSendUserIdsResponseItem]]:
         """
@@ -77,6 +80,13 @@ class MessagesCategoryExtended(MessagesCategory):
         if peer_id:
             peer_ids = [peer_id]
             del peer_id
+        if is_notification:
+            for p in peer_ids:
+                enabled = await db.select([db.User.notification_enabled]).where(db.User.user_id == p).gino.scalar()
+                if not enabled:
+                    peer_ids.remove(p)
+            if not peer_ids:
+                return
         if message is None:
             message = ""  # Set iterable
         if isinstance(random_id, str):  # Compatible
