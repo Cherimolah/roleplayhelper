@@ -837,7 +837,7 @@ async def check_last_activity(user_id: int):
         admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
         await bot.api.messages.send(message=f"❗ Анкета [id{user_id}|{name} / {user.first_name} {user.last_name}] "
                                             f"автоматически заморожена",
-                                    peer_ids=admins)
+                                    peer_ids=admins, is_notification=True)
 
         time_to_delete = await db.select([db.Metadata.time_to_delete]).gino.scalar()
         await asyncio.sleep(time_to_delete - time_to_freeze)
@@ -856,7 +856,7 @@ async def check_last_activity(user_id: int):
             admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
             await bot.api.messages.send(message=f"❗ Анкета [id{user_id}|{name} / {user.first_name} {user.last_name}] "
                                                 f"была автоматически удалена",
-                                        peer_ids=admins)
+                                        peer_ids=admins, is_notification=True)
 
 
 async def apply_reward(user_id: int, data: dict):
@@ -1181,7 +1181,7 @@ async def take_off_item(active_row_id: int):
         await db.ActiveItemToExpeditor.delete.where(db.ActiveItemToExpeditor.id == active_row_id).gino.status()
     form_id = await db.select([db.Expeditor.form_id]).where(db.Expeditor.id == expeditor_id).gino.scalar()
     user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
-    await bot.api.messages.send(peer_id=user_id, message=f'Предмет «{item_name}» закончил свое действие')
+    await bot.api.messages.send(peer_id=user_id, message=f'Предмет «{item_name}» закончил свое действие', is_notification=True)
 
 
 async def wait_disable_debuff(row_id: int):
@@ -1199,7 +1199,7 @@ async def wait_disable_debuff(row_id: int):
     user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
     item_name = await db.select([db.StateDebuff.name]).where(db.StateDebuff.id == row.debuff_id).gino.scalar()
     await db.ExpeditorToDebuffs.delete.where(db.ExpeditorToDebuffs.id == row_id).gino.status()
-    await bot.api.messages.send(peer_id=user_id, message=f'Закончилось время действия дебафа «{item_name}»')
+    await bot.api.messages.send(peer_id=user_id, message=f'Закончилось время действия дебафа «{item_name}»', is_notification=True)
 
 
 async def parse_actions(text: str, expeditor_id: int) -> list[dict]:
@@ -1213,7 +1213,7 @@ async def parse_actions(text: str, expeditor_id: int) -> list[dict]:
                 break
         else:
             continue
-        if match.startswith('использовать '):
+        if match.startswith(alias):
             item_name = match[len(alias):].strip()
             distance = func.levenshtein(func.lower(db.Item.name), item_name)
             similarity = func.similarity(func.lower(db.Item.name), item_name).label('similarity')
