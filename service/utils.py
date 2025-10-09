@@ -1511,7 +1511,7 @@ async def move_user(user_id: int, chat_id: int):
     else:
         await db.UserToChat.update.values(chat_id=chat_id).where(db.UserToChat.user_id == user_id).gino.status()
         is_old_private = await db.select([db.Chat.is_private]).where(db.Chat.chat_id == old_chat_id).gino.scalar()
-        professions = [x[0] for x in await db.select([db.ChatToProfessions.profession_id]).where(db.ChatToProfessions.chat_id == chat_id).gino.all()]
+        professions = [x[0] for x in await db.select([db.ChatToProfessions.profession_id]).where(db.ChatToProfessions.chat_id == old_chat_id).gino.all()]
         user_profession = await db.select([db.Form.profession]).where(db.Form.user_id == user_id).gino.scalar()
         if is_old_private and ((professions and user_profession not in professions) or not professions):
             try:
