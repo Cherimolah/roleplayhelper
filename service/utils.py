@@ -622,7 +622,8 @@ async def page_content(table_name, page: int) -> Tuple[str, Optional[Keyboard]]:
 
 async def send_content_page(m: Union[Message, MessageEvent], table_name: str, page: int):
     """
-
+    Эта функция отправляет страницу контента с названиями элементов
+    Используется при пагинации и после удаления элемента
     """
     reply, keyboard = await page_content(table_name, page)
     if isinstance(m, Message):
@@ -633,24 +634,41 @@ async def send_content_page(m: Union[Message, MessageEvent], table_name: str, pa
 
 
 def parse_reputation(rep_level: int) -> str:
+    """
+    Переводит уровень репутации из числа в строковое название
+    """
     for level, name in fraction_levels.items():
         if rep_level >= level:
             return name
-    return 'Не опознаный уровень'
+    return 'Не опознанный уровень'
 
 
 async def get_reputation(from_user_id: int, to_user_id: int) -> Tuple[str, str]:
+    """
+    Функция для определения какую репутацию показывать пользователю при просмотре анкеты.
+
+    from_user_id: айди пользователя, кто смотрит анкету
+    to_user_id: айди пользователя, ЧЬЮ анкету смотрят
+
+    Правило: если пользователь, который просматривает анкету, имеет репутацию во фракции, в которой состоит
+    пользователь, чью анкету просматривают, показывать следует репутацию в этой фракции
+    В ином случае, показывается репутация (и фракция) с самым большим уровнем
+    """
+    # Фракция пользователя, чью анкету просматривают
     fraction_id = await db.select([db.Form.fraction_id]).where(db.Form.user_id == to_user_id).gino.scalar()
+    # Есть ли репутация у того, кто смотрит анкету в этой фракции
     has_rep = await db.select([db.UserToFraction.id]).where(
         and_(db.UserToFraction.user_id == from_user_id, db.UserToFraction.fraction_id == fraction_id)
     ).gino.scalar()
     if has_rep:
+        # Если есть, то показывается репутация во фракции, в которой состоит пользователь, чью анкету смотрят
         reputation = await db.select([db.UserToFraction.reputation]).where(
             and_(db.UserToFraction.user_id == to_user_id, db.UserToFraction.fraction_id == fraction_id)
         ).gino.scalar()
         name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
         return name, parse_reputation(reputation)
     else:
+        # Если же нет репутации показывается максимальная репутация
         max_rep, fraction_id = await db.select([db.UserToFraction.reputation, db.UserToFraction.fraction_id]).where(
             and_(db.UserToFraction.user_id == to_user_id, db.UserToFraction.fraction_id == fraction_id)
         ).order_by(db.UserToFraction.reputation.desc()).gino.first()
@@ -659,32 +677,48 @@ async def get_reputation(from_user_id: int, to_user_id: int) -> Tuple[str, str]:
 
 
 def allow_edit_content(content_type: str, end: bool = False, text: str = None, state: str = None, keyboard=None):
+    """
+    Функция помогающая в редактировании характеристик контента
+    """
     def decorator(function):
         async def wrapper(m: Message, value=None, form=None, *args, **kwargs):
+            # value и form аргументы прокидываются дальше после фильтров
+            # В хендлере могут стоять фильтры, которые передают эти аргументы, поэтому их нужно прокинуть в функцию
             kwargs["m"] = m
             if value:
                 kwargs["value"] = value
             if form:
                 kwargs["form"] = form
+            # Айди объекта, который создается/редактируется
             item_id = int(states.get(m.from_id).split("*")[1])
             editing_content = await db.select([db.User.editing_content]).where(
                 db.User.user_id == m.from_id).gino.scalar()
+            # Флаг того редактируется ли объект или нет
+            # Это передается в функцию обработчик для удобства, чтобы каждый раз не вытягивать это из стейта
+            # По айди можно понять в каком объекте что-то редактируется, а по флагу editing_content определить надо
+            # переходить к следующему стейту (при создании) или вернуться к выбору полей для редактирования (при редактировании)
             kwargs['editing_content'] = editing_content
             kwargs['item_id'] = item_id
+            # Вызывается функция обработчик, ловится ошибка FormatDataException
+            # Это специальный тип исключения, который следует вызывать если пользователь ввел неверные данные
+            # Когда ловится эта ошибка мы сообщаем о том, что пользователь ввел неверные данные и не переключаем стейт
             try:
                 data = await function(**kwargs)
             except FormatDataException as e:
                 await m.answer(f"Неправильный формат данных!\n{e}")
                 return
+            # Если редактировался контент, сообщаем о том, что поле изменено и отправляем описание объекта
             if editing_content:
                 await m.answer("Новое значение успешно установлено")
                 await send_edit_item(m.from_id, item_id, content_type)
+            # Если же нет, то переносим стейт на следующий и, если передан текст следующего сообщения отправляем его
             else:
                 if state:
                     states.set(m.from_id, f"{state}*{item_id}")
                 if text:
                     await m.answer(text, keyboard=keyboard)
                 if end:
+                    # При завершении возвращаем пользователя в меню выбора контента
                     await send_content_page(m, content_type, 1)
                     states.set(m.from_id, str(service.states.Admin.SELECT_ACTION) + "_" + content_type)
             return data
@@ -695,35 +729,61 @@ def allow_edit_content(content_type: str, end: bool = False, text: str = None, s
 
 
 async def send_edit_item(user_id: int, item_id: int, item_type: str):
+    """
+    Здесь происходит сериализация контента
+    """
     await db.User.update.values(editing_content=True).where(db.User.user_id == user_id).gino.status()
+    # Получаем нужный объект по указанному типу и его айди
     item = await db.select([*getattr(db, item_type)]).where(getattr(db, item_type).id == item_id).gino.first()
     reply = "Выберите поле для редактирования\n\n"
     attachment = None
+    # Проходимся по всем его столбцам, указанным в serializers.fields_content и вызываем функцию serialized_func() (если она указана)
+    # для того, чтобы получить сериализованное значение
     for i, data in enumerate(fields_content[item_type]['fields']):
+        # Для связанных таблиц вызываем функцию с сериализации с указанием айди объекта (как и указано в документации)
         if isinstance(data, RelatedTable):
             if not data.serialize_func:
                 reply += f"{i + 1}. {data.name}: {item[i + 1]}\n"
             else:
                 reply += f"{i + 1}. {data.name}: {await data.serialize_func(item.id)}\n"
+        # Для обычных полей все просто вызываем функцию сериализации если есть
         elif isinstance(data, Field):
+            # За исключением специального название "Фото". Чтобы было видно, какая именно фотография прикреплена к объекту
+            # значение столбца "Фото" (аттач строка) прикрепляется к сообщению
             if data.name == "Фото":
                 attachment = item[i + 1]
             if not data.serialize_func:
                 reply += f"{i + 1}. {data.name}: {item[i + 1]}\n"
             else:
                 reply += f"{i + 1}. {data.name}: {await data.serialize_func(item[i + 1])}\n"
+    # Получаем клавиатуру, устанавливаем стейт и наконец отправляем сообщение пользователю
     keyboard = keyboards.get_edit_content(item_type)
     states.set(user_id, f"{service.states.Admin.EDIT_CONTENT}_{item_type}*{item.id}")
     await bot.api.messages.send(message=reply, keyboard=keyboard.get_json(), peer_id=user_id, attachment=attachment)
 
 
 def soft_divide(num: int, den: int) -> int:
+    """
+    Небольшая функция для деления с округлением в большую сторону.
+    Эта функция применяется для подсчета количества необходимых страниц по количеству контента
+
+    Существует проблема, если число делится без остатка, то прибавление 1 к целой части числа будет лишним.
+    Допустим у нас 30 объектов и мы располагаем на странице по 15 объектов. Нам нужно 2 страницы,
+    но если объектов 33, то уже 3 странницы.
+    Дефолтный int(num // den) + 1 с этим не справляется:
+    int(5 // 2) + 1 == 3  # True
+    int(4 // 2) + 1 == 2  # False
+    """
     if num % den == 0:
         return int(num // den)
     return int(num // den) + 1
 
 
 async def page_fractions(page: int) -> Tuple[str, Keyboard, str]:
+    """
+    Эта функция пагинирует по одной фракции
+    Нужна при регистрации, когда пользователь выбирает в какую фракцию вступить
+    """
     fraction = await db.select([*db.Fraction]).order_by(db.Fraction.id.desc()).offset(page - 1).limit(1).gino.first()
     if fraction.leader_id:
         leader_nick = await db.select([db.Form.name]).where(db.Form.user_id == fraction.leader_id).gino.scalar()
@@ -753,6 +813,12 @@ async def page_fractions(page: int) -> Tuple[str, Keyboard, str]:
 
 
 async def check_last_activity(user_id: int):
+    """
+    Функция проверяет последнюю активность пользователей
+    Запускается в event_loop после каждого сообщения
+    Если пользователь долгое время не писал его анкета замораживается
+    Если пользователь с замороженной анкетой еще дольше не писал его анкета удаляется
+    """
     if user_id == 32650977:
         return
     time_to_freeze: int = await db.select([db.Metadata.time_to_freeze]).gino.scalar()
@@ -794,6 +860,11 @@ async def check_last_activity(user_id: int):
 
 
 async def apply_reward(user_id: int, data: dict):
+    """
+    Эта функция применяет награду/штраф для пользователя
+
+    data: словарь с описанием награды, формат данных смотреть в README
+    """
     if not data:
         return
     for reward in data:
@@ -832,6 +903,21 @@ async def apply_reward(user_id: int, data: dict):
 
 
 async def update_daughter_levels(user_id: int):
+    """
+    Функция для обновления параметров дочерей и проверке выполнения обязательного квеста для дочерей
+
+    Каждый день у дочерей вырастают параметры либидо и подчинения
+
+    Формула:
+    sub_level = sub_level + 2 + 2 * multiplier + sub_bonus
+
+    Где:
+    sub_level - текущий уровень подчинения, принадлежит промежутку [0; 100]
+    multiplier - множитель фракции
+    sub_bonus - набранные очки при регистрации
+
+    Для либидо формула такая же
+    """
     while True:
         now = datetime.datetime.now()
         tomorrow = now + datetime.timedelta(days=1)
@@ -864,6 +950,10 @@ async def update_daughter_levels(user_id: int):
 
 
 async def get_admin_ids():
+    """
+    Прстая функция для получения айди всех админов (из конфига и из базы), потмоу что бывают ситуации, когда админ
+    не зареган в боте, а функции админа нужны. Например, при первой регистрации
+    """
     admins = set([OWNER] + ADMINS)
     admins_db = {x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()}
     admins = list(admins | admins_db)
@@ -884,6 +974,11 @@ async def filter_users_expeditors(user_ids: list[int], chat_id: int) -> list[int
 
 
 async def update_initiative(action_mode_id: int):
+    """
+    Во время экшен режима обновляет уровни инициативы
+
+    К текущему уровню скорости прибавляется случайное число от 1 до 100
+    """
     user_ids = [x[0] for x in await db.select([db.UsersToActionMode.user_id]).where(
         db.UsersToActionMode.action_mode_id == action_mode_id).gino.all()]
     for user_id in user_ids:
@@ -896,13 +991,23 @@ async def update_initiative(action_mode_id: int):
 
 
 async def next_round(action_mode_id: int):
+    """
+    Функция, которая вызывается когда наступает новый цикл постов участников в экшен-режиме
+    """
+    # Айди чата в котором идет экшен-режим
     chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.id == action_mode_id).gino.scalar()
+    # Ставим очередь 0, потому что со следующим шагом добавится один и будет очередь писать первого участника
     await db.ActionMode.update.values(number_step=0).where(db.ActionMode.id == action_mode_id).gino.status()
+    # Удаляем посты, которые были в прошлом, чтобы не засорять базу
     await db.Post.delete.where(db.Post.action_mode_id == action_mode_id).gino.status()
+    # Удаляем пользователей, который выходят в этом раунде из экшен-режима
     await db.UsersToActionMode.delete.where(and_(db.UsersToActionMode.action_mode_id == action_mode_id, db.UsersToActionMode.exited.is_(True))).gino.status()
+    # Добавляем пользователей, которые входят в экшен-режим с новым раундом
     await db.UsersToActionMode.update.values(participate=True).where(
         db.UsersToActionMode.action_mode_id == action_mode_id).gino.all()
+    # Обновляем инициативу у всех участников экшен-режима
     await update_initiative(action_mode_id)
+    # Получаем имена тех, кто участвует в экшен-режиме, чтобы в ответном сообщении написать очередность постов
     users_data = await db.select([db.UsersToActionMode.user_id, db.Form.name]).select_from(
         db.UsersToActionMode.join(db.User, db.UsersToActionMode.user_id == db.User.user_id)
         .join(db.Form, db.User.user_id == db.Form.user_id)
@@ -910,15 +1015,20 @@ async def next_round(action_mode_id: int):
         db.UsersToActionMode.initiative.desc()).gino.all()
     form_ids = [x[0] for x in await db.select([db.Form.id]).where(db.Form.user_id.in_([x[0] for x in users_data])).gino.all()]
     expeditor_ids = [x[0] for x in await db.select([db.Expeditor.id]).where(db.Expeditor.form_id.in_(form_ids)).gino.all()]
+    # Проверяем первый ли это цикл постов в экшен-режиме. Если не первый, то нужно вычесть использование раунда у предметов
     first_cycle = await db.select([db.ActionMode.first_cycle]).where(db.ActionMode.id == action_mode_id).gino.scalar()
+    # Вычитаем использование предметов
     if not first_cycle:
+        # Активные (дающие эффект) предметы у игрока
         active_row_ids = [x[0] for x in await db.select([db.ActiveItemToExpeditor.id]).select_from(
             db.ActiveItemToExpeditor.join(db.ExpeditorToItems, db.ActiveItemToExpeditor.row_item_id == db.ExpeditorToItems.id)
             .join(db.Item, db.ExpeditorToItems.item_id == db.Item.id)
         ).where(
             and_(db.ActiveItemToExpeditor.expeditor_id.in_(expeditor_ids), db.Item.action_time > 0)
         ).gino.all()]
+        # Снимаем по одному использованию
         await db.ActiveItemToExpeditor.update.values(remained_use=db.ActiveItemToExpeditor.remained_use - 1).where(db.ActiveItemToExpeditor.id.in_(active_row_ids)).gino.status()
+        # Предметы, которые закончили свое действие (по количеству раундов или по времени)
         disabled_row_ids = [x[0] for x in await db.select([db.ActiveItemToExpeditor.id]).select_from(
             db.ActiveItemToExpeditor.join(db.ExpeditorToItems,
                                           db.ActiveItemToExpeditor.row_item_id == db.ExpeditorToItems.id)
@@ -926,18 +1036,25 @@ async def next_round(action_mode_id: int):
         ).where(
             and_(db.ActiveItemToExpeditor.expeditor_id.in_(expeditor_ids), db.Item.action_time > 0, db.ActiveItemToExpeditor.remained_use <= 0)
         ).gino.all()]
+        # Проходим по таким предметам и снимаем их (удаляются из активных)
         for row_id in disabled_row_ids:
             await take_off_item(row_id)
+        # Устанавливаем флаг о том, что больше первого цикла не будет
         await db.ActionMode.update.values(first_cycle=False).where(db.ActionMode.id == action_mode_id).gino.status()
+    # Отправляем сообщение с очередностью участников писать посты (по убыванию уровня инициативы)
     users = await bot.api.users.get(user_ids=[x[0] for x in users_data])
     reply = f'Новый цикл постов\nТекущая очередь участников:\n\n'
     for i in range(len(users)):
         reply += f'{i + 1}. [id{users_data[i][0]}|{users_data[i][1]} / {users[i].first_name} {users[i].last_name}]\n'
     await bot.api.messages.send(peer_id=2000000000 + chat_id, message=reply)
+    # Применяем следующий шаг в экшен-режиме
     await next_step(action_mode_id)
 
 
 async def get_current_turn(action_mode_id: int) -> int | None:
+    """
+    Функция вовзвращает номер участника, чья очередь писать пост по айди экшен-режима
+    """
     user_ids = [x[0] for x in await db.select([db.UsersToActionMode.user_id]).where(
         and_(db.UsersToActionMode.action_mode_id == action_mode_id,
              db.UsersToActionMode.participate.is_(True))).order_by(db.UsersToActionMode.initiative.desc()).gino.all()]
@@ -951,9 +1068,14 @@ async def get_current_turn(action_mode_id: int) -> int | None:
 
 
 async def next_step(action_mode_id: int):
+    """
+    Функция для принятия следующего шага в экшен-режиме
+    """
+    # Информация об экшен-режиме
     chat_id, finished, judge_id, time_to_post = await db.select(
         [db.ActionMode.chat_id, db.ActionMode.finished, db.ActionMode.judge_id, db.ActionMode.time_to_post]).where(
         db.ActionMode.id == action_mode_id).gino.first()
+    # Если экшен-режим закончился, то нужно снять все предметы, которые имеют ограничение на использование по количеству раундов
     if finished:
         user_ids = [x[0] for x in await db.select([db.UsersToActionMode.user_id]).where(db.UsersToActionMode.action_mode_id == action_mode_id).gino.all()]
         form_ids = [x[0] for x in await db.select([db.Form.id]).where(db.Form.user_id.in_(user_ids)).gino.all()]
@@ -968,22 +1090,25 @@ async def next_step(action_mode_id: int):
         await db.ActionMode.delete.where(db.ActionMode.id == action_mode_id).gino.status()
         await bot.api.messages.send(peer_id=2000000000 + chat_id, message='Экшен-режим завершен',
                                     keyboard=keyboards.request_action_mode)
+        # Возвращаем судью в стейт главного меню
         if states.contains(judge_id):
             states.set(judge_id, service.states.Menu.MAIN)
         await db.User.update.values(state=str(service.states.Menu.MAIN), check_action_id=None).where(db.User.user_id == judge_id).gino.status()
         await bot.api.messages.send(peer_id=judge_id, message='Экшен режим завершен',
                                     keyboard=await keyboards.main_menu(judge_id))
         return
+    # Если экшен режим не закончился то прописываем следующему пользователю писать пост
     await db.ActionMode.update.values(number_step=db.ActionMode.number_step + 1, number_check=0).where(
         db.ActionMode.id == action_mode_id).gino.scalar()
     user_id = await get_current_turn(action_mode_id)
-    if not user_id:
+    if not user_id:  # Если все участники написали свой пост, то теперь очередь судьи писать свой пост
         await db.ActionMode.update.values(number_step=0, number_check=0).where(
             db.ActionMode.id == action_mode_id).gino.scalar()
         await bot.api.request('messages.changeConversationMemberRestrictions',
                               {'peer_id': 2000000000 + chat_id, 'member_ids': judge_id, 'action': 'rw'})
         await bot.api.messages.send(peer_id=2000000000 + chat_id, message='Сейчас очередь судьи писать свой пост')
         return
+    # Отправляем сообщение о том, чья очередь писать свой пост
     name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
     user = (await bot.api.users.get(user_ids=[user_id]))[0]
     await bot.api.request('messages.changeConversationMemberRestrictions',
@@ -991,12 +1116,19 @@ async def next_step(action_mode_id: int):
     reply = f'Сейчас очередь участника [id{user.id}|{name} / {user.first_name} {user.last_name}] писать свой пост'
     await bot.api.messages.send(peer_id=2000000000 + chat_id, message=reply)
     post = await db.Post.create(user_id=user_id, action_mode_id=action_mode_id)
+    # Ставим таймер на написание поста
     asyncio.get_event_loop().create_task(wait_users_post(post.id))
 
 
 async def wait_users_post(post_id: int):
+    """
+    Функция таймер, ожидающая написание поста участником экшен-режима
+
+    Если за отведенное время участник не написал свой пост, он пропускает свой ход
+    """
     action_mode_id, created_at = await db.select([db.Post.action_mode_id, db.Post.created_at]).where(db.Post.id == post_id).gino.first()
     time_to_post = await db.select([db.ActionMode.time_to_post]).where(db.ActionMode.id == action_mode_id).gino.scalar()
+    # Если нет временного ограничения на написание поста, то просто выходим
     if not time_to_post:
         return  # Нет ограничения на написание поста
     if now() < created_at + datetime.timedelta(seconds=time_to_post):  # Проверяем, что еще надо ждать
@@ -1021,6 +1153,9 @@ async def wait_users_post(post_id: int):
 
 
 async def wait_take_off_item(row_id: int):
+    """
+    Таймер для снятия предмета, который заканчивает свое действие по времмени
+    """
     row = await db.select([*db.ActiveItemToExpeditor]).where(db.ActiveItemToExpeditor.id == row_id).gino.first()
     item_id = await db.select([db.ExpeditorToItems.item_id]).where(db.ExpeditorToItems.id == row.row_item_id).gino.scalar()
     time_use = await db.select([db.Item.time_use]).where(db.Item.id == item_id).gino.scalar()
@@ -1046,7 +1181,7 @@ async def take_off_item(active_row_id: int):
         await db.ActiveItemToExpeditor.delete.where(db.ActiveItemToExpeditor.id == active_row_id).gino.status()
     form_id = await db.select([db.Expeditor.form_id]).where(db.Expeditor.id == expeditor_id).gino.scalar()
     user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
-    await bot.api.messages.send(peer_id=user_id, message=f'Закончилось время действия предмета «{item_name}»')
+    await bot.api.messages.send(peer_id=user_id, message=f'Предмет «{item_name}» закончил свое действие')
 
 
 async def wait_disable_debuff(row_id: int):
@@ -1376,7 +1511,9 @@ async def move_user(user_id: int, chat_id: int):
     else:
         await db.UserToChat.update.values(chat_id=chat_id).where(db.UserToChat.user_id == user_id).gino.status()
         is_old_private = await db.select([db.Chat.is_private]).where(db.Chat.chat_id == old_chat_id).gino.scalar()
-        if is_old_private:
+        professions = [x[0] for x in await db.select([db.ChatToProfessions.profession_id]).where(db.ChatToProfessions.chat_id == chat_id).gino.all()]
+        user_profession = await db.select([db.Form.profession]).where(db.Form.user_id == user_id).gino.scalar()
+        if is_old_private and ((professions and user_profession not in professions) or not professions):
             try:
                 await bot.api.messages.remove_chat_user(chat_id=old_chat_id, member_id=user_id)
             except:

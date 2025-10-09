@@ -557,7 +557,7 @@ class Database(Gino):
             description = Column(Text)  # Описание
             group_id = Column(Integer, ForeignKey('item_groups.id', ondelete='SET NULL'))  # Айди группы
             type_id = Column(Integer, ForeignKey('item_types.id', ondelete='SET NULL'))  # Айди типа
-            count_use = Column(Integer, default=1)  # Корличество возможных использований
+            count_use = Column(Integer, default=1)  # Количество возможных использований
             available_for_sale = Column(Boolean, default=True)  # Доступен ли в продаже
             price = Column(Integer, default=0)  # Цена в магазине (если доступен в продаже)
             fraction_id = Column(Integer, ForeignKey('fractions.id', ondelete='SET NULL'))  # В какой фракции необходимо иметь определенную репутацию (либо доступно всем)
