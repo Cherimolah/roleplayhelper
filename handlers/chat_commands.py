@@ -1,3 +1,9 @@
+"""
+Модуль обработки команд в чатах.
+Содержит обработчики для покупок, переводов, перемещений
+и других действий, доступных в групповых беседах.
+"""
+
 import re
 
 from vkbottle.bot import Message
@@ -14,7 +20,7 @@ from handlers.public_menu.quests import send_ready_quest
 from service.utils import move_user, create_mention, get_current_form_id, soft_divide
 from config import HALL_CHAT_ID
 
-
+# Регулярные выражения для обработки команд
 moving_pattern = re.compile(r'\[\s*перемещение в "([^"]+)"\s*\]', re.IGNORECASE)
 moving_pattern2 = re.compile(r'\[\s*перемещение в (.+)\s*\]', re.IGNORECASE)
 donate_pattern = re.compile(r'\[пожертвовать в храм (\d+)\]', re.IGNORECASE)
@@ -26,6 +32,7 @@ message_pattern_link = re.compile(r'\[отправить сообщение http
 
 @bot.on.chat_message(AdminRule(), text='/chat_id')
 async def get_peer_id(m: Message):
+    """Получение ID чата (только для администраторов)"""
     await m.answer(str(m.chat_id))
 
 
@@ -37,6 +44,12 @@ async def get_peer_id(m: Message):
 @bot.on.chat_message(ChatAction('заказать напиток'), blocking=False)
 @bot.on.chat_message(ChatAction('сделай коктейль'), blocking=False)
 async def order_cocktail(m: Message):
+    """
+    Заказ обычного коктейля в баре
+
+    Args:
+        m: Сообщение с командой заказа
+    """
     price = await db.select([db.Shop.price]).where(db.Shop.id == 1).gino.scalar()
     balance = await db.select([db.Form.balance]).where(db.Form.user_id == m.from_id).gino.scalar()
     if balance >= price:
@@ -54,6 +67,12 @@ async def order_cocktail(m: Message):
 @bot.on.chat_message(ChatAction('заказать элитный коктейль'), blocking=False)
 @bot.on.chat_message(ChatAction('элитный коктейль'), blocking=False)
 async def order_premium_cocktail(m: Message):
+    """
+    Заказ премиального коктейля в баре
+
+    Args:
+        m: Сообщение с командой заказа
+    """
     price = await db.select([db.Shop.price]).where(db.Shop.id == 2).gino.scalar()
     balance = await db.select([db.Form.balance]).where(db.Form.user_id == m.from_id).gino.scalar()
     if balance >= price:
@@ -71,6 +90,12 @@ async def order_premium_cocktail(m: Message):
 @bot.on.chat_message(ChatAction('заказать элитный алкоголь'), blocking=False)
 @bot.on.chat_message(ChatAction('купить дорогой алкоголь'), blocking=False)
 async def order_expensive_alcohol(m: Message):
+    """
+    Заказ бутылки дорогого алкоголя в баре
+
+    Args:
+        m: Сообщение с командой заказа
+    """
     price = await db.select([db.Shop.price]).where(db.Shop.id == 3).gino.scalar()
     balance = await db.select([db.Form.balance]).where(db.Form.user_id == m.from_id).gino.scalar()
     if balance >= price:
@@ -88,6 +113,7 @@ async def order_expensive_alcohol(m: Message):
 @bot.on.chat_message(ChatAction('начислить зарплату'), blocking=False)
 @bot.on.chat_message(ChatAction('дай деньги'), blocking=False)
 async def ask_salary_command(m: Message):
+    """Запрос выплаты зарплаты"""
     return await ask_salary(m)
 
 
@@ -99,6 +125,12 @@ async def ask_salary_command(m: Message):
 @bot.on.chat_message(ChatAction('закончить отчет'), blocking=False)
 @bot.on.chat_message(ChatAction('сдать дейлик'), blocking=False)
 async def ask_salary_command(m: Message):
+    """
+    Сдача отчета о выполнении дейлика или квеста
+
+    Args:
+        m: Сообщение с командой сдачи отчета
+    """
     daylic = await db.select([db.Form.activated_daylic]).where(db.Form.user_id == m.from_id).gino.scalar()
     if daylic:
         m.payload = {"daylic_ready": daylic}
@@ -127,6 +159,13 @@ async def ask_salary_command(m: Message):
 @bot.on.chat_message(RegexRule(re.compile(r"\[перечислить сумму \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)), blocking=False)
 @bot.on.chat_message(RegexRule(re.compile(r"\[перевести валюту \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)), blocking=False)
 async def create_transaction(m: Message, match: tuple[str]):
+    """
+    Создание транзакции между пользователями
+
+    Args:
+        m: Сообщение с командой перевода
+        match: Результат匹配 регулярного выражения (ID пользователя и сумма)
+    """
     user_id = match[0]
     if not user_id.isdigit():
         response = await bot.api.utils.resolve_screen_name(user_id)
@@ -172,6 +211,13 @@ async def create_transaction(m: Message, match: tuple[str]):
 @bot.on.chat_message(RegexRule(re.compile(r'\[сделать пожертвование (\d+)\]', re.IGNORECASE)), blocking=False)
 @bot.on.chat_message(RegexRule(re.compile(r'\[отдать сумму в храм (\d+)\]', re.IGNORECASE)), blocking=False)
 async def create_donate_command(m: Message, match: tuple[str]):
+    """
+    Создание пожертвования в храм
+
+    Args:
+        m: Сообщение с командой пожертвования
+        match: Результат匹配 регулярного выражения (сумма пожертвования)
+    """
     amount = int(match[0])
     form_id = await get_current_form_id(m.from_id)
     balance = await db.select([db.Form.balance]).where(db.Form.id == form_id).gino.scalar()
@@ -189,12 +235,19 @@ async def create_donate_command(m: Message, match: tuple[str]):
 
 @bot.on.chat_message(ChatInviteMember())
 async def test(m: Message, member_id: int):
+    """
+    Обработка приглашения новых участников в чат
+
+    Args:
+        m: Сообщение с событием приглашения
+        member_id: ID приглашенного пользователя
+    """
     if member_id < 0:
         return
     chat_allowed = await db.select([db.UserToChat.chat_id]).where(db.UserToChat.user_id == member_id).gino.scalar()
     if not chat_allowed or m.chat_id != chat_allowed:
         await bot.api.request('messages.changeConversationMemberRestrictions',
-                          {'peer_id': m.peer_id, 'member_ids': member_id, 'action': 'ro'})
+                              {'peer_id': m.peer_id, 'member_ids': member_id, 'action': 'ro'})
 
 
 @bot.on.message(RegexRule(moving_pattern))
@@ -207,6 +260,13 @@ async def test(m: Message, member_id: int):
 @bot.on.message(RegexRule(re.compile(r'\[\s*хочу в (.+)\s*\]', re.IGNORECASE)))
 @bot.on.message(RegexRule(re.compile(r'\[\s*локация (.+)\s*\]', re.IGNORECASE)))
 async def move_to_location(m: Message, match: tuple[str]):
+    """
+    Перемещение пользователя между чатами-локациями
+
+    Args:
+        m: Сообщение с командой перемещения
+        match: Результат匹配 регулярного выражения (название локации)
+    """
     find_name = match[0]
     if find_name.lower().startswith('каюта ') or find_name.lower().startswith('каюту '):  # Алиас для написания каюты
         try:
@@ -220,7 +280,8 @@ async def move_to_location(m: Message, match: tuple[str]):
         chat_id = HALL_CHAT_ID
     else:
         peer_ids = [2000000000 + x[0] for x in await db.select([db.Chat.chat_id]).gino.all() if x[0] is not None]
-        chat_names = [(x.chat_settings.title.lower(), x.peer.id) for x in (await bot.api.messages.get_conversations_by_id(peer_ids=peer_ids)).items]
+        chat_names = [(x.chat_settings.title.lower(), x.peer.id) for x in
+                      (await bot.api.messages.get_conversations_by_id(peer_ids=peer_ids)).items]
         for chat_name, peer_id in chat_names:
             if chat_name == find_name.lower():
                 chat_id = peer_id - 2000000000
@@ -240,22 +301,26 @@ async def move_to_location(m: Message, match: tuple[str]):
         if owner_cabin and owner_cabin != m.from_id:
             admin_ids = [owner_cabin]
         else:
-            profession_ids = [x[0] for x in await db.select([db.ChatToProfessions.profession_id]).where(db.ChatToProfessions.chat_id == chat_id).gino.all()]
+            profession_ids = [x[0] for x in await db.select([db.ChatToProfessions.profession_id]).where(
+                db.ChatToProfessions.chat_id == chat_id).gino.all()]
             profession_id = await db.select([db.Form.profession]).where(db.Form.user_id == m.from_id).gino.scalar()
             if profession_id in profession_ids:
                 await move_user(m.from_id, chat_id)
                 return
-            admin_ids = [x[0] for x in await db.select([db.Form.user_id]).where(db.Form.profession.in_(profession_ids)).gino.all()]
+            admin_ids = [x[0] for x in
+                         await db.select([db.Form.user_id]).where(db.Form.profession.in_(profession_ids)).gino.all()]
         for admin_id in admin_ids:
             request = await db.ChatRequest.create(chat_id=chat_id, admin_id=admin_id, user_id=m.from_id)
             reply = f'Пользователь {await create_mention(m.from_id)} запрашивает доступ в чат «{chat_name}»'
             keyboard = Keyboard(inline=True).add(
                 Callback('Разрешить', {'chat_action': 'accept', 'request_id': request.id}), KeyboardButtonColor.POSITIVE
             ).row().add(
-                Callback('Отклонить', {'chat_action': 'decline', 'request_id': request.id}), KeyboardButtonColor.NEGATIVE
+                Callback('Отклонить', {'chat_action': 'decline', 'request_id': request.id}),
+                KeyboardButtonColor.NEGATIVE
             )
             message = (await bot.api.messages.send(peer_id=admin_id, message=reply, keyboard=keyboard))[0]
-            await db.ChatRequest.update.values(message_id=message.conversation_message_id).where(db.ChatRequest.id == request.id).gino.status()
+            await db.ChatRequest.update.values(message_id=message.conversation_message_id).where(
+                db.ChatRequest.id == request.id).gino.status()
             await m.answer(f'Запрос на перемещение в чат «{chat_name}» успешно отправлен')
             return
     await move_user(m.from_id, chat_id)
@@ -276,6 +341,13 @@ async def move_to_location(m: Message, match: tuple[str]):
 @bot.on.message(RegexRule(re.compile(r'\[сообщение для https://vk.com/(\w*) "([^"]+)"\]', re.IGNORECASE)))
 @bot.on.message(RegexRule(re.compile(r'\[передать сообщение https://vk.com/(\w*) "([^"]+)"\]', re.IGNORECASE)))
 async def transmitter(m: Message, match: tuple[str, str]):
+    """
+    Отправка приватного сообщения другому пользователю через бота
+
+    Args:
+        m: Сообщение с командой отправки
+        match: Результат регулярного выражения (ID пользователя и текст сообщения)
+    """
     user_id, message = match
     if not user_id.isdigit():
         response = await bot.api.utils.resolve_screen_name(user_id)
@@ -293,4 +365,3 @@ async def transmitter(m: Message, match: tuple[str, str]):
                f'«{message}»')
     await bot.api.messages.send(peer_id=user_id, message=message)
     await m.answer('Сообщение успешно отправлено')
-

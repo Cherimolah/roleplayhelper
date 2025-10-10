@@ -1,3 +1,9 @@
+"""
+Модуль административных функций бота.
+Содержит обработчики для модерации контента, управления пользователями
+и проверки выполнения различных заданий.
+"""
+
 import asyncio
 import datetime
 import shutil
@@ -16,19 +22,28 @@ from service import keyboards
 from service.states import Menu, Admin
 from service.middleware import states
 from service.custom_rules import StateRule, NumericRule, AdminRule, UserFree
-from service.utils import take_off_payments, parse_reputation, create_mention, check_quest_completed, apply_reward, serialize_target_reward, create_cabin_chat, move_user
+from service.utils import take_off_payments, parse_reputation, create_mention, check_quest_completed, apply_reward, \
+    serialize_target_reward, create_cabin_chat, move_user
 from config import HALL_CHAT_ID
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_accept": int}), AdminRule(), UserFree())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_accept": int}), AdminRule(),
+                  UserFree())
 async def accept_form(m: MessageEvent):
+    """
+    Принятие анкеты пользователя администратором
+
+    Args:
+        m: Событие с ID анкеты для принятия
+    """
     form_id = m.object.payload['form_accept']
     is_request = await db.select([db.Form.is_request]).where(db.Form.id == form_id).gino.scalar()
     if not is_request:
         await m.edit_message("Анкета уже была принята или отклонена другим администратором")
         return
     user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
-    old_form_id = await db.select([db.Form.id]).where(and_(db.Form.user_id == user_id, db.Form.is_request.is_(False))).gino.scalar()
+    old_form_id = await db.select([db.Form.id]).where(
+        and_(db.Form.user_id == user_id, db.Form.is_request.is_(False))).gino.scalar()
     if old_form_id:
         old_form = await db.Form.get(old_form_id)
         values = old_form.__values__
@@ -41,23 +56,26 @@ async def accept_form(m: MessageEvent):
     state = await db.select([db.User.state]).where(db.User.user_id == user_id).gino.scalar()
     if str(state) == "Registration.wait":
         await db.User.update.values(state=str(Menu.MAIN)).where(db.User.user_id == user_id).gino.status()
-        await bot.api.messages.send(peer_ids=user_id, message=messages.form_accepted, keyboard=await keyboards.main_menu(user_id))
+        await bot.api.messages.send(peer_ids=user_id, message=messages.form_accepted,
+                                    keyboard=await keyboards.main_menu(user_id))
         try:
             await user_bot.api.friends.add(user_id=user_id, text='Автоматическое приглашение на станцию\n'
-                                                             'Чтобы попасть в каюту примите заявку в друзья')
+                                                                 'Чтобы попасть в каюту примите заявку в друзья')
         except:
             pass
         await move_user(user_id, HALL_CHAT_ID)
     else:
-        await bot.api.messages.send(peer_ids=user_id, message="Заявка на редактирование анкеты была принята", is_notification=True)
+        await bot.api.messages.send(peer_ids=user_id, message="Заявка на редактирование анкеты была принята",
+                                    is_notification=True)
     name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
     await m.edit_message(f"Анкета участника [id{user_id}|{name}] принята")
-    current_profession, cabin = await db.select([db.Form.profession, db.Form.cabin]).where(db.Form.user_id == user_id).gino.first()
+    current_profession, cabin = await db.select([db.Form.profession, db.Form.cabin]).where(
+        db.Form.user_id == user_id).gino.first()
     if not current_profession:
         reply = f"Укажите должность участника [id{user_id}|{name}]. Доступные должности:\n\n"
         professions = await db.select([db.Profession.name]).gino.all()
         for i, prof in enumerate(professions):
-            reply = f"{reply}{i+1}. {prof.name}\n"
+            reply = f"{reply}{i + 1}. {prof.name}\n"
         states.set(m.user_id, f"{Admin.SELECT_PROFESSION}*{user_id}")
         await m.send_message(reply, keyboard=keyboards.another_profession_to_user(user_id))
         return
@@ -75,11 +93,19 @@ async def accept_form(m: MessageEvent):
         await m.send_message(reply, keyboard=Keyboard().get_json())
     else:
         states.set(m.user_id, Menu.MAIN)
-        await bot.api.messages.send(peer_id=m.user_id, message='Главное меню', keyboard=await keyboards.main_menu(m.user_id))
+        await bot.api.messages.send(peer_id=m.user_id, message='Главное меню',
+                                    keyboard=await keyboards.main_menu(m.user_id))
 
 
 @bot.on.private_message(StateRule(Admin.SELECT_PROFESSION), NumericRule(), AdminRule())
 async def set_profession_to_user(m: Message, value: int = None):
+    """
+    Назначение профессии пользователю
+
+    Args:
+        m: Сообщение с номером профессии
+        value: Номер выбранной профессии
+    """
     profession_id = await db.select([db.Profession.id]).offset(value - 1).limit(1).gino.scalar()
     user_id = int(states.get(m.from_id).split("*")[1])
     name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
@@ -99,6 +125,13 @@ async def set_profession_to_user(m: Message, value: int = None):
 
 @bot.on.private_message(StateRule(Admin.SELECT_CABIN), NumericRule())
 async def set_user_cabin(m: Message, value: int = None):
+    """
+    Назначение номера кабины пользователю
+
+    Args:
+        m: Сообщение с номером кабины
+        value: Номер кабины
+    """
     employed = await db.select([db.Form.cabin]).where(db.Form.cabin == value).gino.scalar()
     if employed:
         await m.answer("Данная комната уже занята")
@@ -110,16 +143,23 @@ async def set_user_cabin(m: Message, value: int = None):
     cabins = await db.select([db.Cabins.name]).gino.all()
     reply = messages.cabin_class
     for i, cabin in enumerate(cabins):
-        reply = f"{reply}{i+1}. {cabin.name}\n"
+        reply = f"{reply}{i + 1}. {cabin.name}\n"
     await m.answer(reply)
 
 
 @bot.on.private_message(StateRule(Admin.SELECT_CLASS_CABIN), NumericRule(), AdminRule())
 async def set_cabin_class(m: Message, value: int):
+    """
+    Выбор класса кабины для пользователя
+
+    Args:
+        m: Сообщение с номером класса кабины
+        value: Номер класса кабины
+    """
     user_id = int(states.get(m.from_id).split("*")[1])
     cabin_id, price = await db.select([db.Cabins.id, db.Cabins.cost]).offset(value - 1).limit(1).gino.first()
     await db.Form.update.values(cabin_type=cabin_id,
-                                balance=db.Form.balance-price,
+                                balance=db.Form.balance - price,
                                 last_payment=datetime.datetime.now()).where(
         db.Form.user_id == user_id).gino.status()
     form_id = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
@@ -130,6 +170,12 @@ async def set_cabin_class(m: Message, value: int):
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_decline": int}), AdminRule())
 async def decline_form(m: MessageEvent):
+    """
+    Отклонение анкеты пользователя
+
+    Args:
+        m: Событие с ID анкеты для отклонения
+    """
     form_id = m.object.payload['form_decline']
     is_request = await db.select([db.Form.is_request]).where(db.Form.id == form_id).gino.scalar()
     if not is_request:
@@ -138,12 +184,19 @@ async def decline_form(m: MessageEvent):
     user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
     states.set(m.user_id, f"{Admin.REASON_DECLINE}*{user_id}")
     user = (await bot.api.users.get(user_id))[0]
-    await m.edit_message(f"Укажите причину отказа от анкеты пользователя [id{user_id}|{user.first_name} {user.last_name}]",
-                        keyboard=keyboards.reason_decline_form)
+    await m.edit_message(
+        f"Укажите причину отказа от анкеты пользователя [id{user_id}|{user.first_name} {user.last_name}]",
+        keyboard=keyboards.reason_decline_form)
 
 
 @bot.on.private_message(StateRule(Admin.REASON_DECLINE), AdminRule())
 async def reason_decline_form(m: Message):
+    """
+    Указание причины отклонения анкеты
+
+    Args:
+        m: Сообщение с причиной отклонения
+    """
     state = states.get(m.from_id)
     user_id = int(state.split("*")[1])
     await db.Form.delete.where(and_(db.Form.user_id == user_id, db.Form.is_request.is_(True))).gino.status()
@@ -155,16 +208,18 @@ async def reason_decline_form(m: Message):
         await bot.api.messages.send(peer_id=user_id, message=f"{messages.form_decline}\n\n{m.text}", keyboard=keyboard,
                                     is_notification=True)
     else:
-        await bot.api.messages.send(peer_id=user_id, message="Заявка на редактирование анкеты была отклонена", is_notification=True)
+        await bot.api.messages.send(peer_id=user_id, message="Заявка на редактирование анкеты была отклонена",
+                                    is_notification=True)
     user = (await bot.api.users.get(user_id))[0]
     states.set(m.from_id, Menu.MAIN)
     await m.answer(f"Анкета пользователя [id{user_id}|{user.first_name} {user.last_name}] отклонена",
-                        keyboard=await keyboards.main_menu(m.from_id))
+                   keyboard=await keyboards.main_menu(m.from_id))
 
 
 @bot.on.private_message(StateRule(Admin.MENU), PayloadRule({"admin_menu": "back"}))
 @bot.on.private_message(StateRule(Admin.MENU), text="назад")
 async def back_to_admin_menu(m: Message):
+    """Возврат в главное меню администратора"""
     states.set(m.from_id, Menu.MAIN)
     await m.answer(messages.main_menu, keyboard=await keyboards.main_menu(m.from_id))
 
@@ -172,6 +227,12 @@ async def back_to_admin_menu(m: Message):
 @bot.on.private_message(AdminRule(), text="/export")
 @bot.on.private_message(PayloadRule({"admin_menu": "export"}), AdminRule())
 async def export(m: Message):
+    """
+    Экспорт данных базы в Excel-файл
+
+    Args:
+        m: Сообщение с командой экспорта
+    """
     today = datetime.datetime.now().strftime("%Y.%m.%d %H.%M.%S")
     shutil.copy("template.xlsx", f"exports")
     wb = openpyxl.load_workbook(f"exports/template.xlsx")
@@ -200,17 +261,25 @@ async def export(m: Message):
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"quest_ready": bool,
                                                                               "request_id": int}))
 async def verify_quest(m: MessageEvent):
+    """
+    Проверка выполнения квеста пользователем
+
+    Args:
+        m: Событие с решением по квесту
+    """
     request_id = m.payload['request_id']
     checked = await db.select([db.ReadyQuest.is_checked]).where(db.ReadyQuest.id == request_id).gino.scalar()
     if checked:
         await m.edit_message("Другой администратор уже проверил этот запрос")
         return
-    form_id, quest_id = await db.select([db.ReadyQuest.form_id, db.ReadyQuest.quest_id]).where(db.ReadyQuest.id == request_id).gino.first()
+    form_id, quest_id = await db.select([db.ReadyQuest.form_id, db.ReadyQuest.quest_id]).where(
+        db.ReadyQuest.id == request_id).gino.first()
     form_name, user_id = await db.select([db.Form.name, db.Form.user_id]).where(db.Form.id == form_id).gino.first()
     user = (await bot.api.users.get(user_id=user_id))[0]
     user_name = f"{user.first_name} {user.last_name}"
     if m.payload['quest_ready']:
-        await db.ReadyQuest.update.values(is_checked=True, is_claimed=True).where(db.ReadyQuest.id == request_id).gino.status()
+        await db.ReadyQuest.update.values(is_checked=True, is_claimed=True).where(
+            db.ReadyQuest.id == request_id).gino.status()
         reward, name = await db.select([db.Quest.reward, db.Quest.name]).where(db.Quest.id == quest_id).gino.first()
         reply = f'Поздравляем с выполнением квеста «{name}»\nВам начислена награда:\n'
         await apply_reward(user_id, reward)
@@ -223,10 +292,13 @@ async def verify_quest(m: MessageEvent):
         await db.ReadyQuest.update.values(is_checked=True, is_claimed=False).where(
             db.ReadyQuest.id == request_id).gino.status()
         name = await db.select([db.Quest.name]).where(db.Quest.id == quest_id).gino.scalar()
-        await bot.api.messages.send(peer_id=m.user_id, message=f"К сожалению, администрация отклонила вам прохождение квеста «{name}»",
+        await bot.api.messages.send(peer_id=m.user_id,
+                                    message=f"К сожалению, администрация отклонила вам прохождение квеста «{name}»",
                                     is_notification=True)
         await m.edit_message(f"Квест «{name}» не засчитан игроку [id{user_id}|{form_name} / {user_name}]")
 
+
+# ... аналогичные функции для verify_target, accept/decline_salary_request, check_daylic ...
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"target_accept": bool, "request_id": int}))
 async def verify_target(m: MessageEvent):
@@ -325,6 +397,9 @@ async def check_daylic(m: MessageEvent):
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"freeze": str, "user_id": int}))
 async def accept_freeze(m: MessageEvent):
+    """
+    Принятие заявки на заморозку анкеты
+    """
     has_req = await db.select([db.Form.freeze_request]).where(db.Form.user_id == m.payload['user_id']).gino.scalar()
     if not has_req:
         await m.edit_message("Запрос уже принял другой администратор")
@@ -347,6 +422,9 @@ async def accept_freeze(m: MessageEvent):
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"delete": str, "user_id": int}))
 async def accept_delete(m: MessageEvent):
+    """
+    Принятие заявки на удаление анкеты
+    """
     has_req = await db.select([db.Form.delete_request]).where(db.Form.user_id == m.payload['user_id']).gino.scalar()
     if not has_req:
         await m.edit_message("Запрос уже принял другой администратор")
@@ -366,6 +444,9 @@ async def accept_delete(m: MessageEvent):
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_delete": int}), AdminRule())
 async def delete_form(m: MessageEvent):
+    """
+    Удаление анкеты
+    """
     user_id, name = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.id == m.payload['form_delete']).gino.first()
     user = (await bot.api.users.get(user_ids=user_id))[0]
     user_name = f"{user.first_name} {user.last_name}"
@@ -375,6 +456,9 @@ async def delete_form(m: MessageEvent):
 
 @bot.on.private_message(PayloadMapRule({"form_reputation": int}), StateRule(Menu.SHOW_FORM), AdminRule())
 async def form_reputation_all(m: Message):
+    """
+    Выводит список репутаций пользователя (в поиске анкеты)
+    """
     if m.payload:
         user_id = m.payload['form_reputation']
     else:
@@ -397,8 +481,13 @@ async def form_reputation_all(m: Message):
     await m.answer(reply, keyboard=keyboard)
 
 
+# Следующие некоторые хендлеры обрабатывают изменение, удаление, добавление репутации в меню поиска анкеты
+
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"reputation_add": int}), StateRule(Menu.SHOW_FORM), AdminRule())
 async def select_add_reputation(m: MessageEvent):
+    """
+    Отправляет выбор к какой фракции добавить репутацию
+    """
     user_id = m.payload['reputation_add']
     fractions_all = {x[0] for x in await db.select([db.Fraction.id]).gino.all()}
     fractions_user = {x[0] for x in await db.select([db.UserToFraction.fraction_id]).where(db.UserToFraction.user_id == user_id).gino.all()}
@@ -416,6 +505,9 @@ async def select_add_reputation(m: MessageEvent):
 
 @bot.on.private_message(StateRule(Admin.ADDING_REPUTATION), NumericRule(), AdminRule())
 async def add_reputation(m: Message):
+    """
+    Создает репутацию во факции
+    """
     user_id = int(states.get(m.from_id).split("*")[1])
     fractions_all = {x[0] for x in await db.select([db.Fraction.id]).gino.all()}
     fractions_user = {x[0] for x in await db.select([db.UserToFraction.fraction_id]).where(
@@ -435,6 +527,9 @@ async def add_reputation(m: Message):
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"reputation_edit": int}), StateRule(Menu.SHOW_FORM), AdminRule())
 async def select_fraction_to_edit_rep(m: MessageEvent):
+    """
+    Выводит список доступных фракций для изменения в них репутаций
+    """
     user_id = m.payload['reputation_edit']
     fractions = await db.select([db.UserToFraction.fraction_id, db.UserToFraction.reputation]).where(db.UserToFraction.user_id == user_id).order_by(db.UserToFraction.reputation.desc()).gino.all()
     reply = "Выберите номер фракции для редактирования:\n\n"
@@ -448,6 +543,9 @@ async def select_fraction_to_edit_rep(m: MessageEvent):
 
 @bot.on.private_message(StateRule(Admin.SELECT_USER_FRACTION), AdminRule())
 async def set_new_reputation(m: Message):
+    """
+    Отправляет сообщение об успешном выборе фракции для редактирования репутации и просит прислать новое значение репутации
+    """
     user_id = int(states.get(m.from_id).split("*")[1])
     fractions = await db.select([db.UserToFraction.fraction_id]).where(db.UserToFraction.user_id == user_id).order_by(db.UserToFraction.reputation.desc()).gino.all()
     if int(m.text) > len(fractions):
@@ -461,6 +559,9 @@ async def set_new_reputation(m: Message):
 
 @bot.on.private_message(StateRule(Admin.SET_NEW_REPUTATION), AdminRule())
 async def new_reputation(m: Message):
+    """
+    Устанавливает новое значение репутации
+    """
     try:
         int(m.text)
     except ValueError:
@@ -481,6 +582,9 @@ async def new_reputation(m: Message):
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"reputation_delete": int}), StateRule(Menu.SHOW_FORM), AdminRule())
 async def select_reputation_delete(m: MessageEvent):
+    """
+    Присылает выбор фракции для удаления у пользователя
+    """
     user_id = int(m.payload['reputation_delete'])
     fractions_user = await db.select([db.UserToFraction.fraction_id, db.UserToFraction.reputation]).where(db.UserToFraction.user_id == user_id).order_by(db.UserToFraction.reputation).gino.all()
     reply = f"Выберите фракцию для удаления репутации у пользователя {await create_mention(user_id)}\n\n"
@@ -494,6 +598,9 @@ async def select_reputation_delete(m: MessageEvent):
 
 @bot.on.private_message(StateRule(Admin.DELETE_USER_REPUTATION), NumericRule(), AdminRule())
 async def delete_reputation(m: Message, value: int):
+    """
+    Удаляет репутацию в выбранной фракции
+    """
     user_id = int(states.get(m.from_id).split("*")[1])
     fractions_user = [x[0] for x in await db.select([db.UserToFraction.fraction_id]).where(db.UserToFraction.user_id == user_id).order_by(db.UserToFraction.reputation).gino.all()]
     if value > len(fractions_user):
@@ -524,10 +631,19 @@ async def delete_reputation(m: Message, value: int):
     await form_reputation_all(m)
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'confirm_daughter_target_request': int}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'confirm_daughter_target_request': int}),
+                  AdminRule())
 async def confirm_daughter_target_request(m: MessageEvent):
+    """
+    Подтверждение выполнения дополнительной цели для статуса "Дочь❤"
+
+    Args:
+        m: Событие с ID запроса на подтверждение
+    """
     request_id = int(m.payload['confirm_daughter_target_request'])
-    data = await db.select([db.DaughterTargetRequest.target_id, db.DaughterTargetRequest.form_id, db.DaughterTargetRequest.confirmed]).where(db.DaughterTargetRequest.id == request_id).gino.first()
+    data = await db.select([db.DaughterTargetRequest.target_id, db.DaughterTargetRequest.form_id,
+                            db.DaughterTargetRequest.confirmed]).where(
+        db.DaughterTargetRequest.id == request_id).gino.first()
     if not data or data[2]:
         await m.edit_message('Данный запрос уже обработал другой администратор')
         return
@@ -536,7 +652,8 @@ async def confirm_daughter_target_request(m: MessageEvent):
     user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
     await apply_reward(user_id, reward)
     reward_text = await serialize_target_reward(reward)
-    await db.DaughterTargetRequest.update.values(confirmed=True).where(db.DaughterTargetRequest.id == request_id).gino.status()
+    await db.DaughterTargetRequest.update.values(confirmed=True).where(
+        db.DaughterTargetRequest.id == request_id).gino.status()
     target_name = await db.select([db.DaughterTarget.name]).where(db.DaughterTarget.id == target_id).gino.scalar()
     name = await db.select([db.Form.name]).where(db.Form.id == form_id).gino.scalar()
     user = (await bot.api.users.get(user_ids=user_id))[0]
@@ -548,8 +665,15 @@ async def confirm_daughter_target_request(m: MessageEvent):
                                 is_notification=True)
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'decline_daughter_target_request': int}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'decline_daughter_target_request': int}),
+                  AdminRule())
 async def decline_daughter_target(m: MessageEvent):
+    """
+    Отклонение выполнения дополнительной цели для статуса "Дочь❤"
+
+    Args:
+        m: Событие с ID запроса на отклонение
+    """
     request_id = int(m.payload['decline_daughter_target_request'])
     data = await db.select([db.DaughterTargetRequest.target_id, db.DaughterTargetRequest.form_id,
                             db.DaughterTargetRequest.confirmed]).where(

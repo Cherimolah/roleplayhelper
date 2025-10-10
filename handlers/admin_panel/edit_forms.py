@@ -1,3 +1,8 @@
+"""
+Модуль для редактирования анкет пользователей администратором.
+Содержит функции для изменения полей анкет, включая фото, профессии, статусы и другие параметры.
+"""
+
 import asyncio
 import datetime
 
@@ -18,6 +23,7 @@ from service.utils import loads_form, take_off_payments, reload_image
 
 @bot.on.private_message(StateRule(Admin.MENU), PayloadRule({"admin_menu": "edit_form"}), AdminRule())
 async def edit_users_forms(m: Message):
+    """Начало процесса редактирования анкет пользователей"""
     states.set(m.from_id, Admin.EDIT_FORMS)
     keyboard = Keyboard().add(
         Text("Назад", {"admin_forms_edit": "back"}), KeyboardButtonColor.NEGATIVE
@@ -27,8 +33,10 @@ async def edit_users_forms(m: Message):
 
 @bot.on.private_message(StateRule(Admin.EDIT_FORMS), AdminRule(), UserSpecified(Admin.EDIT_FORMS))
 async def search_form_for_edit(m: Message, form: tuple):
+    """Поиск и отображение анкеты для редактирования"""
     form_id, user_id = form
     states.set(m.from_id, f"{Admin.SELECT_FIELDS}*{form_id}")
+    # Загружаем анкету пользователя
     form, photo = await loads_form(user_id, m.from_id, form_id=form_id, absolute_params=True)
     await m.answer(form, photo)
     reply = messages.select_field
@@ -39,45 +47,51 @@ async def search_form_for_edit(m: Message, form: tuple):
 
 @bot.on.private_message(StateRule(Admin.SELECT_FIELDS), NumericRule(), AdminRule())
 async def send_select_fields(m: Message, value: int = None):
+    """Обработчик выбора поля для редактирования"""
     if value and not 0 < value <= len(fields):
         await m.answer("Указано неверное поле")
         return
     _, form_id = states.get(m.from_id).split("*")
     states.set(m.from_id, f"{Admin.ENTER_FIELD_VALUE}*{form_id}*{fields[value - 1].state}")
-    reply = messages.new_value_field.format(fields[value-1].name)
+    reply = messages.new_value_field.format(fields[value - 1].name)
     keyboard = None
-    if value == 2:
+
+    # Специальная обработка для разных типов полей
+    if value == 2:  # Профессии
         professions = await db.select([db.Profession.name]).order_by(db.Profession.id.asc()).gino.all()
         for i, prof in enumerate(professions):
             reply = f"{reply}{i + 1}. {prof.name}\n"
-    if value == 10:
+    if value == 10:  # Ориентация
         keyboard = keyboards.orientations
-    elif value == 15:
+    elif value == 15:  # Каюты
         cabins = await db.select([db.Cabins.name]).order_by(db.Cabins.id.asc()).gino.all()
         for i, cabin in enumerate(cabins):
-            reply = f"{reply}{i+1}. {cabin.name}\n"
-    elif value == 16:
+            reply = f"{reply}{i + 1}. {cabin.name}\n"
+    elif value == 16:  # Заморозка/разморозка
         keyboard = Keyboard().add(
             Text("Заморозить", {"freeze": True}), KeyboardButtonColor.NEGATIVE
         ).row().add(
             Text("Разморозить", {"freeze": False}), KeyboardButtonColor.POSITIVE
         )
-    elif value == 17:
+    elif value == 17:  # Статусы
         statuses = await db.select([db.Status.name]).order_by(db.Status.id.asc()).gino.all()
         for i, status in enumerate(statuses):
-            reply = f"{reply}{i+1}. {status.name}\n"
-    elif value == 18:
+            reply = f"{reply}{i + 1}. {status.name}\n"
+    elif value == 18:  # Фракции
         fractions = await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()
         for i, fraction in enumerate(fractions):
-            reply = f"{reply}{i+1}. {fraction.name}\n"
+            reply = f"{reply}{i + 1}. {fraction.name}\n"
     await m.answer(reply, keyboard=keyboard)
 
 
 @bot.on.private_message(StateRule(Admin.ENTER_FIELD_VALUE), AdminRule())
 async def enter_field_value(m: Message):
+    """Обработчик ввода нового значения для выбранного поля"""
     _, form_id, field = states.get(m.from_id).split("*")
     form_id = int(form_id)
     field = field.split('.')[1]
+
+    # Обработка разных типов полей
     if field == 'name':
         await db.Form.update.values(name=m.text).where(db.Form.id == form_id).gino.status()
         await db.Expeditor.update.values(name=m.text).where(db.Expeditor.form_id == form_id).gino.status()
@@ -86,6 +100,7 @@ async def enter_field_value(m: Message):
             await m.answer(messages.need_photo)
             return
         user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
+        # Обновляем фото
         photo = await reload_image(m.attachments[0], f"data/photo{user_id}{form_id}.jpg")
         await db.Form.update.values(photo=photo).where(db.Form.id == form_id).gino.status()
     elif field == "orientation":
@@ -98,7 +113,9 @@ async def enter_field_value(m: Message):
             await m.answer(messages.need_cabin_class)
             return
         value = int(m.text)
-        cabin_id, price = await db.select([db.Cabins.id, db.Cabins.cost]).order_by(db.Cabins.id.asc()).offset(value - 1).limit(1).gino.first()
+        cabin_id, price = await db.select([db.Cabins.id, db.Cabins.cost]).order_by(db.Cabins.id.asc()).offset(
+            value - 1).limit(1).gino.first()
+        # Обновляем тип каюты и баланс
         await db.Form.update.values(cabin_type=cabin_id,
                                     balance=db.Form.balance - price,
                                     last_payment=datetime.datetime.now()).where(db.Form.id == form_id).gino.status()
@@ -114,14 +131,15 @@ async def enter_field_value(m: Message):
             await m.answer("Необходимо указать число")
             return
         value = int(m.text)
-        profession_id = await db.select([db.Profession.id]).order_by(db.Profession.id.asc()).offset(value-1).gino.scalar()
+        profession_id = await db.select([db.Profession.id]).order_by(db.Profession.id.asc()).offset(
+            value - 1).gino.scalar()
         await db.Form.update.values(profession=profession_id).where(db.Form.id == form_id).gino.status()
     elif field == "status":
         if not m.text.isdigit():
             await m.answer("Необходимо указать число")
             return
         value = int(m.text)
-        status_id = await db.select([db.Status.id]).order_by(db.Status.id.asc()).offset(value-1).gino.scalar()
+        status_id = await db.select([db.Status.id]).order_by(db.Status.id.asc()).offset(value - 1).gino.scalar()
         await db.Form.update.values(status=status_id).where(db.Form.id == form_id).gino.status()
     elif field == "edit_fraction":
         if not m.text.isdigit():
@@ -149,11 +167,13 @@ async def enter_field_value(m: Message):
             return
         await db.Form.update.values(libido_level=value).where(db.Form.id == form_id).gino.status()
     else:
+        # Обработка простых текстовых полей
         if m.text.isdigit():
             value = int(m.text)
         else:
             value = m.text
         await db.Form.update.values(**{field: value}).where(db.Form.id == form_id).gino.status()
+
     keyboard = Keyboard().add(
         Text("Назад", {"admin_forms_edit": "back"}), KeyboardButtonColor.NEGATIVE
     )

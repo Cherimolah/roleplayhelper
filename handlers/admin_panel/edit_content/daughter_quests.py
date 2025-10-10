@@ -1,3 +1,8 @@
+"""
+Модуль для управления квестами дочерей в системе администратора.
+Содержит обработчики для создания, настройки и удаления квестов дочерей.
+"""
+
 from vkbottle.bot import Message, MessageEvent
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
 from vkbottle import Keyboard, Callback, KeyboardButtonColor, GroupEventType, Text
@@ -13,22 +18,53 @@ from service.states import Admin
 import service.keyboards as keyboards
 
 
-@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_DaughterQuest"), PayloadRule({"DaughterQuest": "add"}), AdminRule())
+@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_DaughterQuest"), PayloadRule({"DaughterQuest": "add"}),
+                        AdminRule())
 async def create_quest(m: Message):
+    """
+    Создание нового квеста для дочери.
+
+    Args:
+        m: Сообщение с payload {"DaughterQuest": "add"}
+
+    Действия:
+        1. Создает запись квеста в БД
+        2. Устанавливает состояние для ввода названия квеста
+    """
     quest = await db.DaughterQuest.create()
     states.set(m.from_id, f"{Admin.DAUGHTER_QUEST_NAME}*{quest.id}")
     await m.answer("Напишите название квеста", keyboard=Keyboard())
 
 
 @bot.on.private_message(StateRule(Admin.DAUGHTER_QUEST_NAME), AdminRule())
-@allow_edit_content('DaughterQuest', text='Имя успешно установлено. Укажите описание квеста:', state=Admin.DAUGHTER_QUEST_DESCRIPTION)
+@allow_edit_content('DaughterQuest', text='Имя успешно установлено. Укажите описание квеста:',
+                    state=Admin.DAUGHTER_QUEST_DESCRIPTION)
 async def daughter_quest_name(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка названия квеста дочери.
+
+    Args:
+        m: Сообщение с названием квеста
+        item_id: ID квеста
+        editing_content: Флаг редактирования
+    """
     await db.DaughterQuest.update.values(name=m.text).where(db.DaughterQuest.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.DAUGHTER_QUEST_DESCRIPTION), AdminRule())
 @allow_edit_content('DaughterQuest', state=Admin.DAUGHTER_QUEST_FORM_ID)
 async def daughter_quest_description(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка описания квеста дочери.
+
+    Args:
+        m: Сообщение с описанием квеста
+        item_id: ID квеста
+        editing_content: Флаг редактирования
+
+    Действия:
+        Показывает список дочерей для привязки квеста
+    """
     await db.DaughterQuest.update.values(description=m.text).where(db.DaughterQuest.id == item_id).gino.status()
     if not editing_content:
         reply, keyboard = await show_daughters_page(1)
@@ -36,8 +72,19 @@ async def daughter_quest_description(m: Message, item_id: int, editing_content: 
 
 
 async def show_daughters_page(page: int = 1) -> tuple[str, Keyboard]:
-    used_form_id = [x[0] for x in await db.select([db.DaughterQuest.to_form_id]).where(not_(db.DaughterQuest.to_form_id.is_(None))).gino.all()]
-    data = await db.select([db.Form.user_id, db.Form.name]).where(and_(db.Form.status == 2, db.Form.id.notin_(used_form_id))).order_by(
+    """
+    Показывает страницу со списком дочерей для привязки квеста.
+
+    Args:
+        page: Номер страницы
+
+    Returns:
+        Кортеж (текст сообщения, клавиатура)
+    """
+    used_form_id = [x[0] for x in await db.select([db.DaughterQuest.to_form_id]).where(
+        not_(db.DaughterQuest.to_form_id.is_(None))).gino.all()]
+    data = await db.select([db.Form.user_id, db.Form.name]).where(
+        and_(db.Form.status == 2, db.Form.id.notin_(used_form_id))).order_by(
         db.Form.id.asc()).offset((page - 1) * 15).limit(15).gino.all()
     user_ids = [x[0] for x in data]
     users = await bot.api.users.get(user_ids=user_ids)
@@ -47,7 +94,8 @@ async def show_daughters_page(page: int = 1) -> tuple[str, Keyboard]:
              'Список дочерей, у которых нет квестов:\n\n')
     for i in range(len(data)):
         reply += f'{(page - 1) * 15 + i + 1}. [id{users[i].id}|{data[i][1]} / {user_names[i]}]\n'
-    count = await db.select([func.count(db.Form.id)]).where(and_(db.Form.status == 2, db.Form.id.notin_(used_form_id))).gino.scalar()
+    count = await db.select([func.count(db.Form.id)]).where(
+        and_(db.Form.status == 2, db.Form.id.notin_(used_form_id))).gino.scalar()
     keyboard = Keyboard(inline=True)
     if count > 15:
         if page > 1:
@@ -61,14 +109,29 @@ async def show_daughters_page(page: int = 1) -> tuple[str, Keyboard]:
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"daughters_page": int}), AdminRule())
 async def daughters_page(e: MessageEvent):
+    """
+    Обработка переключения страниц списка дочерей.
+
+    Args:
+        e: Событие сообщения с номером страницы
+    """
     page = e.payload['daughters_page']
     reply, keyboard = await show_daughters_page(page)
     await e.edit_message(reply, keyboard=keyboard.get_json())
 
 
-@bot.on.private_message(StateRule(Admin.DAUGHTER_QUEST_FORM_ID), PayloadRule({"daughter_quest_for_none": True}), AdminRule())
+@bot.on.private_message(StateRule(Admin.DAUGHTER_QUEST_FORM_ID), PayloadRule({"daughter_quest_for_none": True}),
+                        AdminRule())
 @allow_edit_content('DaughterQuest', state=Admin.DAUGHTER_QUEST_REWARD)
 async def daughter_quest_without_form_id(m: Message, item_id: int, editing_content: bool):
+    """
+    Создание квеста без привязки к конкретной дочери.
+
+    Args:
+        m: Сообщение с payload
+        item_id: ID квеста
+        editing_content: Флаг редактирования
+    """
     await db.DaughterQuest.update.values(to_form_id=None).where(db.DaughterQuest.id == item_id).gino.status()
     if not editing_content:
         await m.answer((await info_target_reward())[0])
@@ -77,10 +140,21 @@ async def daughter_quest_without_form_id(m: Message, item_id: int, editing_conte
 @bot.on.private_message(StateRule(Admin.DAUGHTER_QUEST_FORM_ID), AdminRule())
 @allow_edit_content('DaughterQuest', state=Admin.DAUGHTER_QUEST_REWARD)
 async def daughter_quest_form_id(m: Message, item_id: int, editing_content: bool):
-    used_form_id = [x[0] for x in await db.select([db.DaughterQuest.to_form_id]).where(not_(db.DaughterQuest.to_form_id.is_(None))).gino.all()]
+    """
+    Привязка квеста к конкретной дочери.
+
+    Args:
+        m: Сообщение с идентификатором дочери
+        item_id: ID квеста
+        editing_content: Флаг редактирования
+    """
+    used_form_id = [x[0] for x in await db.select([db.DaughterQuest.to_form_id]).where(
+        not_(db.DaughterQuest.to_form_id.is_(None))).gino.all()]
     if m.text.isdigit():
         number = int(m.text)
-        user_id = await db.select([db.Form.user_id]).where(and_(db.Form.status == 2, db.Form.id.notin_(used_form_id))).order_by(db.Form.id.asc()).offset(number-1).limit(1).gino.scalar()
+        user_id = await db.select([db.Form.user_id]).where(
+            and_(db.Form.status == 2, db.Form.id.notin_(used_form_id))).order_by(db.Form.id.asc()).offset(
+            number - 1).limit(1).gino.scalar()
         if not user_id:
             raise FormatDataException('Не найдено анкеты по порядковому номеру')
     else:
@@ -94,7 +168,8 @@ async def daughter_quest_form_id(m: Message, item_id: int, editing_content: bool
     if status != 2:
         raise FormatDataException('У пользователя отсутствует статус дочь')
     if form_id in used_form_id:
-        quest_name = await db.select([db.DaughterQuest.name]).where(db.DaughterQuest.to_form_id == form_id).gino.scalar()
+        quest_name = await db.select([db.DaughterQuest.name]).where(
+            db.DaughterQuest.to_form_id == form_id).gino.scalar()
         raise FormatDataException(f'Для этой дочери установлен квест «{quest_name}»')
     await db.DaughterQuest.update.values(to_form_id=form_id).where(db.DaughterQuest.id == item_id).gino.status()
     if not editing_content:
@@ -104,6 +179,14 @@ async def daughter_quest_form_id(m: Message, item_id: int, editing_content: bool
 @bot.on.private_message(StateRule(Admin.DAUGHTER_QUEST_REWARD), AdminRule())
 @allow_edit_content('DaughterQuest', state=Admin.DAUGHTER_QUEST_PENALTY)
 async def daughter_quest_reward(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка награды за выполнение квеста.
+
+    Args:
+        m: Сообщение с описанием награды
+        item_id: ID квеста
+        editing_content: Флаг редактирования
+    """
     data = await parse_reward(m.text)
     await db.DaughterQuest.update.values(reward=data).where(db.DaughterQuest.id == item_id).gino.status()
     if not editing_content:
@@ -114,6 +197,14 @@ async def daughter_quest_reward(m: Message, item_id: int, editing_content: bool)
 @bot.on.private_message(StateRule(Admin.DAUGHTER_QUEST_PENALTY), PayloadRule({"without_penalty": True}), AdminRule())
 @allow_edit_content('DaughterQuest', state=Admin.DAUGHTER_QUEST_TARGET_IDS)
 async def daughter_penalty(m: Message, item_id: int, editing_content: bool):
+    """
+    Создание квеста без штрафных санкций.
+
+    Args:
+        m: Сообщение с payload
+        item_id: ID квеста
+        editing_content: Флаг редактирования
+    """
     await db.DaughterQuest.update.values(penalty=None).where(db.DaughterQuest.id == item_id).gino.status()
     if not editing_content:
         reply = ('Укажите доп. цели, через запятую, которые будут появляться по мере нарастания параметров.\n\n'
@@ -126,6 +217,14 @@ async def daughter_penalty(m: Message, item_id: int, editing_content: bool):
 @bot.on.private_message(StateRule(Admin.DAUGHTER_QUEST_PENALTY), AdminRule())
 @allow_edit_content('DaughterQuest', state=Admin.DAUGHTER_QUEST_TARGET_IDS)
 async def daughter_penalty(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка штрафных санкций за невыполнение квеста.
+
+    Args:
+        m: Сообщение с описанием штрафа
+        item_id: ID квеста
+        editing_content: Флаг редактирования
+    """
     data = await parse_reward(m.text)
     await db.DaughterQuest.update.values(penalty=data).where(db.DaughterQuest.id == item_id).gino.status()
     if not editing_content:
@@ -137,10 +236,21 @@ async def daughter_penalty(m: Message, item_id: int, editing_content: bool):
 
 
 async def show_daughter_target_page(page: int = 1) -> tuple[str, Keyboard | None]:
-    data = await db.select([db.DaughterTarget.name, db.DaughterTarget.params]).order_by(db.DaughterTarget.id.asc()).offset((page - 1) * 15).limit(15).gino.all()
+    """
+    Показывает страницу со списком дополнительных целей.
+
+    Args:
+        page: Номер страницы
+
+    Returns:
+        Кортеж (текст сообщения, клавиатура)
+    """
+    data = await db.select([db.DaughterTarget.name, db.DaughterTarget.params]).order_by(
+        db.DaughterTarget.id.asc()).offset((page - 1) * 15).limit(15).gino.all()
     if not data:
         reply = 'На данный момент не создано доп. целей'
-        return reply, Keyboard(inline=True).add(Text('Без доп. целей', {"without_targets": True}), KeyboardButtonColor.SECONDARY)
+        return reply, Keyboard(inline=True).add(Text('Без доп. целей', {"without_targets": True}),
+                                                KeyboardButtonColor.SECONDARY)
     reply = '{номер}. {название} / {либидо} {правило} {подчинение}\n\n'
     count = await db.select([func.count(db.DaughterTarget.id)]).gino.scalar()
     for i in range(len(data)):
@@ -162,6 +272,12 @@ async def show_daughter_target_page(page: int = 1) -> tuple[str, Keyboard | None
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"daughter_targets": int}), AdminRule())
 async def daughter_targets_page(m: MessageEvent):
+    """
+    Обработка переключения страниц списка дополнительных целей.
+
+    Args:
+        m: Событие сообщения с номером страницы
+    """
     page = m.payload['daughter_targets']
     reply, keyboard = await show_daughter_target_page(page)
     await m.edit_message(reply, keyboard=keyboard.get_json())
@@ -170,12 +286,28 @@ async def daughter_targets_page(m: MessageEvent):
 @bot.on.private_message(StateRule(Admin.DAUGHTER_QUEST_TARGET_IDS), PayloadRule({"without_targets": True}), AdminRule())
 @allow_edit_content('DaughterQuest', end=True, text='Квест для дочери успешно создан')
 async def daughter_target_ids(m: Message, item_id: int, editing_content: bool):
+    """
+    Создание квеста без дополнительных целей.
+
+    Args:
+        m: Сообщение с payload
+        item_id: ID квеста
+        editing_content: Флаг редактирования
+    """
     await db.DaughterQuest.update.values(target_ids=[]).where(db.DaughterQuest.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.DAUGHTER_QUEST_TARGET_IDS), AdminRule())
 @allow_edit_content('DaughterQuest', end=True, text='Квест для дочери успешно создан')
 async def daughter_target_ids(m: Message, item_id: int, editing_content: bool):
+    """
+    Привязка дополнительных целей к квесту.
+
+    Args:
+        m: Сообщение со списком номеров целей
+        item_id: ID квеста
+        editing_content: Флаг редактирования
+    """
     text = m.text.replace(" ", '')
     try:
         target_numbers = list(map(int, text.split(",")))
@@ -185,13 +317,24 @@ async def daughter_target_ids(m: Message, item_id: int, editing_content: bool):
     for n in target_numbers:
         if n <= 0 or n > count:
             raise FormatDataException(f'Номера должны быть от 1 до {count}')
-    target_ids_all = [x[0] for x in await db.select([db.DaughterTarget.id]).order_by(db.DaughterTarget.id.asc()).gino.all()]
+    target_ids_all = [x[0] for x in
+                      await db.select([db.DaughterTarget.id]).order_by(db.DaughterTarget.id.asc()).gino.all()]
     target_ids = [target_ids_all[n - 1] for n in target_numbers]
     await db.DaughterQuest.update.values(target_ids=target_ids).where(db.DaughterQuest.id == item_id).gino.status()
 
 
-@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_DaughterQuest"), PayloadRule({"DaughterQuest": "delete"}), AdminRule())
+@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_DaughterQuest"), PayloadRule({"DaughterQuest": "delete"}),
+                        AdminRule())
 async def select_delete_quest(m: Message):
+    """
+    Выбор квеста для удаления.
+
+    Args:
+        m: Сообщение с payload {"DaughterQuest": "delete"}
+
+    Действия:
+        Показывает список всех квестов для выбора
+    """
     quests = await db.select([db.DaughterQuest.name]).order_by(db.DaughterQuest.id.asc()).gino.all()
     if not quests:
         return "Квесты ещё не созданы"
@@ -204,9 +347,16 @@ async def select_delete_quest(m: Message):
 
 @bot.on.private_message(StateRule(Admin.DAUGHTER_QUEST_DELETE), NumericRule(), AdminRule())
 async def delete_quest(m: Message, value: int):
-    quest_id = await db.select([db.DaughterQuest.id]).order_by(db.DaughterQuest.id.asc()).offset(value - 1).limit(1).gino.scalar()
+    """
+    Удаление выбранного квеста.
+
+    Args:
+        m: Сообщение с номером квеста
+        value: Номер квеста в списке
+    """
+    quest_id = await db.select([db.DaughterQuest.id]).order_by(db.DaughterQuest.id.asc()).offset(value - 1).limit(
+        1).gino.scalar()
     await db.DaughterQuest.delete.where(db.DaughterQuest.id == quest_id).gino.status()
     states.set(m.peer_id, f"{Admin.SELECT_ACTION}_DaughterQuest")
     await m.answer("Квест успешно удалён", keyboard=keyboards.gen_type_change_content("DaughterQuest"))
     await send_content_page(m, "DaughterQuest", 1)
-

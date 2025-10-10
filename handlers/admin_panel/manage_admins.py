@@ -1,3 +1,8 @@
+"""
+Модуль для управления администраторами и судьями системы.
+Позволяет добавлять и удалять администраторов, назначать судей.
+"""
+
 from vkbottle.bot import Message
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
 from vkbottle import Keyboard, Text, KeyboardButtonColor
@@ -17,6 +22,7 @@ from handlers.admin_panel.users_list import send_administrators
 @bot.on.private_message(StateRule(Admin.ENTER_OLD_ADMIN_ID), PayloadRule({"manage_admins": "add_admin"}))
 @bot.on.private_message(StateRule(Admin.ENTER_NEW_ADMIN_ID), PayloadRule({"manage_admins": "add_admin"}))
 async def enter_new_admin_id(m: Message):
+    """Начало процесса добавления нового администратора"""
     states.set(m.from_id, Admin.ENTER_NEW_ADMIN_ID)
     keyboard = Keyboard().add(
         Text('Назад', {'manage_judge': 'back'}), KeyboardButtonColor.NEGATIVE
@@ -26,6 +32,7 @@ async def enter_new_admin_id(m: Message):
 
 @bot.on.private_message(StateRule(Admin.ENTER_NEW_ADMIN_ID), AdminRule())
 async def ask_new_admin(m: Message):
+    """Запрос подтверждения для нового администратора"""
     user_id = await get_mention_from_message(m)
     user = await bot.api.users.get(user_id)
     if not user_id:
@@ -43,6 +50,7 @@ async def ask_new_admin(m: Message):
 
 @bot.on.private_message(StateRule(Admin.CONFIRM_NEW_ADMIN_ID), PayloadMapRule({"new_admin": int}), AdminRule())
 async def add_new_admin(m: Message):
+    """Добавление нового администратора"""
     user_id = m.payload['new_admin']
     await db.User.update.values(admin=1).where(db.User.user_id == int(user_id)).gino.status()
     states.set(m.from_id, Admin.SELECT_MANAGE_ADMINS)
@@ -53,6 +61,7 @@ async def add_new_admin(m: Message):
 
 @bot.on.private_message(StateRule(Admin.SELECT_MANAGE_ADMINS), PayloadRule({"manage_admins": "delete_admins"}))
 async def delete_old_admin(m: Message):
+    """Начало процесса удаления администратора"""
     states.set(m.from_id, Admin.ENTER_OLD_ADMIN_ID)
     keyboard = Keyboard().add(
         Text('Назад', {'manage_judge': 'back'}), KeyboardButtonColor.NEGATIVE
@@ -62,6 +71,7 @@ async def delete_old_admin(m: Message):
 
 @bot.on.private_message(StateRule(Admin.ENTER_OLD_ADMIN_ID), AdminRule())
 async def ask_old_admin(m: Message):
+    """Запрос подтверждения для удаления администратора"""
     user_id = await get_mention_from_message(m)
     user = await bot.api.users.get(user_id)
     if not user_id:
@@ -79,6 +89,7 @@ async def ask_old_admin(m: Message):
 
 @bot.on.private_message(StateRule(Admin.CONFIRM_OLD_ADMIN_ID), PayloadMapRule({"old_admin": int}), AdminRule())
 async def delete_old_admin_(m: Message):
+    """Удаление администратора"""
     user_id = m.payload['old_admin']
     await db.User.update.values(admin=0).where(db.User.user_id == int(user_id)).gino.status()
     states.set(m.from_id, Admin.SELECT_MANAGE_ADMINS)
@@ -89,6 +100,7 @@ async def delete_old_admin_(m: Message):
 
 @bot.on.private_message(StateRule(Admin.SELECT_MANAGE_ADMINS), PayloadRule({"manage_admins": "add_judge"}), AdminRule())
 async def select_judge_to_add(m: Message):
+    """Начало процесса добавления судьи"""
     states.set(m.from_id, Admin.ADD_JUDGE)
     keyboard = Keyboard().add(
         Text('Назад', {'manage_judge': 'back'}), KeyboardButtonColor.NEGATIVE
@@ -99,6 +111,7 @@ async def select_judge_to_add(m: Message):
 
 @bot.on.private_message(StateRule(Admin.ADD_JUDGE), AdminRule())
 async def ask_new_admin(m: Message):
+    """Запрос подтверждения для нового судьи"""
     user_id = await get_mention_from_message(m)
     user = (await bot.api.users.get(user_id))[0]
     if not user_id:
@@ -116,6 +129,7 @@ async def ask_new_admin(m: Message):
 
 @bot.on.private_message(StateRule(Admin.ENTER_NEW_JUDGE), PayloadMapRule({"new_judge": int}), AdminRule())
 async def create_new_judge(m: Message):
+    """Добавление нового судьи"""
     user_id = m.payload['new_judge']
     await db.User.update.values(judge=True).where(db.User.user_id == user_id).gino.status()
     name = await db.select([db.Form.name]).where(db.User.user_id == user_id).gino.scalar()
@@ -126,6 +140,7 @@ async def create_new_judge(m: Message):
 
 @bot.on.private_message(StateRule(Admin.SELECT_MANAGE_ADMINS), PayloadRule({'manage_admins': 'delete_judge'}))
 async def delete_old_admin(m: Message):
+    """Начало процесса удаления судьи"""
     states.set(m.from_id, Admin.DELETE_JUDGE)
     keyboard = Keyboard().add(
         Text('Назад', {'manage_judge': 'back'}), KeyboardButtonColor.NEGATIVE
@@ -136,6 +151,7 @@ async def delete_old_admin(m: Message):
 
 @bot.on.private_message(StateRule(Admin.DELETE_JUDGE), AdminRule())
 async def ask_old_admin(m: Message):
+    """Запрос подтверждения для удаления судьи"""
     user_id = await get_mention_from_message(m)
     user = (await bot.api.users.get(user_id))[0]
     if not user_id:
@@ -155,6 +171,7 @@ async def ask_old_admin(m: Message):
 
 @bot.on.private_message(StateRule(Admin.ENTER_OLD_JUDGE), PayloadMapRule({"old_judge": int}), AdminRule())
 async def delete_old_admin_(m: Message):
+    """Удаление судьи"""
     user_id = m.payload['old_judge']
     await db.User.update.values(judge=False).where(db.User.user_id == user_id).gino.status()
     name = await db.select([db.Form.name]).where(db.User.user_id == user_id).gino.scalar()

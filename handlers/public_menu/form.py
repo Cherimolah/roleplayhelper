@@ -1,3 +1,8 @@
+"""
+Модуль управления анкетами пользователей.
+Включает просмотр, редактирование анкет и управление элементами кают.
+"""
+
 from typing import Tuple
 
 from vkbottle.bot import Message, MessageEvent
@@ -19,27 +24,48 @@ from handlers.questions import q1
 
 
 async def load_forms_page(page) -> Tuple[str, Keyboard]:
-    data = await db.select([db.Form.user_id, db.Form.name]).where(and_(db.Form.is_request.is_(False), db.Form.user_id != 32650977)).limit(15).offset((page - 1) * 15).order_by(db.Form.id.asc()).gino.all()
-    count = await db.select([func.count(db.Form.id)]).where(and_(db.Form.is_request.is_(False), db.Form.user_id != 32650977)).gino.scalar()
+    """
+    Загрузка страницы со списком анкет пользователей.
+
+    Args:
+        page: Номер страницы
+
+    Returns:
+        Tuple[str, Keyboard]: Текст сообщения и клавиатура пагинации
+    """
+    data = await db.select([db.Form.user_id, db.Form.name]).where(
+        and_(db.Form.is_request.is_(False), db.Form.user_id != 32650977)).limit(15).offset(
+        (page - 1) * 15).order_by(db.Form.id.asc()).gino.all()
+    count = await db.select([func.count(db.Form.id)]).where(
+        and_(db.Form.is_request.is_(False), db.Form.user_id != 32650977)).gino.scalar()
+
+    # Расчет количества страниц
     if count % 15 == 0:
         pages = count // 15
     else:
         pages = count // 15 + 1
+
     reply = f"Список анкет пользователей:\n\n"
     user_ids = [x[0] for x in data]
     names = [x[1] for x in data]
     user_names = [f"{x.first_name} {x.last_name}" for x in await bot.api.users.get(user_ids=user_ids)]
     data = list(zip(range(len(user_names)), user_ids, names, user_names))
+
+    # Формирование списка анкет
     for i, user_id, name, user_name in data:
         reply += f"{(page - 1) * 15 + i + 1}. [id{user_id}|{user_name} / {name}]\n"
+
     reply += "\nДля просмотра анкеты отправьте номер из списка"
     reply += ("\n⚠ Вы можете отправить ссылку/айди/имя в игре/пересланное сообщение/упоминание участника, "
               "анкету которого вы хотите найти")
+
+    # Создание клавиатуры пагинации
     if page == 1 and page == pages:
         keyboard = None
     else:
         keyboard = Keyboard(inline=True)
         reply += f"\n\nСтраница {page}/{pages}"
+
     if page > 1:
         keyboard.add(
             Callback("<-", {"forms_page": page - 1}), KeyboardButtonColor.PRIMARY
@@ -56,13 +82,16 @@ async def load_forms_page(page) -> Tuple[str, Keyboard]:
 @bot.on.private_message(PayloadRule({"cabins_menu": "back"}), StateRule(Menu.CABINS_MENU))
 @bot.on.private_message(PayloadRule({'form': 'decline_new_expeditor'}), StateRule(Menu.CONFIRM_NEW_EXPEDITOR))
 async def send_form(m: Message):
+    """Отправка анкеты пользователя."""
     form, photo = await loads_form(m.from_id, m.from_id)
     states.set(m.from_id, Menu.SHOW_FORM)
-    await m.answer(f"Ваша анкета:\n\n{form}", attachment=photo, keyboard=await keyboards.generate_form_activity(m.from_id))
+    await m.answer(f"Ваша анкета:\n\n{form}", attachment=photo,
+                   keyboard=await keyboards.generate_form_activity(m.from_id))
 
 
 @bot.on.private_message(PayloadRule({'form': 'clear_daughter_params'}), StateRule(Menu.SHOW_FORM))
 async def ask_clear_daughter(m: Message):
+    """Запрос подтверждения сброса параметров дочерей."""
     reply = 'Вы действительно хотите перезаполнить вопросы для дочерей?'
     keyboard = Keyboard(inline=True).add(
         Callback('Подтвердить', {'form': 'renew_daughter'}), KeyboardButtonColor.POSITIVE
@@ -74,7 +103,9 @@ async def ask_clear_daughter(m: Message):
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadRule({'form': 'renew_daughter'}))
 async def confirm_renew_daughter(m: MessageEvent):
-    await db.Form.update.values(is_request=True, libido_bonus=0, subordination_bonus=0).where(db.Form.user_id == m.user_id).gino.status()
+    """Подтверждение сброса параметров дочерей."""
+    await db.Form.update.values(is_request=True, libido_bonus=0, subordination_bonus=0).where(
+        db.Form.user_id == m.user_id).gino.status()
     await db.User.update.values(editing_form=True).where(db.Form.user_id == m.user_id).gino.status()
     await m.edit_message('Заполняются заново вопросы', keyboard=Keyboard().get_json())
     await q1(m)
@@ -82,17 +113,20 @@ async def confirm_renew_daughter(m: MessageEvent):
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadRule({'form': 'decline_renew_daughter'}))
 async def decline_renew_daughter(m: MessageEvent):
+    """Отмена сброса параметров дочерей."""
     await m.edit_message('Отменено перезаполнение вопросов дочерей')
 
 
 @bot.on.private_message(PayloadRule({"form": "search"}), StateRule(Menu.SHOW_FORM))
 async def search_form(m: Message):
+    """Поиск анкет других пользователей."""
     reply, keyboard = await load_forms_page(1)
     await m.answer(reply, keyboard=keyboard)
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"forms_page": int}))
 async def map_form(m: MessageEvent):
+    """Переключение страниц списка анкет."""
     reply, keyboard = await load_forms_page(m.payload['forms_page'])
     await m.edit_message(message=reply, keyboard=keyboard.get_json())
 
@@ -100,7 +134,9 @@ async def map_form(m: MessageEvent):
 @bot.on.private_message(StateRule(Menu.SHOW_FORM), PayloadRule({"form": "edit"}))
 @bot.on.private_message(StateRule(Menu.EDIT_FIELDS), PayloadRule({"form": "edit"}))
 async def send_form_edit(m: Message, new=True):
-    request_exist = await db.select([db.Form.id]).where(and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))).gino.scalar()
+    """Начало редактирования анкеты."""
+    request_exist = await db.select([db.Form.id]).where(
+        and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))).gino.scalar()
     if request_exist:
         await m.answer('У вас уже есть отправленная анкета на проверке!')
         return
@@ -109,16 +145,23 @@ async def send_form_edit(m: Message, new=True):
 
 @bot.on.private_message(StateRule(Menu.SELECT_FIELD_EDIT_NUMBER), PayloadRule({"form_edit": "confirm"}))
 async def confirm_edit_fields(m: Message):
-    form_id = await db.select([db.Form.id]).where(and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))).gino.scalar()
+    """Подтверждение редактирования полей анкеты."""
+    form_id = await db.select([db.Form.id]).where(
+        and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))).gino.scalar()
     admins = await get_admin_ids()
     user = await m.get_user()
+
+    # Уведомление администраторов об изменениях
     for admin_id in admins:
         form, photo = await loads_form(m.from_id, admin_id, is_request=True)
-        await bot.api.messages.send(peer_id=admin_id,
-                                        message=f'Пользователь [id{user.id}|{user.first_name} {user.last_name}] '
-                                                f'отредактировал некоторые поля в своей анкете')
+        await bot.api.messages.send(
+            peer_id=admin_id,
+            message=f'Пользователь [id{user.id}|{user.first_name} {user.last_name}] '
+                    f'отредактировал некоторые поля в своей анкете'
+        )
         await bot.api.messages.send(peer_id=admin_id, message=form, attachment=photo,
                                     keyboard=keyboards.create_accept_form(form_id))
+
     states.set(m.from_id, Menu.MAIN)
     await db.User.update.values(editing_form=False).where(db.User.user_id == m.from_id).gino.scalar()
     await m.answer("Новая версия анкеты успешно отправлена на проверку")
@@ -127,6 +170,7 @@ async def confirm_edit_fields(m: Message):
 
 @bot.on.private_message(StateRule(Menu.SELECT_FIELD_EDIT_NUMBER), PayloadRule({"form_edit": "decline"}))
 async def decline_edit_fields(m: Message):
+    """Отмена редактирования анкеты."""
     await db.User.update.values(editing_form=False).where(db.User.user_id == m.from_id).gino.scalar()
     await db.Form.delete.where(and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))).gino.status()
     await m.answer("Изменения отклонены")
@@ -135,10 +179,14 @@ async def decline_edit_fields(m: Message):
 
 @bot.on.private_message(StateRule(Menu.SELECT_FIELD_EDIT_NUMBER), NumericRule())
 async def select_field_edit(m: Message, value: int = None):
+    """Выбор поля анкеты для редактирования."""
     if not 1 <= value <= len(fields):
         return "Номер поля неверный"
-    states.set(m.from_id, fields[value-1].state)
-    field = fields[value-1].name
+
+    states.set(m.from_id, fields[value - 1].state)
+    field = fields[value - 1].name
+
+    # Обработка специальных полей
     if field == "Должность":
         professions = await db.select([db.Profession.name]).where(db.Profession.special.is_(False)).gino.all()
         reply = "Выберите профессию\n\n"
@@ -153,23 +201,29 @@ async def select_field_edit(m: Message, value: int = None):
         reply, kb, photo = await page_fractions(1)
         await m.answer(reply, keyboard=kb, attachment=photo)
     else:
-        await m.answer(f"Введите новое значение для поля {fields[value-1].name}:")
+        await m.answer(f"Введите новое значение для поля {fields[value - 1].name}:")
 
 
 @bot.on.private_message(PayloadRule({"form": "cabins"}), StateRule(Menu.SHOW_FORM))
 async def form_cabins(m: Message):
+    """Отображение информации о каюте пользователя."""
     decor_slots = await db.select([db.Cabins.decor_slots]).select_from(
         db.Form.join(db.Cabins, db.Form.cabin_type == db.Cabins.id)
     ).where(db.Form.user_id == m.from_id).gino.scalar()
     func_slots = await db.select([db.Cabins.functional_slots]).select_from(
         db.Form.join(db.Cabins, db.Form.cabin_type == db.Cabins.id)
     ).where(db.Form.user_id == m.from_id).gino.scalar()
+
+    # Получение декора и функциональных товаров
     decor = await db.select([db.Decor.name]).select_from(
         db.UserDecor.join(db.Decor, db.Decor.id == db.UserDecor.decor_id)
-    ).where(and_(db.UserDecor.user_id == m.from_id, db.Decor.is_func.is_(False))).order_by(db.UserDecor.id.asc()).gino.all()
+    ).where(and_(db.UserDecor.user_id == m.from_id, db.Decor.is_func.is_(False))).order_by(
+        db.UserDecor.id.asc()).gino.all()
     func_products = await db.select([db.Decor.name]).select_from(
         db.UserDecor.join(db.Decor, db.Decor.id == db.UserDecor.decor_id)
-    ).where(and_(db.UserDecor.user_id == m.from_id, db.Decor.is_func.is_(True))).order_by(db.UserDecor.id.asc()).gino.all()
+    ).where(and_(db.UserDecor.user_id == m.from_id, db.Decor.is_func.is_(True))).order_by(
+        db.UserDecor.id.asc()).gino.all()
+
     reply = f"Информация по прокачке номера:\n\nДекор\nСлотов: {len(decor)}/{decor_slots}\n"
     for i, decor in enumerate(decor):
         reply = f"{reply}{i + 1}. {decor.name}\n"
@@ -177,6 +231,7 @@ async def form_cabins(m: Message):
     reply += f"Функциональные товары\nСлотов: {len(func_products)}/{func_slots}\n"
     for i, func_slot in enumerate(func_products):
         reply = f"{reply}{i + 1}. {func_slot.name}\n"
+
     states.set(m.from_id, Menu.CABINS_MENU)
     await m.answer(reply, keyboard=keyboards.cabins_menu)
 
@@ -184,15 +239,20 @@ async def form_cabins(m: Message):
 @bot.on.private_message(PayloadRule({"cabins": "decor"}), StateRule(Menu.CABINS_MENU))
 @bot.on.private_message(PayloadRule({"cabins": "func_products"}), StateRule(Menu.CABINS_MENU))
 async def cabins_decor(m: Message):
+    """Просмотр декора или функциональных товаров в каюте."""
     is_func = m.payload['cabins'] == "func_products"
     decor = await db.select([*db.Decor]).select_from(
         db.UserDecor.join(db.Decor, db.Decor.id == db.UserDecor.decor_id)
-    ).where(and_(db.UserDecor.user_id == m.from_id, db.Decor.is_func.is_(is_func))).order_by(db.UserDecor.id.asc()).limit(1).gino.first()
+    ).where(and_(db.UserDecor.user_id == m.from_id, db.Decor.is_func.is_(is_func))).order_by(
+        db.UserDecor.id.asc()).limit(1).gino.first()
+
     if not decor:
         return "На данный момент у вас нет декора"
+
     count = await db.select([func.count(db.UserDecor.id)]).select_from(
         db.UserDecor.join(db.Decor, db.Decor.id == db.UserDecor.decor_id)
     ).where(and_(db.UserDecor.user_id == m.from_id, db.Decor.is_func.is_(is_func))).gino.scalar()
+
     kb = Keyboard(inline=True)
     if count > 1:
         kb.add(
@@ -201,6 +261,7 @@ async def cabins_decor(m: Message):
     kb.add(
         Callback("Удалить", {"decor_form_delete": 1, "is_func": is_func}), KeyboardButtonColor.NEGATIVE
     )
+
     reply = (f"Слот 1/{count}\n"
              f"Название: {decor.name}\n"
              f"Цена: {decor.price}\n"
@@ -212,14 +273,18 @@ async def cabins_decor(m: Message):
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"decor_form_page": int, "is_func": bool}))
 async def decor_form_page(m: MessageEvent):
+    """Переключение страниц с декором/функциональными товарами."""
     page = int(m.payload['decor_form_page'])
     is_func = m.payload['is_func']
     decor = await db.select([*db.Decor]).select_from(
         db.UserDecor.join(db.Decor, db.Decor.id == db.UserDecor.decor_id)
-    ).where(and_(db.UserDecor.user_id == m.user_id, db.Decor.is_func.is_(is_func))).order_by(db.UserDecor.id.asc()).offset(page - 1).limit(1).gino.first()
+    ).where(and_(db.UserDecor.user_id == m.user_id, db.Decor.is_func.is_(is_func))).order_by(
+        db.UserDecor.id.asc()).offset(page - 1).limit(1).gino.first()
+
     count = await db.select([func.count(db.UserDecor.id)]).select_from(
         db.UserDecor.join(db.Decor, db.Decor.id == db.UserDecor.decor_id)
     ).where(and_(db.UserDecor.user_id == m.user_id, db.Decor.is_func.is_(is_func))).gino.scalar()
+
     kb = Keyboard(inline=True)
     if page > 1:
         kb.add(
@@ -233,6 +298,7 @@ async def decor_form_page(m: MessageEvent):
     kb.add(
         Callback("Удалить", {"decor_form_delete": page, "is_func": is_func}), KeyboardButtonColor.NEGATIVE
     )
+
     reply = (f"Слот 1/{count}\n"
              f"Название: {decor.name}\n"
              f"Цена: {decor.price}\n"
@@ -242,25 +308,35 @@ async def decor_form_page(m: MessageEvent):
     await m.edit_message(reply, keyboard=kb.get_json(), attachment=decor.photo)
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"decor_form_delete": int, "is_func": bool}))
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent,
+                  PayloadMapRule({"decor_form_delete": int, "is_func": bool}))
 async def delete_decor(m: MessageEvent):
+    """Удаление декора/функционального товара из каюты."""
     page = int(m.payload['decor_form_delete'])
     is_func = m.payload['is_func']
     user_decor_id, decor_id = await db.select([db.UserDecor.id, db.UserDecor.decor_id]).where(
-        and_(db.UserDecor.user_id == m.user_id, db.Decor.is_func.is_(is_func))).order_by(db.UserDecor.id.asc()).offset(page - 1).limit(1).gino.first()
+        and_(db.UserDecor.user_id == m.user_id, db.Decor.is_func.is_(is_func))).order_by(
+        db.UserDecor.id.asc()).offset(page - 1).limit(1).gino.first()
     decor_name = await db.select([db.Decor.name]).where(db.Decor.id == decor_id).gino.scalar()
+
     await db.UserDecor.delete.where(db.UserDecor.id == user_decor_id).gino.status()
+
+    # Уведомление администраторов об удалении
     admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
     user = (await bot.api.users.get(user_id=m.user_id))[0]
     name = await db.select([db.Form.name]).where(db.Form.user_id == m.user_id).gino.scalar()
-    await bot.api.messages.send(peer_ids=admins,
-                                message=f"Пользователь [id{m.user_id}|{user.first_name} {user.last_name} / {name}] "
-                                        f"удалил {'декор' if not is_func else 'функциональный товар'} «{decor_name}»")
-    await m.edit_message(f"{'Декор' if not is_func else 'Функциональный товар'} «{decor_name}» был удалён из вашей каюты!")
+    await bot.api.messages.send(
+        peer_ids=admins,
+        message=f"Пользователь [id{m.user_id}|{user.first_name} {user.last_name} / {name}] "
+                f"удалил {'декор' if not is_func else 'функциональный товар'} «{decor_name}»"
+    )
+    await m.edit_message(
+        f"{'Декор' if not is_func else 'Функциональный товар'} «{decor_name}» был удалён из вашей каюты!")
 
 
 @bot.on.private_message(PayloadRule({"form": "reputation"}), StateRule(Menu.SHOW_FORM))
 async def reputation_form(m: Message):
+    """Просмотр репутации пользователя в различных фракциях."""
     reputations = await db.get_reputations(m.from_id)
     reply = "Список ваших репутаций:\n\n"
     for fraction_id, reputation in reputations:
@@ -272,19 +348,29 @@ async def reputation_form(m: Message):
 
 @bot.on.private_message(StateRule(Menu.SHOW_FORM))
 async def search_user_form(m: Message):
+    """Поиск анкеты пользователя по различным критериям."""
     user_id = await get_mention_from_message(m)
-    count = await db.select([func.count(db.Form.id)]).where(and_(db.Form.is_request.is_(False), db.Form.user_id != 32650977)).gino.scalar()
+    count = await db.select([func.count(db.Form.id)]).where(
+        and_(db.Form.is_request.is_(False), db.Form.user_id != 32650977)).gino.scalar()
+
     if not user_id and (not m.text.isdigit() or int(m.text) < 1 or int(m.text) > count):
         await m.answer(messages.user_not_found)
         return
+
     if not user_id:
-        # Try get by form index (not id)
-        user_id = await db.select([db.Form.user_id]).where(and_(db.Form.is_request.is_(False), db.Form.user_id != 32650977)).limit(15).offset(int(m.text) - 1).order_by(db.Form.id.asc()).gino.scalar()
+        # Попытка получить по индексу анкеты (не ID)
+        user_id = await db.select([db.Form.user_id]).where(
+            and_(db.Form.is_request.is_(False), db.Form.user_id != 32650977)).limit(15).offset(
+            int(m.text) - 1).order_by(db.Form.id.asc()).gino.scalar()
+
     if not user_id:
         await m.answer(messages.user_not_found)
         return
+
     form, photo = await loads_form(user_id, m.from_id)
     keyboard = None
+
+    # Добавление административных функций для админов
     admin = await db.select([db.User.admin]).where(db.User.user_id == m.from_id).gino.scalar()
     if admin:
         form_id = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()

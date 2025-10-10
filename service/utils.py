@@ -100,9 +100,11 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
             f"Статус: {status}\n" \
             f"Фракция: {fraction or 'не установлена'}\n" \
             f"Репутация: {reputation} ({rep_fraction})\n"
+    # Добавляем специальные параметры для дочерей
     if form.status == 2:
         libido, subordination = await count_daughter_params(user_id)
         if not absolute_params:
+            # Преобразуем числовые значения в текстовые диапазоны
             if 1 <= subordination <= 33:
                 reply += 'Уровень подчинения: Низкий\n'
             elif 34 <= subordination <= 66:
@@ -118,6 +120,7 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
         else:
             reply += (f'Уровень подчинения: {subordination}\n'
                       f'Уровень либидо: {libido}\n')
+        # Показываем бонусные параметры для админов
         admin_request = await db.select([db.User.admin]).where(db.User.user_id == from_user_id).gino.scalar()
         if admin_request:
             reply += f'Базовое либидо: {form.libido_bonus}\nБазовое подчинение: {form.subordination_bonus}'
@@ -146,9 +149,12 @@ async def show_expeditor(expeditor_id: int, from_user_id) -> str:
              f'Специальность: {profession}\n'
              f'Фракция: {fraction}\n'
              f'Репутация: {reputation} ({rep_fraction})\n\n')
+    # Получаем атрибуты экспедитора
     attributes = await db.select([db.ExpeditorToAttributes.attribute_id, db.ExpeditorToAttributes.value]).where(db.ExpeditorToAttributes.expeditor_id == expeditor_id).gino.all()
+    # Получаем бонусы от профессии и расы
     profession_bonuses = await db.select([db.ProfessionBonus.attribute_id, db.ProfessionBonus.bonus]).where(db.ProfessionBonus.profession_id == form.profession).gino.all()
     race_bonuses = await db.select([db.RaceBonus.attribute_id, db.RaceBonus.bonus]).where(db.RaceBonus.race_id == expeditor.race_id).gino.all()
+    # Получаем активные предметы и дебафы
     active_items = [x[0] for x in await db.select([db.ExpeditorToItems.item_id]).select_from(
         db.ActiveItemToExpeditor.join(db.ExpeditorToItems, db.ActiveItemToExpeditor.row_item_id == db.ExpeditorToItems.id)
     ).where(
@@ -175,6 +181,7 @@ async def show_expeditor(expeditor_id: int, from_user_id) -> str:
             description += f' {"+" if profession_bonus >= 0 else "-"} {abs(profession_bonus)} от профессии'
         if race_bonus:
             description += f' {"+" if race_bonus >= 0 else "-"} {abs(race_bonus)} от расы'
+        # Учитываем бонусы от активных предметов
         if active_items:
             for active_item_id in active_items:
                 item_name, item_bonus = await db.select([db.Item.name, db.Item.bonus]).where(db.Item.id == active_item_id).gino.first()
@@ -183,6 +190,7 @@ async def show_expeditor(expeditor_id: int, from_user_id) -> str:
                         description += f' {"+" if bonus['bonus'] >= 0 else "-"} {abs(bonus["bonus"])} от «{item_name}»'
                         summary += bonus['bonus']
                         break
+        # Учитываем штрафы от активных дебафов
         if active_debuffs:
             for active_debuf_id in active_debuffs:
                 attribute_type = await db.select([db.StateDebuff.attribute_id]).where(db.StateDebuff.id == active_debuf_id).gino.scalar()
@@ -192,6 +200,7 @@ async def show_expeditor(expeditor_id: int, from_user_id) -> str:
                     description += f' {"+" if debuff_penalty >= 0 else "-"} {abs(debuff_penalty)} от «{debuff_name}»'
                     summary += debuff_penalty
         reply += f'{attribute}: {summary} ({value} базовое{description})\n'
+    # Добавляем информацию о дебафах и предметах
     reply += await serialize_expeditor_debuffs(expeditor_id)
     reply += '\n\n'
     reply += f'Оплодотворение: {expeditor.pregnant if expeditor.pregnant else 'Отсутствует'}\n\n'
@@ -230,6 +239,7 @@ async def parse_ids(m: Message) -> List[int]:
                 obj = await bot.api.utils.resolve_screen_name(screen_name)
                 if obj.type == obj.type.USER:
                     user_ids.append(obj.object_id)
+    # Ищем пользователей по имени персонажа
     names = list(map(lambda x: x.lower(), m.text.split("\n")))
     user_ids.extend([x[0] for x in await db.select([db.Form.user_id]).where(
         func.lower(db.Form.name).in_(names)
@@ -263,12 +273,17 @@ async def reload_image(attachment, name: str, delete: bool = False):
     Функция, для "перезагрузки изображения". Т.к. айди фотографий пользователей со временем могут стать для бота
     недоступны, рекомендуется скачать и загрузить фото от лица бота
     """
+    # Получаем URL самой большой версии фото
     photo_url = get_max_size_url(attachment.photo.sizes)
+    # Скачиваем изображение
     response = await client.request_content(photo_url)
+    # Создаем директорию если нужно
     if not os.path.exists("/".join(name.split("/")[:-1])):
         os.mkdir("/".join(name.split("/")[:-1]))
+    # Сохраняем файл
     async with aiofiles.open(name, mode="wb") as file:
         await file.write(response)
+    # Загружаем фото от имени бота
     photo = None
     for i in range(5):
         try:
@@ -278,6 +293,7 @@ async def reload_image(attachment, name: str, delete: bool = False):
             await asyncio.sleep(2)
     if not photo:
         raise Exception("Photo upload failed")
+    # Удаляем временный файл если нужно
     if delete:
         os.remove(name)
     return photo
@@ -311,9 +327,12 @@ async def send_mailing(sleep, message_id, mailing_id):
     mailing_id: айди рассылки из db.Mailing
     """
     await asyncio.sleep(sleep)
+    # Получаем всех пользователей
     user_ids = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
+    # Отправляем сообщение пачками по 100 пользователей
     for i in range(0, len(user_ids), 100):
         await bot.api.messages.send(peer_ids=user_ids[i:i + 100], forward_messages=message_id, is_notification=True)
+    # Удаляем запись о рассылке
     await db.Mailings.delete.where(db.Mailings.id == mailing_id).gino.status()
 
 
@@ -326,6 +345,7 @@ async def take_off_payments(form_id: int):
         if not info:  # Анкета удалена
             return
         balance, freeze = info
+        # Если баланс отрицательный или анкета заморожена - ждем сутки
         if not balance or balance < 0 or freeze:
             await asyncio.sleep(86400)  # Ждём сутки, вдруг появятся деньги или анкета разморозиться
             continue
@@ -334,18 +354,22 @@ async def take_off_payments(form_id: int):
         today = datetime.datetime.now()
         delta = today - last_payment
         user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
+        # Если прошло 7 дней или больше - списываем оплату
         if delta.days >= 7:
             cabin_type = await db.select([db.Form.cabin_type]).where(db.Form.id == form_id).gino.scalar()
             if cabin_type:
+                # Считаем стоимость каюты и функционального декора
                 price = await db.select([db.Cabins.cost]).where(db.Cabins.id == cabin_type).gino.scalar()
                 func_price = sum([soft_divide(x[0], 10) for x in await db.select([db.Decor.price]).select_from(
                     db.UserDecor.join(db.Decor, db.UserDecor.decor_id == db.Decor.id)
                 ).where(and_(db.UserDecor.user_id == user_id, db.Decor.is_func.is_(True))).gino.all()])
                 price += func_price
+                # Списание средств
                 await db.Form.update.values(balance=db.Form.balance - price,
                                             last_payment=today - datetime.timedelta(seconds=20)).where(
                     db.Form.id == form_id
                 ).gino.status()
+                # Уведомление пользователя
                 group_id = (await bot.api.groups.get_by_id()).groups[0].id
                 if (await bot.api.messages.is_messages_from_group_allowed(group_id, user_id=user_id)).is_allowed:
                     await bot.api.messages.send(peer_id=user_id, message=f"Снята арендная плата в размере {price}\n"
@@ -382,6 +406,7 @@ async def send_page_users(m: Union[Message, MessageEvent], page: int = 1):
     else:
         count_pages = count_users // 15 + 1
     reply = f"{reply}\n\nСтраница {page}/{count_pages}"
+    # Создаем клавиатуру пагинации если нужно
     if page > 1 or page * 15 < count_users:
         keyboard = Keyboard(inline=True)
         if page > 1:
@@ -442,6 +467,7 @@ def parse_period(text: str) -> Optional[int]:
         else:
             if param.isdigit():
                 return
+            # Суммируем секунды в зависимости от единицы измерения
             if param in years:
                 total += last_number * 31536000
             elif param in months:
@@ -467,13 +493,16 @@ async def quest_over(seconds, form_id, quest_id):
     if not seconds:
         return
     await asyncio.sleep(seconds)
+    # Проверяем что квест все еще активен
     active_quest = await db.select([db.QuestToForm.quest_id]).where(db.QuestToForm.form_id == form_id).gino.scalar()
     if active_quest != quest_id:
         return
     user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
     name, penalty = await db.select([db.Quest.name, db.Quest.penalty]).where(db.Quest.id == quest_id).gino.first()
+    # Удаляем квест из активных
     await db.QuestToForm.delete.where(db.QuestToForm.form_id == form_id).gino.status()
     reply = f"Время выполнения квеста «{name}» завершилось"
+    # Применяем штраф если есть
     if penalty:
         reply += "\nВам выписан штраф:\n\n"
         await apply_reward(user_id, penalty)
@@ -513,9 +542,11 @@ async def check_quest_completed(form_id: int) -> bool:
     quest_id, target_ids = await db.select([db.QuestToForm.quest_id, db.QuestToForm.active_targets]).where(
         db.QuestToForm.form_id == form_id
     ).gino.first()
+    # Проверяем выполнен ли основной квест
     ready_quest = await db.select([db.ReadyQuest.id]).where(
         and_(db.ReadyQuest.quest_id == quest_id, db.ReadyQuest.form_id == form_id, db.ReadyQuest.is_claimed.is_(True))
     ).gino.scalar()
+    # Проверяем выполнены ли все цели
     completed_targets = set()
     for target_id in target_ids:
         is_claimed = await db.select([db.ReadyTarget.is_claimed]).where(
@@ -557,13 +588,16 @@ async def send_daylics():
         data = await db.select([db.Form.id, db.Form.user_id]).where(db.Form.is_request.is_(False)).gino.all()
         for form_id, user_id in data:
             profession_id = await db.select([db.Form.profession]).where(db.Form.id == form_id).gino.scalar()
+            # Получаем использованные дейлики
             daylic_used = [x[0] for x in await db.select([db.DaylicHistory.daylic_id]).where(db.DaylicHistory.form_id == form_id).gino.all()]
+            # Ищем новый дейлик
             daylic = await db.select([db.Daylic.id]).where(and_(db.Daylic.profession_id == profession_id, db.Daylic.id.notin_(daylic_used))).order_by(
                 func.random()).gino.scalar()
             if not daylic:  # all daylics used, try clean pool
                 await db.DaylicHistory.delete.where(db.DaylicHistory.form_id == form_id).gino.status()
                 daylic = await db.select([db.Daylic.id]).where(db.Daylic.profession_id == profession_id).order_by(func.random()).gino.scalar()
             if daylic:
+                # Записываем новый дейлик
                 await db.DaylicHistory.create(form_id=form_id, daylic_id=daylic)
                 await db.Form.update.values(activated_daylic=daylic, daylic_completed=False).where(db.Form.id == form_id).gino.status()
                 await bot.api.messages.send(peer_id=user_id, message="Вам доступно новое ежедневное задание!",
@@ -580,6 +614,7 @@ async def show_fields_edit(user_id: int, new=True):
     new: флаг, если True - создаст новую анкету
     """
     if new:
+        # Создаем копию анкеты для редактирования
         form = dict(await db.select([*db.Form]).where(db.Form.user_id == user_id).gino.first())
         params = {k: v for k, v in form.items() if k not in ("id", "is_request")}
         params['is_request'] = True
@@ -611,6 +646,7 @@ async def page_content(table_name, page: int) -> Tuple[str, Optional[Keyboard]]:
     reply = f"Отправьте число, для редактирования:\n\n"
     for i, name in enumerate(names):
         reply += f"{(page - 1) * 15 + i + 1}. {name}\n"
+    # Добавляем кнопки пагинации
     if page > 1:
         keyboard.add(Callback("<-", {"content_page": page - 1, "content": table_name}), KeyboardButtonColor.SECONDARY)
     if page * 15 < count:
@@ -724,7 +760,6 @@ def allow_edit_content(content_type: str, end: bool = False, text: str = None, s
             return data
 
         return wrapper
-
     return decorator
 
 
@@ -796,6 +831,7 @@ async def page_fractions(page: int) -> Tuple[str, Keyboard, str]:
              f"Текущий лидер: {leader_mention}")
     count = await db.select([func.count(db.Fraction.id)]).gino.scalar()
     kb = Keyboard(inline=True)
+    # Добавляем кнопки пагинации
     if page > 1:
         kb.add(
             Callback("<-", {"fraction_page": page - 1}), KeyboardButtonColor.SECONDARY
@@ -819,7 +855,7 @@ async def check_last_activity(user_id: int):
     Если пользователь долгое время не писал его анкета замораживается
     Если пользователь с замороженной анкетой еще дольше не писал его анкета удаляется
     """
-    if user_id == 32650977:
+    if user_id == 32650977:  # Исключение для конкретного пользователя
         return
     time_to_freeze: int = await db.select([db.Metadata.time_to_freeze]).gino.scalar()
     await asyncio.sleep(time_to_freeze)
@@ -827,6 +863,7 @@ async def check_last_activity(user_id: int):
         db.User.user_id == user_id).gino.scalar()
     time_to_freeze: int = await db.select([db.Metadata.time_to_freeze]).gino.scalar()  # Can be updated after sleeping
     freeze, is_request = await db.select([db.Form.freeze, db.Form.is_request]).where(db.Form.user_id == user_id).gino.first()
+    # Замораживаем анкету если время без активности превышено
     if (datetime.datetime.now() - last_activity).total_seconds() >= time_to_freeze and not freeze and not is_request:
         await db.Form.update.values(freeze=True).where(db.Form.user_id == user_id).gino.status()
         await bot.api.messages.send(message="❗ В связи с отсутствием вашей активности в течение "
@@ -839,12 +876,14 @@ async def check_last_activity(user_id: int):
                                             f"автоматически заморожена",
                                     peer_ids=admins, is_notification=True)
 
+        # Ждем время до удаления
         time_to_delete = await db.select([db.Metadata.time_to_delete]).gino.scalar()
         await asyncio.sleep(time_to_delete - time_to_freeze)
         last_activity: datetime.datetime = await db.select([db.User.last_activity]).where(
             db.User.user_id == user_id).gino.scalar()
         time_to_delete: int = await db.select([db.Metadata.time_to_delete]).gino.scalar()
         freeze = await db.select([db.Form.freeze]).where(db.Form.user_id == user_id).gino.scalar()
+        # Удаляем анкету если время без активности превышено
         if last_activity and freeze and (
                 datetime.datetime.now() - last_activity).total_seconds() >= time_to_delete and not is_request:
             await bot.api.messages.send(message=f"❗ В связи с отсутствием вашей активности в течение "
@@ -924,17 +963,20 @@ async def update_daughter_levels(user_id: int):
         tomorrow = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0)
         await asyncio.sleep((tomorrow - now).total_seconds() - 2)
         form_id = await get_current_form_id(user_id)
+        # Проверяем выполнение квеста дочери
         quest = await db.select([*db.DaughterQuest]).where(db.DaughterQuest.to_form_id == form_id).gino.first()
         if quest:
             confirmed = await db.select([db.DaughterQuestRequest.confirmed]).where(
                 and_(db.DaughterQuestRequest.quest_id == quest.id, db.DaughterQuestRequest.form_id == form_id,
                      db.DaughterQuestRequest.created_at == datetime.date.today())
             ).gino.scalar()
+            # Если квест не выполнен - применяем штраф
             if confirmed is None:
                 await apply_reward(user_id, quest.penalty)
                 reply = f' ❌ Вам выписан штраф за невыполнение квеста  «{quest.name}»:\n'
                 reply += await serialize_target_reward(quest.penalty)
                 await bot.api.messages.send(peer_id=user_id, message=reply, is_notification=True)
+        # Обновляем параметры дочерей
         sub_bonus, lib_bonus, sub_level, lib_level, fraction_id = await db.select(
             [db.Form.subordination_bonus, db.Form.libido_bonus, db.Form.subordination_level, db.Form.libido_level, db.Form.fraction_id]).where(
             db.Form.user_id == user_id).gino.first()
@@ -1154,7 +1196,7 @@ async def wait_users_post(post_id: int):
 
 async def wait_take_off_item(row_id: int):
     """
-    Таймер для снятия предмета, который заканчивает свое действие по времмени
+    Таймер для снятия предмета, который заканчивает свое действие по времени
     """
     row = await db.select([*db.ActiveItemToExpeditor]).where(db.ActiveItemToExpeditor.id == row_id).gino.first()
     item_id = await db.select([db.ExpeditorToItems.item_id]).where(db.ExpeditorToItems.id == row.row_item_id).gino.scalar()
@@ -1171,6 +1213,12 @@ async def wait_take_off_item(row_id: int):
 
 
 async def take_off_item(active_row_id: int):
+    """
+    Функция снимающая предмет с игрока
+
+    Если предмет, одноразовый, то он удаляется из инвентаря (нельзя переиспользовать)
+    Если предмет многоразовый/постоянный его можно повторно переиспользовать
+    """
     item_type, row_id, expeditor_id, item_name = await db.select([db.Item.type_id, db.ExpeditorToItems.id, db.ExpeditorToItems.expeditor_id, db.Item.name]).select_from(
         db.ActiveItemToExpeditor.join(db.ExpeditorToItems, db.ActiveItemToExpeditor.row_item_id == db.ExpeditorToItems.id)
         .join(db.Item, db.ExpeditorToItems.item_id == db.Item.id)
@@ -1185,6 +1233,9 @@ async def take_off_item(active_row_id: int):
 
 
 async def wait_disable_debuff(row_id: int):
+    """
+    Таймер для снятия дебафа
+    """
     row = await db.select([*db.ExpeditorToDebuffs]).where(db.ExpeditorToDebuffs.id == row_id).gino.first()
     time_use = await db.select([db.StateDebuff.time_use]).where(db.StateDebuff.id == row.debuff_id).gino.scalar()
     if not time_use:  # Нет ограничения по времени
@@ -1203,6 +1254,11 @@ async def wait_disable_debuff(row_id: int):
 
 
 async def parse_actions(text: str, expeditor_id: int) -> list[dict]:
+    """
+    Функция которая парсит действия игрока из текста поста во время экшен-режима
+
+    Формат объекта действия смотреть в README
+    """
     text = text.lower()
     matches = re.findall(action_regex, text)
     actions = []
@@ -1213,8 +1269,10 @@ async def parse_actions(text: str, expeditor_id: int) -> list[dict]:
                 break
         else:
             continue
+        # Если написано использовать значит это предмет
         if match.startswith(alias):
             item_name = match[len(alias):].strip()
+            # Ищем предмет по похожести названия
             distance = func.levenshtein(func.lower(db.Item.name), item_name)
             similarity = func.similarity(func.lower(db.Item.name), item_name).label('similarity')
             item_id = (await db.select([db.Item.id])
@@ -1223,27 +1281,35 @@ async def parse_actions(text: str, expeditor_id: int) -> list[dict]:
                       .order_by(distance.asc()).limit(1).gino.scalar())
             if not item_id:
                 continue
+            # Проверяем что предмет есть в инвентаре и не активирован
             active_row_ids = [x[0] for x in await db.select([db.ActiveItemToExpeditor.row_item_id]).where(db.ActiveItemToExpeditor.expeditor_id == expeditor_id).gino.all()]
             exist = await db.select([db.ExpeditorToItems.id]).where(and_(db.ExpeditorToItems.expeditor_id == expeditor_id, db.ExpeditorToItems.id.notin_(active_row_ids), db.ExpeditorToItems.item_id == item_id)).order_by(db.ExpeditorToItems.id.asc()).gino.scalar()
             if not exist:
                 continue
+            # Проверяем лимит использований
             used = await db.select([db.ExpeditorToItems.count_use]).where(db.ExpeditorToItems.id == exist).gino.scalar()
             count_use = await db.select([db.Item.count_use]).where(db.Item.id == item_id).gino.scalar()
             if count_use - used <= 0:
                 continue
             actions.append({'type': 'use_item', 'row_id': exist})
+        # Если указано упоминание на кого-то то это PvP, требует проверки судьи с двумя последствиями
         elif x := re.search(mention_regex_cut, match):
             user_id = int(x.group(0)[3:-1])
             actions.append({'type': 'pvp', 'user_id': user_id})
+        # В ином случае текстовое действие которое требуется проверки судьи
         else:
             actions.append({'type': 'action', 'text': match})
     return actions
 
 
 async def count_attribute(user_id: int, attribute_id: int) -> int:
+    """
+    Функция которая рассчитывает текущий показатель уровня характеристики с учетом бафов предметов и дебафов (травм и безумий)
+    """
     form_id = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
     expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
     base = await db.select([db.ExpeditorToAttributes.value]).where(and_(db.ExpeditorToAttributes.expeditor_id == expeditor_id, db.ExpeditorToAttributes.attribute_id == attribute_id)).gino.scalar()
+    # Считаем бонусы от активных предметов
     active_item_ids = [x[0] for x in await db.select([db.ExpeditorToItems.item_id]).select_from(
         db.ActiveItemToExpeditor.join(db.ExpeditorToItems, db.ActiveItemToExpeditor.row_item_id == db.ExpeditorToItems.id)
     ).where(db.ActiveItemToExpeditor.expeditor_id == expeditor_id).gino.all()]
@@ -1254,11 +1320,13 @@ async def count_attribute(user_id: int, attribute_id: int) -> int:
             if bonus.get('type') == 'attribute' and bonus.get('attribute_id') == attribute_id:
                 item_bonus += bonus['bonus']
                 continue
+    # Считаем штрафы от активных дебафов
     active_debuff_ids = [x[0] for x in await db.select([db.ExpeditorToDebuffs.debuff_id]).where(db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()]
     penalty_debuff = sum([x[0] for x in await db.select([db.StateDebuff.penalty]).where(and_(db.StateDebuff.id.in_(active_debuff_ids), db.StateDebuff.attribute_id == attribute_id)).gino.all()])
     return min(200, base + item_bonus + penalty_debuff)
 
 
+# Типы последствий
 types_consequences = {
     1: 'Критический провал',
     2: 'Провал',
@@ -1270,6 +1338,7 @@ types_consequences = {
     8: 'Критический успех (противник)'
 }
 
+# Типы сложностей
 type_difficulties = {
     1: ['Легкая', 1.2],
     2: ['Нормальная', 1.0],
@@ -1281,6 +1350,9 @@ type_difficulties = {
 
 
 async def show_consequences(action_id: int) -> str:
+    """
+    Функция выводит все привязанные последствия по айди действия
+    """
     data = await db.select([db.Action.data]).where(db.Action.id == action_id).gino.scalar()
     reply = 'Тип действия: '
     if data['type'] == 'action':
@@ -1310,6 +1382,11 @@ async def show_consequences(action_id: int) -> str:
 
 
 async def serialize_consequence(data: dict) -> str:
+    """
+    Функция сериализует последствие
+
+    Формат данных смотреть в README
+    """
     type_ = data['type']
     if type_ == 'add_debuff':
         debuff_id = data['debuff_id']
@@ -1365,22 +1442,69 @@ async def serialize_consequence(data: dict) -> str:
 
 
 async def count_available_actions(user_id: int) -> int:
-    speed = await count_attribute(user_id, 2)
+    """
+    Функция для расчета доступных действий в экшен режим
+    """
+    speed = await count_attribute(user_id, 2)  # Уровень скорости
     return min(5, 1 + int(speed / 50))
 
 
 async def count_difficult(post_id: int) -> int:
+    """
+    Функция возвращает номер сложности из type_difficulties
+
+    Правило расчета уровня сложности:
+    Для 1-ого действия: базовая сложность устанавливаемая судьёй в начале проверки поста
+    Для каждого последующего действия: +1 к сложности (в пределах лимита)
+    Количество доступных действий без штрафа: int(Скорость / 50) + 1
+    Если игрок выходит за рамки, минимальная сложность становится Сложная (3)
+    За каждое действие сверх лимита +1 к сложности
+
+    Пример: доступно действий 1, базовая сложность 1, распределение:
+    Номер действия - Сложность
+    1 - 1
+    2 - 4  # Перескакиваем на Очень сложную сложность
+    3 - 5
+
+    Пример: доступно действий 1, базовая сложность 2, распределение:
+    Номер действия - Сложность
+    1 - 2
+    2 - 4  # Перескакиваем на Очень сложную сложность
+    3 - 5
+
+    Пример: доступно действий 1, сложность 3, распределение:
+    Номер действия - Сложность
+    1 - 3
+    2 - 4  # Перескакиваем на Очень сложную сложность (но здесь она и так следующей идет)
+    3 - 5
+
+    Пример: доступно действий 5, сложность 1:
+    Номер действия - Сложность
+    1 - 1
+    2 - 2
+    3 - 3  # За лимит не выходим просто прибавляем +1
+
+    Пример: доступно действий 1, сложность 4:
+    Номер действия - Сложность
+    1 - 4
+    2 - 5  # Выходим за лимит, но из-за высокой сложности прибавляется +1
+    3 - 6
+    """
     difficult, action_mode_id, user_id = await db.select([db.Post.difficult, db.Post.action_mode_id, db.Post.user_id]).where(db.Post.id == post_id).gino.first()
     number_check = await db.select([db.ActionMode.number_check]).where(db.ActionMode.id == action_mode_id).gino.scalar()
     available = await count_available_actions(user_id)
     if number_check > available:
-        return min(6, 3 + number_check - available)
-    return min(6, difficult + number_check - 1)
+        return min(6, 3 + number_check - available + max(0, difficult - 3))  # Формула для расчета сложности сверх лимита (я проверил она рабочая)
+    return min(6, difficult + number_check - 1)  # Формула расчета сложности в пределах лимита
 
 
 async def apply_consequences(action_id: int, con_var: int):
+    """
+    Функция применяет последствие по айди действия и айди типа (успех/провал)
+    """
     post_id = await db.select([db.Action.post_id]).where(db.Action.id == action_id).gino.scalar()
     action_mode_id = await db.select([db.Post.action_mode_id]).where(db.Post.id == post_id).gino.scalar()
+    # Определяем на кого применяются последствия
     if con_var <= 4:
         user_id = await db.select([db.Post.user_id]).where(db.Post.id == post_id).gino.scalar()
     else:
@@ -1390,6 +1514,7 @@ async def apply_consequences(action_id: int, con_var: int):
     expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
     chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.id == action_mode_id).gino.scalar()
     data = [x[0] for x in await db.select([db.Consequence.data]).where(and_(db.Consequence.action_id == action_id, db.Consequence.type == con_var)).gino.all()]
+    # Применяем все последствия
     for con in data:
         type = con['type']
         match type:
@@ -1430,6 +1555,7 @@ async def apply_consequences(action_id: int, con_var: int):
                 bonus = con['bonus']
                 attribute_id = con['attribute_id']
                 await db.ExpeditorToAttributes.update.values(value=db.ExpeditorToAttributes.value + bonus).where(and_(db.ExpeditorToAttributes.expeditor_id == expeditor_id, db.ExpeditorToAttributes.attribute_id == attribute_id)).gino.status()
+    # Формируем сообщение о результате
     if not data:
         description = 'не указаны'
     else:
@@ -1452,11 +1578,17 @@ async def apply_consequences(action_id: int, con_var: int):
 
 
 async def apply_item(row_id: int):
+    """
+    Функция применяет предмет и записывает его действующие эффекты
+    """
     expeditor_id, action_time, data = await db.select([db.ExpeditorToItems.expeditor_id, db.Item.action_time, db.Item.bonus]).select_from(
         db.ExpeditorToItems.join(db.Item, db.ExpeditorToItems.item_id == db.Item.id)
     ).where(db.ExpeditorToItems.id == row_id).gino.first()
+    # Увеличиваем счетчик использований
     await db.ExpeditorToItems.update.values(count_use=db.ExpeditorToItems.count_use + 1).where(db.ExpeditorToItems.id == row_id).gino.status()
+    # Активируем предмет
     await db.ActiveItemToExpeditor.create(expeditor_id=expeditor_id, remained_use=action_time, row_item_id=row_id)
+    # Применяем все бонусы предмета
     for bonus in data:
         if bonus['type'] == 'state':
             if bonus.get('action', '') in ('add', 'delete'):
@@ -1483,11 +1615,15 @@ async def apply_item(row_id: int):
 
 
 async def count_daughter_params(user_id: int) -> tuple[int, int]:
+    """
+    Функция рассчитывает уровень либидо и подчинения с учетом действующих бафов и дебафов
+    """
     form_id = await get_current_form_id(user_id)
     libido, subordination = await db.select([db.Form.libido_level, db.Form.subordination_level]).where(db.Form.id == form_id).gino.first()
     expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
     if not expeditor_id:
         return libido, subordination
+    # Учитываем бонусы от активных предметов
     active_items_data = [x[0] for x in await db.select([db.Item.bonus]).select_from(
         db.ActiveItemToExpeditor.join(db.ExpeditorToItems, db.ActiveItemToExpeditor.row_item_id == db.ExpeditorToItems.id)
         .join(db.Item, db.ExpeditorToItems.item_id == db.Item.id)
@@ -1505,6 +1641,17 @@ async def count_daughter_params(user_id: int) -> tuple[int, int]:
 
 
 async def move_user(user_id: int, chat_id: int):
+    """
+    Перемещает пользователя из одного чата в другой
+
+    При перемещении в публичный чат бот присылает ссылку на это чат
+    При выходе из публичного чата бот ставит запрет писать сообщения в этом чате
+
+    При перемещении в приватный чат бот приглашает участника
+    При перемещении из приватного чата бот кикает участника
+    (кроме случаев, когда чат приватный и у пользователя есть постоянный доступ именно по профессии,
+    в этом случае также ставится запрет писать сообщения)
+    """
     old_chat_id = await db.select([db.UserToChat.chat_id]).where(db.UserToChat.user_id == user_id).gino.scalar()
     if not old_chat_id:
         await db.UserToChat.create(chat_id=chat_id, user_id=user_id)
@@ -1513,21 +1660,25 @@ async def move_user(user_id: int, chat_id: int):
         is_old_private = await db.select([db.Chat.is_private]).where(db.Chat.chat_id == old_chat_id).gino.scalar()
         professions = [x[0] for x in await db.select([db.ChatToProfessions.profession_id]).where(db.ChatToProfessions.chat_id == old_chat_id).gino.all()]
         user_profession = await db.select([db.Form.profession]).where(db.Form.user_id == user_id).gino.scalar()
+        # Если старый чат приватный и у пользователя нет постоянного доступа - кикаем
         if is_old_private and ((professions and user_profession not in professions) or not professions):
             try:
                 await bot.api.messages.remove_chat_user(chat_id=old_chat_id, member_id=user_id)
             except:
                 pass
         else:
+            # Иначе ставим запрет на отправку сообщений
             await bot.api.request('messages.changeConversationMemberRestrictions',
                                   {'peer_id': old_chat_id + 2000000000, 'member_ids': user_id, 'action': 'ro'})
     is_private, count, user_chat_id = await db.select([db.Chat.is_private, db.Chat.visible_messages, db.Chat.user_chat_id]).where(db.Chat.chat_id == chat_id).gino.first()
     chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=[2000000000 + chat_id])).items[0].chat_settings.title
     states.set(user_id, service.states.Menu.MAIN)
     await db.User.update.values(state=str(service.states.Menu.MAIN)).where(db.User.user_id == user_id).gino.status()
+    # Уведомляем о перемещении
     if old_chat_id:
         await bot.api.messages.send(message=f'Пользователь {await create_mention(user_id)} будет перемещен в чат «{chat_name}»',
                                     peer_id=old_chat_id + 2000000000)
+    # Обрабатываем новый чат
     if not is_private:
         await bot.api.request('messages.changeConversationMemberRestrictions',
                               {'peer_id': chat_id + 2000000000, 'member_ids': user_id, 'action': 'rw'})
@@ -1547,6 +1698,9 @@ async def move_user(user_id: int, chat_id: int):
 
 
 async def create_cabin_chat(user_id: int):
+    """
+    Функция создает чат с локацией каюты пользователя. Добавляет туда бота и дает ему админку
+    """
     cabin_number = await db.select([db.Form.cabin]).where(db.Form.user_id == user_id).gino.scalar()
     response = await user_bot.api.messages.create_chat(title=f'RP Among Us Каюта/Кельи № {cabin_number}')
     await asyncio.sleep(0.5)

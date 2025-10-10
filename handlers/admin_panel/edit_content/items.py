@@ -9,12 +9,24 @@ from service.custom_rules import StateRule, AdminRule, NumericRule, JudgeRule
 from service.states import Admin
 from service.db_engine import db
 from service import keyboards
-from service.utils import send_content_page, allow_edit_content, FormatDataException, reload_image, soft_divide, parse_period
-from service.serializers import info_item_group, info_item_bonus, info_item_type, serialize_item_bonus, info_item_fraction, info_item_photo, info_item_action_time, info_item_time
+from service.utils import send_content_page, allow_edit_content, FormatDataException, reload_image, soft_divide, \
+    parse_period
+from service.serializers import info_item_group, info_item_bonus, info_item_type, serialize_item_bonus, \
+    info_item_fraction, info_item_photo, info_item_action_time, info_item_time
 
 
-@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Item"), PayloadRule({"Item": "add"}), OrRule(JudgeRule(), AdminRule()))
+@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Item"), PayloadRule({"Item": "add"}),
+                        OrRule(JudgeRule(), AdminRule()))
 async def create_quest(m: Message):
+    """
+    Создание нового предмета.
+
+    Инициализирует процесс добавления нового предмета, создает запись в БД
+    и переводит пользователя в состояние ввода названия.
+
+    Args:
+        m (Message): Входящее сообщение от пользователя
+    """
     item = await db.Item.create()
     states.set(m.from_id, f"{Admin.ITEM_NAME}*{item.id}")
     await m.answer("Напишите название предмета", keyboard=Keyboard())
@@ -23,30 +35,73 @@ async def create_quest(m: Message):
 @bot.on.private_message(StateRule(Admin.ITEM_NAME), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', state=Admin.ITEM_DESCRIPTION, text='Укажите описание предмета')
 async def item_name(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка названия предмета.
+
+    Сохраняет название предмета в базу данных.
+
+    Args:
+        m (Message): Входящее сообщение с названием предмета
+        item_id (int): ID предмета в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
     await db.Item.update.values(name=m.text).where(db.Item.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.ITEM_DESCRIPTION), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', state=Admin.ITEM_GROUP)
 async def item_description(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка описания предмета.
+
+    Сохраняет описание предмета в базу данных и переводит к выбору группы предмета.
+
+    Args:
+        m (Message): Входящее сообщение с описанием предмета
+        item_id (int): ID предмета в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
     await db.Item.update.values(description=m.text).where(db.Item.id == item_id).gino.status()
     if not editing_content:
         reply, keyboard = await info_item_group()
         await m.answer(reply, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_GROUP), PayloadMapRule({"item_group": int}), OrRule(JudgeRule(), AdminRule()))
+@bot.on.private_message(StateRule(Admin.ITEM_GROUP), PayloadMapRule({"item_group": int}),
+                        OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', state=Admin.ITEM_TYPE)
 async def item_type(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка группы предмета.
+
+    Сохраняет выбранную группу предмета и переводит к выбору типа предмета.
+
+    Args:
+        m (Message): Входящее сообщение с выбранной группой
+        item_id (int): ID предмета в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
     await db.Item.update.values(group_id=m.payload['item_group']).where(db.Item.id == item_id).gino.status()
     if not editing_content:
         reply, keyboard = await info_item_type()
         await m.answer(reply, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_TYPE), PayloadMapRule({"item_type": int}), OrRule(JudgeRule(), AdminRule()))
+@bot.on.private_message(StateRule(Admin.ITEM_TYPE), PayloadMapRule({"item_type": int}),
+                        OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item')
 async def item_type(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка типа предмета.
+
+    Сохраняет выбранный тип предмета и в зависимости от типа переводит
+    либо к установке количества использований, либо к установке доступности в магазине.
+
+    Args:
+        m (Message): Входящее сообщение с выбранным типом
+        item_id (int): ID предмета в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
     await db.Item.update.values(type_id=m.payload['item_type']).where(db.Item.id == item_id).gino.status()
     if not editing_content:
         if m.payload['item_type'] != 2:
@@ -63,12 +118,35 @@ async def item_type(m: Message, item_id: int, editing_content: bool):
 @allow_edit_content('Item', state=Admin.ITEM_AVAILABLE_FOR_SALE,
                     text='Укажите тип предмета', keyboard=keyboards.item_type)
 async def item_count_use(m: Message, item_id: int, editing_content: bool, value: int):
+    """
+    Установка количества использований предмета.
+
+    Сохраняет количество использований для предмета с ограниченным использованием.
+
+    Args:
+        m (Message): Входящее сообщение с количеством использований
+        item_id (int): ID предмета в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+        value (int): Количество использований
+    """
     await db.Item.update.values(count_use=value).where(db.Item.id == item_id).gino.status()
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_AVAILABLE_FOR_SALE), PayloadMapRule({"item_type": int}), OrRule(JudgeRule(), AdminRule()))
+@bot.on.private_message(StateRule(Admin.ITEM_AVAILABLE_FOR_SALE), PayloadMapRule({"item_type": int}),
+                        OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item')
 async def item_available_for_sale(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка доступности предмета в магазине.
+
+    Сохраняет флаг доступности предмета в магазине и в зависимости от значения
+    переводит либо к установке цены, либо к установке фотографии.
+
+    Args:
+        m (Message): Входящее сообщение с флагом доступности
+        item_id (int): ID предмета в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
     await db.Item.update.values(available_for_sale=m.payload['item_type']).where(db.Item.id == item_id).gino.status()
     if not editing_content:
         if m.payload['item_type'] == 1:  # Доступно в магазине
@@ -427,17 +505,39 @@ async def delete_item_bonus(m: Message, value: int):
     await show_bonus_menu(m, item_id)
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, "action": "save_bonus"}), OrRule(JudgeRule(), AdminRule()))
+@bot.on.private_message(StateRule(Admin.ITEM_BONUS), PayloadMapRule({"item_id": int, "action": "save_bonus"}),
+                        OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', state=Admin.ITEM_ACTION_TIME)
 async def save_bonus(m: Message, item_id: int, editing_content: bool):
+    """
+    Сохранение бонусов предмета.
+
+    Завершает этап настройки бонусов и переводит к установке времени действия.
+
+    Args:
+        m (Message): Входящее сообщение
+        item_id (int): ID предмета в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
     if not editing_content:
         reply, keyboard = await info_item_action_time()
         await m.answer(reply, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_ACTION_TIME), PayloadRule({'item_action_time': 'null'}), OrRule(JudgeRule(), AdminRule()))
+@bot.on.private_message(StateRule(Admin.ITEM_ACTION_TIME), PayloadRule({'item_action_time': 'null'}),
+                        OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', state=Admin.ITEM_TIME)
 async def set_item_action_time_zero(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка нулевого времени действия предмета.
+
+    Обрабатывает выбор отсутствия времени действия для предмета.
+
+    Args:
+        m (Message): Входящее сообщение
+        item_id (int): ID предмета в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
     if not editing_content:
         reply, keyboard = await info_item_time()
         await m.answer(reply, keyboard=keyboard)
@@ -446,21 +546,56 @@ async def set_item_action_time_zero(m: Message, item_id: int, editing_content: b
 @bot.on.private_message(StateRule(Admin.ITEM_ACTION_TIME), NumericRule(), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', state=Admin.ITEM_TIME)
 async def set_item_action_time(m: Message, item_id: int, editing_content: bool, value: int):
+    """
+    Установка времени действия предмета.
+
+    Сохраняет указанное время действия предмета в секундах.
+
+    Args:
+        m (Message): Входящее сообщение с временем действия
+        item_id (int): ID предмета в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+        value (int): Время действия в секундах
+    """
     await db.Item.update.values(action_time=int(value)).where(db.Item.id == item_id).gino.status()
     if not editing_content:
         reply, keyboard = await info_item_time()
         await m.answer(reply, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.ITEM_TIME), PayloadRule({'item_time': 'infinity'}), OrRule(JudgeRule(), AdminRule()))
+@bot.on.private_message(StateRule(Admin.ITEM_TIME), PayloadRule({'item_time': 'infinity'}),
+                        OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', text='Предмет успешно создан', end=True)
 async def set_infinity_tem_time(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка бесконечного времени для предмета.
+
+    Обрабатывает выбор бесконечной длительности предмета.
+
+    Args:
+        m (Message): Входящее сообщение
+        item_id (int): ID предмета в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
     pass
 
 
 @bot.on.private_message(StateRule(Admin.ITEM_TIME), OrRule(JudgeRule(), AdminRule()))
 @allow_edit_content('Item', text='Предмет успешно создан', end=True)
 async def set_item_time(m: Message, item_id, editing_content):
+    """
+    Установка времени использования предмета.
+
+    Парсит текстовое представление времени и сохраняет в секундах.
+
+    Args:
+        m (Message): Входящее сообщение с текстовым представлением времени
+        item_id (int): ID предмета в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+
+    Raises:
+        FormatDataException: Если формат времени неправильный или время не указано
+    """
     try:
         seconds = parse_period(m.text)
     except:
@@ -470,8 +605,20 @@ async def set_item_time(m: Message, item_id, editing_content):
     await db.Item.update.values(time_use=seconds).where(db.Item.id == item_id).gino.status()
 
 
-@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Item"), PayloadRule({"Item": "delete"}), OrRule(JudgeRule(), AdminRule()))
+@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Item"), PayloadRule({"Item": "delete"}),
+                        OrRule(JudgeRule(), AdminRule()))
 async def select_delete_quest(m: Message):
+    """
+    Выбор предмета для удаления.
+
+    Показывает список всех предметов для выбора того, который нужно удалить.
+
+    Args:
+        m (Message): Входящее сообщение
+
+    Returns:
+        str: Сообщение об отсутствии предметов, если таковых нет
+    """
     items = await db.select([db.Item.name]).order_by(db.Item.id.asc()).gino.all()
     if not items:
         return "Предметы ещё не созданы"
@@ -484,6 +631,15 @@ async def select_delete_quest(m: Message):
 
 @bot.on.private_message(StateRule(Admin.ITEM_DELETE), NumericRule(), OrRule(JudgeRule(), AdminRule()))
 async def delete_quest(m: Message, value: int):
+    """
+    Удаление выбранного предмета.
+
+    Удаляет предмет из базы данных и все его упоминания в связанных таблицах.
+
+    Args:
+        m (Message): Входящее сообщение с номером предмета для удаления
+        value (int): Номер предмета в списке
+    """
     item_id = await db.select([db.Item.id]).order_by(db.Item.id.asc()).offset(value - 1).limit(1).gino.scalar()
     cons = await db.select([db.Consequence.id, db.Consequence.data]).gino.all()
     for con_id, data in cons:

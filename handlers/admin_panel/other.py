@@ -1,3 +1,8 @@
+"""
+Вспомогательные обработчики для административной панели.
+Содержит функции для навигации и возврата в главное меню.
+"""
+
 from vkbottle.bot import Message
 from vkbottle.dispatch.rules.base import VBMLRule, PayloadRule
 
@@ -12,12 +17,14 @@ from service.states import Admin, Menu
 @bot.on.private_message(VBMLRule("/admin"), AdminRule())
 @bot.on.private_message(PayloadRule({"menu": "admin_panel"}), AdminRule())
 async def send_admin_panel(m: Message):
+    """Отображение административной панели"""
     states.set(m.from_id, Admin.MENU)
     await m.answer(messages.admin_menu, keyboard=keyboards.admin_menu)
 
 
 @bot.on.private_message(StateRule(Admin.MENU), PayloadRule({"admin_menu": "back"}), AdminRule())
 async def back_from_admin_menu(m: Message):
+    """Возврат из админ-панели в главное меню"""
     states.set(m.from_id, Menu.MAIN)
     await m.answer(messages.main_menu, keyboard=await keyboards.main_menu(m.from_id))
 
@@ -34,5 +41,6 @@ async def back_from_admin_menu(m: Message):
 @bot.on.private_message(StateRule(Admin.WRITE_MAILING), PayloadRule({"mailing": "back"}), AdminRule())
 @bot.on.private_message(PayloadRule({"give_reward": "back"}), AdminRule())
 async def back_to_admin_menu(m: Message):
+    """Возврат в главное меню админ-панели из различных разделов"""
     states.set(m.from_id, Admin.MENU)
     await m.answer(messages.admin_menu, keyboard=keyboards.admin_menu)

@@ -1,3 +1,8 @@
+"""
+Общий модуль для работы с контентом системы.
+Содержит обработчики для навигации, отображения и управления различными типами контента.
+"""
+
 import inspect
 
 from vkbottle.bot import Message, MessageEvent
@@ -33,6 +38,15 @@ from service.db_engine import db
 @bot.on.private_message(PayloadRule({"Race": "back"}), AdminRule())
 @bot.on.private_message(PayloadRule({"Expeditor": "back"}), AdminRule())
 async def select_edit_content(m: Message):
+    """
+    Выбор раздела для редактирования контента.
+
+    Args:
+        m: Сообщение с командой или payload для возврата
+
+    Действия:
+        Проверяет права пользователя и показывает соответствующее меню
+    """
     judge = await db.select([db.User.judge_panel]).where(db.User.user_id == m.from_id).gino.scalar()
     if not judge:
         states.set(m.from_id, Admin.SELECT_EDIT_CONTENT)
@@ -43,7 +57,16 @@ async def select_edit_content(m: Message):
 
 
 @bot.on.private_message(PayloadMapRule({"edit_content": str}), OrRule(JudgeRule(), AdminRule()))
-async def select_action_with_cabins(m: Message):
+async def select_action_with_element(m: Message):
+    """
+    Выбор действия с элементом контента.
+
+    Args:
+        m: Сообщение с payload {"edit_content": "тип_контента"}
+
+    Действия:
+        Проверяет права доступа и показывает интерфейс управления выбранным типом контента
+    """
     is_judge, admin = await db.select([db.User.judge, db.User.admin]).where(db.User.user_id == m.from_id).gino.first()
     if is_judge and admin <= 0 and m.payload['edit_content'] not in ('Item', 'StateDebuff'):
         await m.answer('Доступ запрещен')
@@ -65,8 +88,18 @@ async def select_action_with_cabins(m: Message):
     await m.answer(reply, keyboard=keyboard)
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"content_page": int, "content": str}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"content_page": int, "content": str}),
+                  AdminRule())
 async def show_page_content(m: MessageEvent):
+    """
+    Показ страницы с контентом.
+
+    Args:
+        m: Событие сообщения с payload {"content_page": номер, "content": "тип"}
+
+    Действия:
+        Отображает страницу с контентом указанного типа
+    """
     page = m.payload['content_page']
     content = m.payload['content']
     reply, keyboard = await page_content(content, page)
@@ -74,8 +107,20 @@ async def show_page_content(m: MessageEvent):
 
 
 @bot.on.private_message(SelectContent(), NumericRule(), OrRule(JudgeRule(), AdminRule()))
-async def select_cabin(m: Message, value: int, content_type: str, table):
-    item = await db.select([*table]).order_by(table.id.asc()).offset(value-1).limit(1).gino.first()
+async def select_element(m: Message, value: int, content_type: str, table):
+    """
+    Выбор элемента контента по номеру.
+
+    Args:
+        m: Сообщение с номером элемента
+        value: Номер элемента в списке
+        content_type: Тип контента
+        table: Таблица БД для данного типа контента
+
+    Действия:
+        Отображает детальную информацию о выбранном элементе
+    """
+    item = await db.select([*table]).order_by(table.id.asc()).offset(value - 1).limit(1).gino.first()
     if not item:
         return "Не найдено контента"
     reply = ""
@@ -98,8 +143,20 @@ async def select_cabin(m: Message, value: int, content_type: str, table):
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, SelectContent(),
-                  PayloadMapRule({"item_type": str, "item_id": int, "action": "delete"}), OrRule(JudgeRule(), AdminRule()))
+                  PayloadMapRule({"item_type": str, "item_id": int, "action": "delete"}),
+                  OrRule(JudgeRule(), AdminRule()))
 async def delete_cabin_message_event(m: MessageEvent, content_type: str, table):
+    """
+    Удаление элемента контента.
+
+    Args:
+        m: Событие сообщения с payload {"action": "delete"}
+        content_type: Тип контента
+        table: Таблица БД
+
+    Действия:
+        Удаляет элемент и все связанные с ним данные
+    """
     item_id = m.payload["item_id"]
     item_name = await db.select([table.name]).where(table.id == item_id).gino.scalar()
     if table.__tablename__ == 'fractions':
@@ -141,8 +198,20 @@ async def delete_cabin_message_event(m: MessageEvent, content_type: str, table):
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, SelectContent(),
-                  PayloadMapRule({"item_type": str, "item_id": int, "action": "edit"}), OrRule(JudgeRule(), AdminRule()))
-async def edit_cabin_message_event(m: MessageEvent, content_type: str, table):
+                  PayloadMapRule({"item_type": str, "item_id": int, "action": "edit"}),
+                  OrRule(JudgeRule(), AdminRule()))
+async def edit_element_message_event(m: MessageEvent, content_type: str, table):
+    """
+    Редактирование элемента контента.
+
+    Args:
+        m: Событие сообщения с payload {"action": "edit"}
+        content_type: Тип контента
+        table: Таблица БД
+
+    Действия:
+        Показывает интерфейс редактирования выбранного элемента
+    """
     item = await db.select([*table]).where(table.id == m.payload['item_id']).gino.first()
     reply = ""
     attachment = None
@@ -166,6 +235,17 @@ async def edit_cabin_message_event(m: MessageEvent, content_type: str, table):
 
 @bot.on.private_message(EditContent(), NumericRule(), OrRule(JudgeRule(), AdminRule()))
 async def select_field_to_edit(m: Message, value: int, content_type: str):
+    """
+    Выбор поля для редактирования.
+
+    Args:
+        m: Сообщение с номером поля
+        value: Номер поля
+        content_type: Тип контента
+
+    Действия:
+        Устанавливает состояние для редактирования выбранного поля
+    """
     if value > len(fields_content[content_type]['fields']):
         return "Слишком большое число"
     item_id = int(states.get(m.from_id).split("*")[1])
@@ -173,6 +253,8 @@ async def select_field_to_edit(m: Message, value: int, content_type: str):
     await m.answer(f"Введите новое значение для поля {fields_content[content_type]['fields'][value - 1].name}:",
                    keyboard=Keyboard())
     if fields_content[content_type]['fields'][value - 1].info_func:
+        # Проверка количества аргументов у функции описывающей информацию
+        # Если есть 1 аргумент передается айди предмета, чтобы вывести связанные объекты (используется обычно с RelatedTable)
         if len(inspect.signature(fields_content[content_type]['fields'][value - 1].info_func).parameters) == 0:
             text, keyboard = await fields_content[content_type]['fields'][value - 1].info_func()
         else:

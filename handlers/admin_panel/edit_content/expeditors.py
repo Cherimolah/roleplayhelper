@@ -1,3 +1,172 @@
+from vkbottle.bot import Message
+from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
+from vkbottle import Keyboard
+from vkbottle_types.objects import MessagesMessageAttachmentType as attach_type
+
+from loader import bot
+from service.custom_rules import StateRule, AdminRule, NumericRule
+from service.states import Admin
+from service.db_engine import db
+from service.middleware import states
+from service.utils import allow_edit_content, reload_image, send_content_page
+from service.keyboards import decor_vars, gen_type_change_content
+
+
+@bot.on.private_message(PayloadRule({"Decor": "add"}), StateRule(f"{Admin.SELECT_ACTION}_Decor"), AdminRule())
+async def add_decor(m: Message):
+    """
+    Создание нового декора.
+
+    Инициализирует процесс добавления нового декора, создает запись в БД
+    и переводит пользователя в состояние ввода названия.
+
+    Args:
+        m (Message): Входящее сообщение от пользователя
+    """
+    decor = await db.Decor.create()
+    states.set(m.from_id, f"{Admin.NAME_DECOR}*{decor.id}")
+    await m.answer("Введите название декора:", keyboard=Keyboard())
+
+
+@bot.on.private_message(StateRule(Admin.NAME_DECOR), AdminRule())
+@allow_edit_content("Decor", state=Admin.PRICE_DECOR, text="Название успешно установлено, теперь укажите цену")
+async def name_decor(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка названия декора.
+
+    Сохраняет название декора в базу данных.
+
+    Args:
+        m (Message): Входящее сообщение с названием декора
+        item_id (int): ID декора в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
+    await db.Decor.update.values(name=m.text).where(db.Decor.id == item_id).gino.status()
+
+
+@bot.on.private_message(StateRule(Admin.PRICE_DECOR), AdminRule(), NumericRule())
+@allow_edit_content("Decor", state=Admin.DESCRIPTION_DECOR, text="Цена успешно установлена. Напишите описание товара")
+async def price_decor(m: Message, value: int, item_id: int, editing_content: bool):
+    """
+    Установка цены декора.
+
+    Сохраняет цену декора в базу данных.
+
+    Args:
+        m (Message): Входящее сообщение с ценой
+        value (int): Числовое значение цены
+        item_id (int): ID декора в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
+    await db.Decor.update.values(price=value).where(db.Decor.id == item_id).gino.status()
+
+
+@bot.on.private_message(StateRule(Admin.DESCRIPTION_DECOR), AdminRule())
+@allow_edit_content("Decor", state=Admin.IS_FUNC_DECOR, text="Описание успешно установлено. Выберите тип товара:",
+                    keyboard=decor_vars)
+async def description_decor(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка описания декора.
+
+    Сохраняет описание декора в базу данных.
+
+    Args:
+        m (Message): Входящее сообщение с описанием
+        item_id (int): ID декора в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
+    await db.Decor.update.values(description=m.text).where(db.Decor.id == item_id).gino.status()
+
+
+@bot.on.private_message(PayloadMapRule({"is_functional_product": bool}), StateRule(Admin.IS_FUNC_DECOR), AdminRule())
+@allow_edit_content("Decor", state=Admin.PHOTO_DECOR,
+                    text="Тип товара установлен. Теперь пришлите фотографию товара", keyboard=Keyboard())
+async def is_functional_decor(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка типа декора (функциональный/нефункциональный).
+
+    Сохраняет тип декора в базу данных.
+
+    Args:
+        m (Message): Входящее сообщение с типом декора
+        item_id (int): ID декора в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
+    is_func = m.payload["is_functional_product"]
+    await db.Decor.update.values(is_func=is_func).where(db.Decor.id == item_id).gino.status()
+
+
+@bot.on.private_message(StateRule(Admin.PHOTO_DECOR), AdminRule())
+@allow_edit_content("Decor", text="Товар успешно добавлен",
+                    keyboard=gen_type_change_content("Decor"), end=True)
+async def photo_decor(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка фотографии декора.
+
+    Сохраняет фотографию декора в базу данных и файловую систему.
+
+    Args:
+        m (Message): Входящее сообщение с фотографией
+        item_id (int): ID декора в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
+    message = await m.get_full_message()
+    if not message.attachments or message.attachments[0].type != attach_type.PHOTO:
+        await m.answer("Нужно прислать одно фото")
+        return
+    name = await db.select([db.Decor.name]).where(db.Decor.id == item_id).gino.scalar()
+    photo = await reload_image(message.attachments[0], f"data/decors/{name}.jpg")
+    await db.Decor.update.values(photo=photo).where(db.Decor.id == item_id).gino.status()
+
+
+@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Decor"), PayloadRule({"Decor": "delete"}), AdminRule())
+async def select_number_product_to_delete(m: Message):
+    """
+    Выбор декора для удаления.
+
+    Показывает список всех декоров для выбора того, который нужно удалить.
+
+    Args:
+        m (Message): Входящее сообщение
+
+    Returns:
+        str: Сообщение об отсутствии декоров, если таковых нет
+    """
+    reply = "Выберите товар:\n\n"
+    decors = await db.select([db.Decor.name]).order_by(db.Decor.id.asc()).gino.all()
+    if not decors:
+        return "Товары ещё не созданы"
+    for i, product in enumerate(decors):
+        reply = f"{reply}{i + 1}. {product.name}\n"
+    states.set(m.from_id, Admin.ID_DECOR)
+    await m.answer(reply, keyboard=Keyboard())
+
+
+@bot.on.private_message(StateRule(Admin.ID_DECOR), NumericRule(), AdminRule())
+async def delete_poduct(m: Message, value: int):
+    """
+    Удаление выбранного декора.
+
+    Удаляет декора из базы данных.
+
+    Args:
+        m (Message): Входящее сообщение с номером декора для удаления
+        value (int): Номер декора в списке
+    """
+    decor_id = await db.select([db.Decor.id]).order_by(db.Decor.id.asc()).offset(value - 1).limit(1).gino.scalar()
+    if not decor_id:
+        await m.answer("Указан неверный номер товара")
+        return
+    await db.Decor.delete.where(db.Decor.id == decor_id).gino.status()
+    states.set(m.from_id, f"{Admin.SELECT_ACTION}_Decor")
+    await m.answer("Товар успешно удалён", keyboard=gen_type_change_content("Decor"))
+    await send_content_page(m, "Decor", 1)
+
+
+# [file content end]
+python
+# [file name]: expeditors.py
+# [file content begin]
 from vkbottle.bot import Message, MessageEvent
 from vkbottle import Keyboard, GroupEventType, Callback, KeyboardButtonColor
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
@@ -14,12 +183,30 @@ from service import keyboards
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Expeditor"), PayloadRule({"Expeditor": "add"}), AdminRule())
 async def create_quest(m: Message):
+    """
+    Создание карты экспедитора.
+
+    В настоящее время создание через админ-панель не поддерживается.
+
+    Args:
+        m (Message): Входящее сообщение от пользователя
+    """
     await m.answer('Создание Карты экспедитора из админ-панели не поддерживается')
 
 
 @bot.on.private_message(StateRule(Admin.EXPEDITOR_NAME), AdminRule())
 @allow_edit_content('Expeditor')
 async def set_expeditor_name(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка имени экспедитора.
+
+    Заглушка - в текущей реализации имя не устанавливается через админ-панель.
+
+    Args:
+        m (Message): Входящее сообщение
+        item_id (int): ID экспедитора в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
     # No need to set name expeditor by admin panel
     pass
 
@@ -27,73 +214,156 @@ async def set_expeditor_name(m: Message, item_id: int, editing_content: bool):
 @bot.on.private_message(StateRule(Admin.EXPEDITOR_SEX), PayloadMapRule({'sex': int}), AdminRule())
 @allow_edit_content('Expeditor')
 async def set_expeditor_sex(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка пола экспедитора.
+
+    Сохраняет пол экспедитора в базу данных.
+
+    Args:
+        m (Message): Входящее сообщение с полом
+        item_id (int): ID экспедитора в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
     await db.Expeditor.update.values(sex=m.payload['sex']).where(db.Expeditor.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.EXPEDITOR_RACE), NumericRule(), AdminRule())
 @allow_edit_content('Expeditor')
 async def set_expeditor_race(m: Message, item_id: int, editing_content: bool, value: int):
+    """
+    Установка расы экспедитора.
+
+    Сохраняет выбранную расу для экспедитора.
+
+    Args:
+        m (Message): Входящее сообщение с номером расы
+        item_id (int): ID экспедитора в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+        value (int): Номер расы в списке
+
+    Raises:
+        FormatDataException: Если номер расы не соответствует существующей расе
+    """
     race_id = await db.select([db.Race.id]).order_by(db.Race.id.asc()).offset(value - 1).limit(1).gino.scalar()
     if not race_id:
         raise FormatDataException('Неправильный номер расы!')
     await db.Expeditor.update.values(race_id=race_id).where(db.Expeditor.id == item_id).gino.status()
 
 
-@bot.on.private_message(StateRule(Admin.EXPEDITOR_PREGNANT), PayloadRule({'delete_expeditor_pregnant': True}), AdminRule())
+@bot.on.private_message(StateRule(Admin.EXPEDITOR_PREGNANT), PayloadRule({'delete_expeditor_pregnant': True}),
+                        AdminRule())
 @allow_edit_content('Expeditor')
 async def set_expeditor_pregnant(m: Message, item_id: int, editing_content: bool):
+    """
+    Удаление информации о беременности экспедитора.
+
+    Очищает поле беременности у экспедитора.
+
+    Args:
+        m (Message): Входящее сообщение
+        item_id (int): ID экспедитора в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
     await db.Expeditor.update.values(pregnant=None).where(db.Expeditor.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.EXPEDITOR_PREGNANT), AdminRule())
 @allow_edit_content('Expeditor')
 async def set_expeditor_pregnant(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка информации о беременности экспедитора.
+
+    Сохраняет информацию о беременности экспедитора.
+
+    Args:
+        m (Message): Входящее сообщение с информацией о беременности
+        item_id (int): ID экспедитора в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
     await db.Expeditor.update.values(pregnant=m.text).where(db.Expeditor.id == item_id).gino.status()
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.EXPEDITOR_ATTRIBUTES), PayloadMapRule({'expeditor_id': int, 'attributes': 'back'}), AdminRule())
+# Далее идут обработчики для управления атрибутами, дебаффами и предметами экспедитора
+# Каждый из них обеспечивает интерактивное изменение соответствующих характеристик
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.EXPEDITOR_ATTRIBUTES),
+                  PayloadMapRule({'expeditor_id': int, 'attributes': 'back'}), AdminRule())
 async def back_attrs(m: MessageEvent):
+    """
+    Возврат к меню атрибутов экспедитора.
+
+    Обновляет сообщение с информацией об атрибутах экспедитора.
+
+    Args:
+        m (MessageEvent): Событие callback кнопки
+    """
     expeditor_id = m.payload['expeditor_id']
     reply, keyboard = await info_expeditor_attributes(expeditor_id)
     await m.edit_message(message=reply, keyboard=keyboard.get_json())
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.EXPEDITOR_ATTRIBUTES), PayloadMapRule({'expeditor_id': int, 'attribute_id': int, 'action': 'select_attribute'}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.EXPEDITOR_ATTRIBUTES),
+                  PayloadMapRule({'expeditor_id': int, 'attribute_id': int, 'action': 'select_attribute'}), AdminRule())
 async def select_attribute(m: MessageEvent):
+    """
+    Выбор конкретного атрибута для изменения.
+
+    Показывает текущее значение атрибута и кнопки для его изменения.
+
+    Args:
+        m (MessageEvent): Событие callback кнопки
+    """
     attribute_id = m.payload['attribute_id']
     expeditor_id = m.payload['expeditor_id']
     state = f'{Admin.EXPEDITOR_ATTRIBUTES}*{expeditor_id}*{attribute_id}'
     states.set(m.user_id, state)
     attribute_name = await db.select([db.Attribute.name]).where(db.Attribute.id == attribute_id).gino.scalar()
     value = await db.select([db.ExpeditorToAttributes.value]).where(
-        and_(db.ExpeditorToAttributes.expeditor_id == expeditor_id, db.ExpeditorToAttributes.attribute_id == attribute_id)
+        and_(db.ExpeditorToAttributes.expeditor_id == expeditor_id,
+             db.ExpeditorToAttributes.attribute_id == attribute_id)
     ).gino.scalar()
     reply = f'Текущее значение «{attribute_name}»: {value}'
     keyboard = Keyboard(inline=True).add(
-        Callback('-5', {'expeditor_id': expeditor_id, 'attribute_id': attribute_id, 'delta': -5}), KeyboardButtonColor.PRIMARY
+        Callback('-5', {'expeditor_id': expeditor_id, 'attribute_id': attribute_id, 'delta': -5}),
+        KeyboardButtonColor.PRIMARY
     ).add(
-        Callback('-1', {'expeditor_id': expeditor_id, 'attribute_id': attribute_id, 'delta': -1}), KeyboardButtonColor.PRIMARY
+        Callback('-1', {'expeditor_id': expeditor_id, 'attribute_id': attribute_id, 'delta': -1}),
+        KeyboardButtonColor.PRIMARY
     ).add(
-        Callback('+1', {'expeditor_id': expeditor_id, 'attribute_id': attribute_id, 'delta': 1}), KeyboardButtonColor.PRIMARY
+        Callback('+1', {'expeditor_id': expeditor_id, 'attribute_id': attribute_id, 'delta': 1}),
+        KeyboardButtonColor.PRIMARY
     ).add(
-        Callback('+5', {'expeditor_id': expeditor_id, 'attribute_id': attribute_id, 'delta': 5}), KeyboardButtonColor.PRIMARY
+        Callback('+5', {'expeditor_id': expeditor_id, 'attribute_id': attribute_id, 'delta': 5}),
+        KeyboardButtonColor.PRIMARY
     ).row().add(
-        Callback('-10', {'expeditor_id': expeditor_id, 'attribute_id': attribute_id, 'delta': -10}), KeyboardButtonColor.PRIMARY
+        Callback('-10', {'expeditor_id': expeditor_id, 'attribute_id': attribute_id, 'delta': -10}),
+        KeyboardButtonColor.PRIMARY
     ).add(
-        Callback('+10', {'expeditor_id': expeditor_id, 'attribute_id': attribute_id, 'delta': 10}), KeyboardButtonColor.PRIMARY
+        Callback('+10', {'expeditor_id': expeditor_id, 'attribute_id': attribute_id, 'delta': 10}),
+        KeyboardButtonColor.PRIMARY
     ).row().add(
         Callback('Назад', {'expeditor_id': expeditor_id, 'attributes': 'back'}), KeyboardButtonColor.NEGATIVE
     )
     await m.edit_message(message=reply, keyboard=keyboard.get_json())
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.EXPEDITOR_ATTRIBUTES), PayloadMapRule({'expeditor_id': int, 'attribute_id': int, 'delta': int}), AdminRule())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.EXPEDITOR_ATTRIBUTES),
+                  PayloadMapRule({'expeditor_id': int, 'attribute_id': int, 'delta': int}), AdminRule())
 async def update_attribute(m: MessageEvent):
+    """
+    Обновление значения атрибута.
+
+    Изменяет значение атрибута на указанную дельту.
+
+    Args:
+        m (MessageEvent): Событие callback кнопки
+    """
     expeditor_id = m.payload['expeditor_id']
     attribute_id = m.payload['attribute_id']
     delta = m.payload['delta']
     await db.ExpeditorToAttributes.update.values(value=db.ExpeditorToAttributes.value + delta).where(
-        and_(db.ExpeditorToAttributes.attribute_id == attribute_id, db.ExpeditorToAttributes.expeditor_id == expeditor_id)
+        and_(db.ExpeditorToAttributes.attribute_id == attribute_id,
+             db.ExpeditorToAttributes.expeditor_id == expeditor_id)
     ).gino.status()
     await select_attribute(m)
 
@@ -316,8 +586,20 @@ async def save_items(m: Message, item_id: int, editing_content: bool):
     pass
 
 
-@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Expeditor"), PayloadRule({"Expeditor": "delete"}), AdminRule())
+@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Expeditor"), PayloadRule({"Expeditor": "delete"}),
+                        AdminRule())
 async def select_delete_quest(m: Message):
+    """
+    Выбор карты экспедитора для удаления.
+
+    Показывает список всех карт экспедитора для выбора той, которую нужно удалить.
+
+    Args:
+        m (Message): Входящее сообщение
+
+    Returns:
+        str: Сообщение об отсутствии карт экспедитора, если таковых нет
+    """
     expeditors = await db.select([db.Expeditor.name]).order_by(db.Expeditor.id.asc()).gino.all()
     if not expeditors:
         return "Карты экспедитора ещё не созданы"
@@ -330,7 +612,17 @@ async def select_delete_quest(m: Message):
 
 @bot.on.private_message(StateRule(Admin.EXPEDITOR_DELETE), NumericRule(), AdminRule())
 async def delete_quest(m: Message, value: int):
-    item_id = await db.select([db.Expeditor.id]).order_by(db.Expeditor.id.asc()).offset(value - 1).limit(1).gino.scalar()
+    """
+    Удаление выбранной карты экспедитора.
+
+    Удаляет карту экспедитора из базы данных.
+
+    Args:
+        m (Message): Входящее сообщение с номером карты для удаления
+        value (int): Номер карты в списке
+    """
+    item_id = await db.select([db.Expeditor.id]).order_by(db.Expeditor.id.asc()).offset(value - 1).limit(
+        1).gino.scalar()
     await db.Expeditor.delete.where(db.Expeditor.id == item_id).gino.status()
     states.set(m.peer_id, f"{Admin.SELECT_ACTION}_Expeditor")
     await m.answer("Карта экспедитора успешно удалена", keyboard=keyboards.gen_type_change_content("Expeditor"))

@@ -15,6 +15,7 @@ from service.serializers import info_race_bonus
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Race"), PayloadRule({"Race": "add"}), AdminRule())
 async def select_action_race(m: Message):
+    """Начало создания новой расы"""
     race = await db.Race.create()
     states.set(m.from_id, f"{Admin.RACE_NAME}*{race.id}")
     await m.answer('Введите название расы', keyboard=Keyboard())
@@ -23,6 +24,7 @@ async def select_action_race(m: Message):
 @bot.on.private_message(StateRule(Admin.RACE_NAME), AdminRule())
 @allow_edit_content("Race", state=Admin.RACE_BONUS)
 async def set_name_race(m: Message, item_id: int, editing_content: bool):
+    """Установка названия расы и переход к настройке бонусов"""
     await db.Race.update.values(name=m.text).where(db.Race.id == item_id).gino.status()
     if not editing_content:
         await m.answer('Укажите бонусы к характеристикам в карте экспедитора', keyboard=Keyboard())
@@ -32,6 +34,7 @@ async def set_name_race(m: Message, item_id: int, editing_content: bool):
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.RACE_BONUS), PayloadMapRule({'race_id': int, 'attribute_id': int, 'action': 'select'}), AdminRule())
 async def select_bonus_race(m: MessageEvent):
+    """Обработчик выбора атрибута для настройки бонуса расы"""
     attribute = await db.select([db.Attribute.name]).where(db.Attribute.id == m.payload['attribute_id']).gino.scalar()
     bonus = await db.select([db.RaceBonus.bonus]).where(
         and_(db.RaceBonus.race_id == m.payload['race_id'], db.RaceBonus.attribute_id == m.payload['attribute_id'])
@@ -45,6 +48,7 @@ async def select_bonus_race(m: MessageEvent):
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.RACE_BONUS), PayloadMapRule({"race_id": int, 'attribute_id': int, 'add': int}), AdminRule())
 async def change_race_bonus(m: MessageEvent):
+    """Изменение бонуса расы для выбранного атрибута"""
     exist = await db.select([db.RaceBonus.id]).where(
         and_(db.RaceBonus.race_id == m.payload['race_id'], db.RaceBonus.attribute_id == m.payload['attribute_id'])
     ).gino.scalar()
@@ -74,6 +78,7 @@ async def change_race_bonus(m: MessageEvent):
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, StateRule(Admin.RACE_BONUS), PayloadMapRule({"race_id": int, 'action': 'back'}), AdminRule())
 async def back_race_bonuses(m: MessageEvent):
+    """Возврат к списку бонусов расы"""
     reply, keyboard = await info_race_bonus(m.payload['race_id'])
     await m.edit_message(reply, keyboard=keyboard)
 
@@ -81,12 +86,14 @@ async def back_race_bonuses(m: MessageEvent):
 @bot.on.private_message(StateRule(Admin.RACE_BONUS), PayloadMapRule({"race_id": int, 'action': 'save'}), AdminRule())
 @allow_edit_content('Race', end=True, text='Раса успешно создана')
 async def save_race_bonus(m: Message, item_id: int, editing_content: bool):
+    """Сохранение расы после настройки бонусов"""
     pass
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Race"), PayloadRule({"Race": "delete"}),
                         AdminRule())
 async def select_id_to_delete_race(m: Message):
+    """Выбор расы для удаления"""
     reply = 'Выберите расу:\n\n'
     races = await db.select([db.Race.name]).order_by(db.Race.id.asc()).gino.all()
     if not races:
@@ -99,6 +106,7 @@ async def select_id_to_delete_race(m: Message):
 
 @bot.on.private_message(StateRule(Admin.RACE_DELETE), NumericRule(), AdminRule())
 async def delete_race(m: Message, value: int):
+    """Удаление выбранной расы"""
     race_id = await db.select([db.Race.id]).order_by(db.Race.id.asc()).offset(value - 1).limit(1).gino.scalar()
     await db.Race.delete.where(db.Race.id == race_id).gino.status()
     states.set(m.from_id, f"{Admin.SELECT_ACTION}_Race")

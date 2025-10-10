@@ -17,6 +17,7 @@ from config import DATETIME_FORMAT
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Quest"), PayloadRule({"Quest": "add"}), AdminRule())
 async def create_quest(m: Message):
+    """Начало создания квеста"""
     quest = await db.Quest.create()
     states.set(m.from_id, f"{Admin.QUEST_NAME}*{quest.id}")
     await m.answer("Напишите название квеста", keyboard=Keyboard())
@@ -26,12 +27,14 @@ async def create_quest(m: Message):
 @allow_edit_content("Quest", state=Admin.QUEST_DESCRIPTION,
                     text="Название квеста установлено. Теперь пришлите описание квеста")
 async def name_quest(m: Message, item_id: int, editing_content: bool):
+    """Установка названия квеста"""
     await db.Quest.update.values(name=m.text).where(db.Quest.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.QUEST_DESCRIPTION), AdminRule())
 @allow_edit_content("Quest", state=Admin.QUEST_REWARD)
 async def description_quest(m: Message, item_id: int, editing_content: bool):
+    """Установка описания квеста"""
     await db.Quest.update.values(description=m.text).where(db.Quest.id == item_id).gino.status()
     if not editing_content:
         await m.answer("Укажите награду для квеста\n\n" + (await info_target_reward())[0])
@@ -42,6 +45,7 @@ async def description_quest(m: Message, item_id: int, editing_content: bool):
                     text="Награда за квест установлена. Укажите дату и время начала квеста в формате "
                          "ДД.ММ.ГГГГ чч:мм:сс")
 async def reward_quest(m: Message, item_id: int, editing_content: bool):
+    """Установка награды за квест"""
     data = await parse_reward(m.text.lower())
     await db.Quest.update.values(reward=data).where(db.Quest.id == item_id).gino.status()
 
@@ -52,6 +56,7 @@ async def reward_quest(m: Message, item_id: int, editing_content: bool):
         Text("Навсегда", {"quest_always": True})
     ))
 async def start_date_quest(m: Message, item_id: int, editing_content: bool):
+    """Установка даты начала квеста"""
     try:
         day = datetime.datetime.strptime(m.text, DATETIME_FORMAT)
     except:
@@ -70,6 +75,7 @@ async def start_date_quest(m: Message, item_id: int, editing_content: bool):
         Text("Бессрочно", {"quest_forever": True})
     ))
 async def set_quest_always(m: Message, item_id: int, editing_content: bool):
+    """Установка бессрочного квеста"""
     await db.Quest.update.values(closed_at=None).where(db.Quest.id == item_id).gino.status()
 
 
@@ -79,6 +85,7 @@ async def set_quest_always(m: Message, item_id: int, editing_content: bool):
         Text("Бессрочно", {"quest_forever": True})
     ))
 async def end_date_quest(m: Message, item_id: int, editing_content: bool):
+    """Установка даты окончания квеста"""
     try:
         day = datetime.datetime.strptime(m.text, DATETIME_FORMAT)
     except:
@@ -97,6 +104,7 @@ async def end_date_quest(m: Message, item_id: int, editing_content: bool):
                     keyboard=Keyboard().add(Text('Без ограничений по игрокам', {"quest_for_all": True}),
                                             KeyboardButtonColor.PRIMARY))
 async def quest_forever(m: Message, item_id: int, editing_content: bool):
+    """Установка бессрочного времени выполнения квеста"""
     await db.Quest.update.values(execution_time=None).where(db.Quest.id == item_id).gino.status()
 
 
@@ -106,6 +114,7 @@ async def quest_forever(m: Message, item_id: int, editing_content: bool):
                     keyboard=Keyboard().add(Text('Без ограничений по игрокам', {"quest_for_all": True}),
                                             KeyboardButtonColor.PRIMARY))
 async def quest_expiration_time(m: Message, item_id: int, editing_content: bool):
+    """Установка времени выполнения квеста"""
     seconds = parse_period(m.text)
     if not seconds:
         raise FormatDataException("Формат периода неверный")
@@ -118,6 +127,7 @@ async def quest_expiration_time(m: Message, item_id: int, editing_content: bool)
 @bot.on.private_message(StateRule(Admin.QUEST_USERS_ALLOWED), PayloadRule({"quest_for_all": True}), AdminRule())
 @allow_edit_content('Quest', state=Admin.QUEST_FRACTION_ALLOWED)
 async def quest_users_all_allowed(m: Message, item_id: int, editing_content: bool):
+    """Разрешение квеста для всех пользователей"""
     await db.Quest.update.values(allowed_forms=[]).where(db.Quest.id == item_id).gino.status()
     if not editing_content:
         reply = ("Квест установлен без ограничений по пользователям\n\n"
@@ -134,6 +144,7 @@ async def quest_users_all_allowed(m: Message, item_id: int, editing_content: boo
 @bot.on.private_message(StateRule(Admin.QUEST_USERS_ALLOWED), AdminRule())
 @allow_edit_content('Quest', state=Admin.QUEST_FRACTION_ALLOWED)
 async def quest_users_allowed(m: Message, item_id: int, editing_content: bool):
+    """Установка ограничений по пользователям для квеста"""
     user_ids = list(set(await parse_ids(m)))
     if not user_ids:
         raise FormatDataException('Пользователи не указаны')
@@ -156,6 +167,7 @@ async def quest_users_allowed(m: Message, item_id: int, editing_content: bool):
 @bot.on.private_message(StateRule(Admin.QUEST_FRACTION_ALLOWED), PayloadRule({"quest_for_all_fractions": True}), AdminRule())
 @allow_edit_content('Quest', state=Admin.QUEST_PROFESSION_ALLOWED)
 async def quest_fraction_all_allowed(m: Message, item_id: int, editing_content: bool):
+    """Разрешение квеста для всех фракций"""
     await db.Quest.update.values(allowed_fraction=None).where(db.Quest.id == item_id).gino.status()
     if not editing_content:
         reply = ("Квест установлен без ограничений по фракциям\n\n"
@@ -172,6 +184,7 @@ async def quest_fraction_all_allowed(m: Message, item_id: int, editing_content: 
 @bot.on.private_message(StateRule(Admin.QUEST_FRACTION_ALLOWED), NumericRule(), AdminRule())
 @allow_edit_content('Quest', state=Admin.QUEST_PROFESSION_ALLOWED)
 async def quest_fractions_allowed(m: Message, value: int, item_id: int, editing_content: bool):
+    """Установка ограничения по фракциям для квеста"""
     fractions = [x[0] for x in await db.select([db.Fraction.id]).order_by(db.Fraction.id.asc()).gino.all()]
     if value > len(fractions):
         raise FormatDataException("Номер фракции слишком большой")
@@ -193,6 +206,7 @@ async def quest_fractions_allowed(m: Message, value: int, item_id: int, editing_
 @bot.on.private_message(StateRule(Admin.QUEST_PROFESSION_ALLOWED), PayloadRule({"quest_for_all_professions": True}), AdminRule())
 @allow_edit_content('Quest', state=Admin.QUEST_ADDITIONAL_TARGETS)
 async def quest_allow_all_professions(m: Message, item_id: int, editing_content: bool):
+    """Разрешение квеста для всех профессий"""
     await db.Quest.update.values(allowed_profession=None).where(db.Quest.id == item_id).gino.status()
     if not editing_content:
         targets = [x[0] for x in await db.select([db.AdditionalTarget.name]).order_by(db.AdditionalTarget.id.asc()).gino.all()]
@@ -208,6 +222,7 @@ async def quest_allow_all_professions(m: Message, item_id: int, editing_content:
 @bot.on.private_message(StateRule(Admin.QUEST_PROFESSION_ALLOWED), NumericRule(), AdminRule())
 @allow_edit_content('Quest', state=Admin.QUEST_ADDITIONAL_TARGETS)
 async def quest_allow_professions(m: Message, value: int, item_id: int, editing_content: bool):
+    """Установка ограничения по профессиям для квеста"""
     professions = [x[0] for x in await db.select([db.Profession.id]).order_by(db.Profession.id.asc()).gino.all()]
     if value > len(professions):
         raise FormatDataException("Номер профессии слишком большой")
@@ -229,6 +244,7 @@ async def quest_allow_professions(m: Message, value: int, item_id: int, editing_
 @bot.on.private_message(StateRule(Admin.QUEST_ADDITIONAL_TARGETS), PayloadRule({"quest_without_targets": True}), AdminRule())
 @allow_edit_content('Quest', state=Admin.QUEST_PENALTY)
 async def quest_without_targets(m: Message, item_id: int, editing_content: bool):
+    """Создание квеста без дополнительных целей"""
     await db.Quest.update.values(target_ids=[]).where(db.Quest.id == item_id).gino.status()
     if not editing_content:
         reply, keyboard = await info_quest_penalty()
@@ -238,6 +254,7 @@ async def quest_without_targets(m: Message, item_id: int, editing_content: bool)
 @bot.on.private_message(StateRule(Admin.QUEST_ADDITIONAL_TARGETS), AdminRule())
 @allow_edit_content('Quest', state=Admin.QUEST_PENALTY)
 async def quest_additional_targets(m: Message, item_id: int, editing_content: bool):
+    """Добавление дополнительных целей к квесту"""
     try:
         numbers = list(set(map(int, m.text.replace(' ', '').split(','))))
     except:
@@ -253,18 +270,21 @@ async def quest_additional_targets(m: Message, item_id: int, editing_content: bo
 @bot.on.private_message(StateRule(Admin.QUEST_PENALTY), PayloadRule({"without_penalty": True}), AdminRule())
 @allow_edit_content('Quest', end=True, text='Квест успешно создан')
 async def quest_without_penalty(m: Message, item_id: int, editing_content: bool):
+    """Создание квеста без штрафа"""
     await db.Quest.update.values(penalty=None).where(db.Quest.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.QUEST_PENALTY), AdminRule())
 @allow_edit_content('Quest', end=True, text='Квест успешно создан')
 async def quest_without_penalty(m: Message, item_id: int, editing_content: bool):
+    """Установка штрафа для квеста"""
     data = await parse_reward(m.text.lower())
     await db.Quest.update.values(penalty=data).where(db.Quest.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Quest"), PayloadRule({"Quest": "delete"}), AdminRule())
 async def select_delete_quest(m: Message):
+    """Выбор квеста для удаления"""
     quests = await db.select([db.Quest.name]).order_by(db.Quest.id.asc()).gino.all()
     if not quests:
         return "Квесты ещё не созданы"
@@ -277,6 +297,7 @@ async def select_delete_quest(m: Message):
 
 @bot.on.private_message(StateRule(Admin.QUEST_DELETE), NumericRule(), AdminRule())
 async def delete_quest(m: Message, value: int):
+    """Удаление выбранного квеста и связанных данных"""
     quest_id = await db.select([db.Quest.id]).order_by(db.Quest.id.asc()).offset(value - 1).limit(1).gino.scalar()
     await db.ReadyQuest.delete.where(db.ReadyQuest.quest_id == quest_id).gino.status()
     await db.QuestToForm.delete.where(db.QuestToForm.quest_id == quest_id).gino.status()

@@ -16,6 +16,7 @@ from service.serializers import info_target_reward, parse_reward
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_AdditionalTarget"), PayloadRule({"AdditionalTarget": "add"}), AdminRule())
 async def create_quest(m: Message):
+    """Начало создания дополнительной цели"""
     target = await db.AdditionalTarget.create()
     states.set(m.from_id, f"{Admin.TARGET_NAME}*{target.id}")
     await m.answer("Напишите название дополнительной цели", keyboard=Keyboard())
@@ -25,6 +26,7 @@ async def create_quest(m: Message):
 @allow_edit_content('AdditionalTarget', state=Admin.TARGET_DESCRIPTION,
                     text='Напишите описание доп. цели')
 async def name_quest(m: Message, item_id: int, editing_content: bool):
+    """Установка названия дополнительной цели"""
     await db.AdditionalTarget.update.values(name=m.text).where(db.AdditionalTarget.id == item_id).gino.status()
 
 
@@ -33,12 +35,14 @@ async def name_quest(m: Message, item_id: int, editing_content: bool):
                     text='Доп. цель будет доступна для всех?',
                     keyboard=Keyboard().add(Text('Доступна для всех', {"target_for_all": True})).row().add(Text('Указать фильтры', {"target_for_all": False})))
 async def target_description(m: Message, item_id: int, editing_content: bool):
+    """Установка описания дополнительной цели"""
     await db.AdditionalTarget.update.values(description=m.text).where(db.AdditionalTarget.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.TARGET_FOR_ALL_USERS), AdminRule(), PayloadRule({"target_for_all": False}))
 @allow_edit_content('AdditionalTarget', state=Admin.TARGET_FRACTION_REPUTATION, keyboard=Keyboard())
 async def fraction_reputation(m: Message, item_id: int, editing_content: bool):
+    """Настройка ограничений по репутации фракции"""
     await db.AdditionalTarget.update.values(for_all_users=False).where(db.AdditionalTarget.id == item_id).gino.status()
     if not editing_content:
         fractions = [x[0] for x in await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()]
@@ -55,6 +59,7 @@ async def fraction_reputation(m: Message, item_id: int, editing_content: bool):
 @bot.on.private_message(StateRule(Admin.TARGET_FOR_ALL_USERS), AdminRule(), PayloadRule({"target_for_all": True}))
 @allow_edit_content('AdditionalTarget', state=Admin.TARGET_REWARD)
 async def target_for_all(m: Message, item_id: int, editing_content: bool):
+    """Установка доступности цели для всех пользователей"""
     await db.AdditionalTarget.update.values(for_all_users=True).where(db.AdditionalTarget.id == item_id).gino.status()
     if not editing_content:
         await m.answer((await info_target_reward())[0], keyboard=Keyboard())
@@ -63,6 +68,7 @@ async def target_for_all(m: Message, item_id: int, editing_content: bool):
 @bot.on.private_message(StateRule(Admin.TARGET_FRACTION_REPUTATION), PayloadRule({"target_reputation": False}), AdminRule())
 @allow_edit_content('AdditionalTarget', state=Admin.TARGET_FRACTION)
 async def target_without_reputation(m: Message, item_id: int, editing_content: bool):
+    """Создание цели без ограничений по репутации"""
     await db.AdditionalTarget.update.values(fraction_reputation=None, reputation=None).where(db.AdditionalTarget.id == item_id).gino.status()
     if not editing_content:
         fractions = [x[0] for x in await db.select([db.Fraction.name]).order_by(db.Fraction.id.asc()).gino.all()]
@@ -80,6 +86,7 @@ async def target_without_reputation(m: Message, item_id: int, editing_content: b
                     text='Укажите уровень репутации с которого будет доступна доп. цель',
                     keyboard=Keyboard())
 async def target_fraction_reputation(m: Message, value: int, item_id: int, editing_content: bool):
+    """Установка фракции для ограничения по репутации"""
     fractions = [x[0] for x in await db.select([db.Fraction.id]).order_by(db.Fraction.id.asc()).gino.all()]
     if value > len(fractions):
         raise FormatDataException('Номер фракции слишком большой')
@@ -90,6 +97,7 @@ async def target_fraction_reputation(m: Message, value: int, item_id: int, editi
 @bot.on.private_message(StateRule(Admin.TARGET_REPUTATION), AdminRule())
 @allow_edit_content('AdditionalTarget', state=Admin.TARGET_FRACTION)
 async def target_reputation(m: Message, item_id: int, editing_content: bool):
+    """Установка уровня репутации"""
     try:
         value = int(m.text)
     except ValueError:
@@ -111,6 +119,7 @@ async def target_reputation(m: Message, item_id: int, editing_content: bool):
 @bot.on.private_message(StateRule(Admin.TARGET_FRACTION), PayloadRule({"target_fraction": False}), AdminRule())
 @allow_edit_content('AdditionalTarget', state=Admin.TARGET_PROFESSION)
 async def target_without_fractions(m: Message, item_id: int, editing_content: bool):
+    """Создание цели без ограничений по фракции"""
     await db.AdditionalTarget.update.values(fraction=None).where(db.AdditionalTarget.id == item_id).gino.status()
     if not editing_content:
         professions = [x[0] for x in await db.select([db.Profession.name]).order_by(db.Profession.id.asc()).gino.all()]
@@ -126,6 +135,7 @@ async def target_without_fractions(m: Message, item_id: int, editing_content: bo
 @bot.on.private_message(StateRule(Admin.TARGET_FRACTION), NumericRule(), AdminRule())
 @allow_edit_content('AdditionalTarget', state=Admin.TARGET_PROFESSION)
 async def target_fraction(m: Message, value: int, item_id: int, editing_content: bool):
+    """Установка ограничения по фракции"""
     fractions = [x[0] for x in await db.select([db.Fraction.id]).order_by(db.Fraction.id.asc()).gino.all()]
     if value > len(fractions):
         raise FormatDataException('Номер фракции слишком большой')
@@ -150,6 +160,7 @@ async def target_fraction(m: Message, value: int, item_id: int, editing_content:
                          '10 и 15\n10 или 5\n\n',
                     keyboard=Keyboard().add(Text('Без выдачи по параметрам', {"target_params": False})))
 async def target_without_profession(m: Message, item_id: int, editing_content: bool):
+    """Создание цели без ограничений по профессии"""
     await db.AdditionalTarget.update.values(profession=None).where(db.AdditionalTarget.id == item_id).gino.status()
 
 
@@ -160,6 +171,7 @@ async def target_without_profession(m: Message, item_id: int, editing_content: b
                          '10 и 15\n10 или 5\n\n❗️ Можноуказать только один фильтр',
                     keyboard=Keyboard().add(Text('Без выдачи по параметрам', {"target_params": False})))
 async def target_profession(m: Message, value: int, item_id: int, editing_content: bool):
+    """Установка ограничения по профессии"""
     professions = [x[0] for x in await db.select([db.Profession.id]).order_by(db.Profession.id.asc()).gino.all()]
     if value > len(professions):
         raise FormatDataException('Номер профессии слишком большой')
@@ -173,6 +185,7 @@ async def target_profession(m: Message, value: int, item_id: int, editing_conten
                     text='Пришлите ссылки на пользователей, которым будет доступна доп. цель',
                     keyboard=Keyboard().add(Text('Без выдачи определённым пользователям', {"target_forms": False})))
 async def target_daughter_params(m: Message, item_id: int, editing_content: bool):
+    """Установка параметров дочери для фильтрации"""
     if m.payload:
         await db.AdditionalTarget.update.values(daughter_params=[]).where(db.AdditionalTarget.id == item_id).gino.status()
         return
@@ -183,6 +196,7 @@ async def target_daughter_params(m: Message, item_id: int, editing_content: bool
 @bot.on.private_message(StateRule(Admin.TARGET_FORMS), PayloadRule({"target_forms": False}), AdminRule())
 @allow_edit_content('AdditionalTarget',  state=Admin.TARGET_REWARD, keyboard=Keyboard())
 async def target_without_forms(m: Message, item_id: int, editing_content: bool):
+    """Создание цели без ограничений по пользователям"""
     await db.AdditionalTarget.update.values(forms=[]).where(db.AdditionalTarget.id == item_id).gino.status()
     if not editing_content:
         await m.answer((await info_target_reward())[0], keyboard=Keyboard())
@@ -191,6 +205,7 @@ async def target_without_forms(m: Message, item_id: int, editing_content: bool):
 @bot.on.private_message(StateRule(Admin.TARGET_FORMS), AdminRule())
 @allow_edit_content('AdditionalTarget', state=Admin.TARGET_REWARD)
 async def target_forms(m: Message, item_id: int, editing_content: bool):
+    """Установка ограничений по пользователям"""
     user_ids = list(set(await parse_ids(m)))
     if not user_ids:
         raise FormatDataException('Пользователи не указаны')
@@ -205,6 +220,7 @@ async def target_forms(m: Message, item_id: int, editing_content: bool):
 @bot.on.private_message(StateRule(Admin.TARGET_REWARD), AdminRule())
 @allow_edit_content('AdditionalTarget', text='Доп. цель успешно создана', end=True)
 async def target_reward(m: Message, item_id: int, editing_content: bool):
+    """Установка награды за дополнительную цель"""
     text = m.text.lower()
     data = await parse_reward(text)
     await db.AdditionalTarget.update.values(reward_info=json.dumps(data)).where(db.AdditionalTarget.id == item_id).gino.status()
@@ -212,6 +228,7 @@ async def target_reward(m: Message, item_id: int, editing_content: bool):
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_AdditionalTarget"), PayloadRule({"AdditionalTarget": "delete"}), AdminRule())
 async def select_delete_quest(m: Message):
+    """Выбор дополнительной цели для удаления"""
     targets = await db.select([db.AdditionalTarget.name]).order_by(db.AdditionalTarget.id.asc()).gino.all()
     if not targets:
         return "Дополнительные цели ещё не созданы"
@@ -224,6 +241,7 @@ async def select_delete_quest(m: Message):
 
 @bot.on.private_message(StateRule(Admin.TARGET_DELETE), NumericRule(), AdminRule())
 async def delete_quest(m: Message, value: int):
+    """Удаление выбранной дополнительной цели"""
     target_id = await db.select([db.AdditionalTarget.id]).order_by(db.AdditionalTarget.id.asc()).offset(value - 1).limit(1).gino.scalar()
     await db.AdditionalTarget.delete.where(db.AdditionalTarget.id == target_id).gino.status()
     data = await db.select([db.Quest.id, db.Quest.target_ids]).where(db.Quest.target_ids.op('@>')([target_id])).gino.all()

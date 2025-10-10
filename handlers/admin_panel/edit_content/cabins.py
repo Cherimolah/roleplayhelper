@@ -1,3 +1,8 @@
+"""
+Модуль для управления каютами в системе администратора.
+Содержит обработчики для создания, настройки и удаления кают.
+"""
+
 from vkbottle.bot import Message
 from vkbottle.dispatch.rules.base import PayloadRule
 from vkbottle import Keyboard
@@ -12,9 +17,19 @@ from service.db_engine import db
 from service.utils import send_content_page, allow_edit_content
 
 
-# Создание новой каюты
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Cabins"), PayloadRule({"Cabins": "add"}), AdminRule())
 async def create_new_cabin(m: Message):
+    """
+    Создание новой каюты.
+
+    Args:
+        m: Сообщение от пользователя с payload {"Cabins": "add"}
+
+    Действия:
+        1. Создает запись каюты в БД
+        2. Устанавливает состояние для ввода названия каюты
+        3. Запрашивает название каюты
+    """
     # Создаем новую запись каюты в БД
     cabin = await db.Cabins.create()
     # Устанавливаем состояние с привязкой к ID созданной каюты
@@ -22,45 +37,99 @@ async def create_new_cabin(m: Message):
     await m.answer(messages.name_cabin, keyboard=Keyboard())
 
 
-# Установка названия каюты
 @bot.on.private_message(StateRule(Admin.NAME_CABIN), AdminRule())
 @allow_edit_content("Cabins", text=messages.price_cabin, keyboard=Keyboard(), state=Admin.PRICE_CABIN)
 async def set_name_cabin(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка названия каюты.
+
+    Args:
+        m: Сообщение с названием каюты
+        item_id: ID каюты из состояния
+        editing_content: Флаг редактирования существующего контента
+
+    Действия:
+        Обновляет название каюты в базе данных
+    """
     # Обновляем название каюты в базе данных
     await db.Cabins.update.values(name=m.text).where(db.Cabins.id == item_id).gino.status()
 
 
-# Установка цены каюты
 @bot.on.private_message(StateRule(Admin.PRICE_CABIN), NumericRule(), AdminRule())
 @allow_edit_content("Cabins",
                     text="Цена каюты установлена. Теперь укажите сколько будет слотов под обычный декор",
                     state=Admin.DECOR_SLOTS_CABINS)
 async def set_price_cabin(m: Message, value: int, item_id: int, editing_content: bool):
+    """
+    Установка цены каюты.
+
+    Args:
+        m: Сообщение с ценой каюты
+        value: Числовое значение цены
+        item_id: ID каюты
+        editing_content: Флаг редактирования
+
+    Действия:
+        Обновляет цену каюты в базе данных
+    """
     # Обновляем цену каюты в базе данных
     await db.Cabins.update.values(cost=value).where(db.Cabins.id == item_id).gino.status()
 
 
-# Установка слотов для декора
 @bot.on.private_message(StateRule(Admin.DECOR_SLOTS_CABINS), AdminRule(), NumericRule())
 @allow_edit_content("Cabins", state=Admin.FUNC_PRODUCTS_CABINS,
                     text="Количество слотов под обычный декор успешно записано. "
                          "Теперь укажите количество слотов для функциональных товаров")
 async def set_decor_cabins(m: Message, value: int, item_id: int, editing_content: bool):
+    """
+    Установка количества слотов для декора.
+
+    Args:
+        m: Сообщение с количеством слотов
+        value: Числовое значение количества слотов
+        item_id: ID каюты
+        editing_content: Флаг редактирования
+
+    Действия:
+        Обновляет количество слотов для декора в базе данных
+    """
     # Обновляем количество слотов для декора в базе данных
     await db.Cabins.update.values(decor_slots=value).where(db.Cabins.id == item_id).gino.status()
 
 
-# Установка слотов для функциональных товаров
 @bot.on.private_message(StateRule(Admin.FUNC_PRODUCTS_CABINS), AdminRule(), NumericRule())
 @allow_edit_content("Cabins", state=f"{Admin.SELECT_ACTION}_Cabins", text=messages.cabin_added, end=True)
 async def set_func_slots(m: Message, value: int, item_id: int, editing_content: bool):
+    """
+    Установка количества слотов для функциональных товаров.
+
+    Args:
+        m: Сообщение с количеством слотов
+        value: Числовое значение количества слотов
+        item_id: ID каюты
+        editing_content: Флаг редактирования
+
+    Действия:
+        Обновляет количество слотов для функциональных товаров
+        Завершает процесс создания/редактирования каюты
+    """
     # Обновляем количество слотов для функциональных товаров
     await db.Cabins.update.values(functional_slots=value).where(db.Cabins.id == item_id).gino.status()
 
 
-# Выбор каюты для удаления
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Cabins"), PayloadRule({"Cabins": "delete"}), AdminRule())
 async def select_cabin_to_delete(m: Message):
+    """
+    Выбор каюты для удаления.
+
+    Args:
+        m: Сообщение с payload {"Cabins": "delete"}
+
+    Действия:
+        1. Получает список всех кают из БД
+        2. Формирует список для отображения
+        3. Устанавливает состояние для ввода номера каюты
+    """
     # Получаем список всех кают из базы данных
     cabins = await db.select([db.Cabins.name, db.Cabins.cost]).order_by(db.Cabins.id.asc()).gino.all()
 
@@ -77,9 +146,21 @@ async def select_cabin_to_delete(m: Message):
     await m.answer(reply, keyboard=Keyboard())
 
 
-# Удаление каюты по номеру
 @bot.on.private_message(StateRule(Admin.ID_CABIN), NumericRule(), AdminRule())
 async def delete_cabin(m: Message, value: int):
+    """
+    Удаление каюты по номеру.
+
+    Args:
+        m: Сообщение с номером каюты
+        value: Числовой номер каюты в списке
+
+    Действия:
+        1. Получает ID каюты по порядковому номеру
+        2. Удаляет каюту из БД
+        3. Возвращает состояние к выбору действия
+        4. Обновляет страницу с контентом
+    """
     # Получаем ID каюты по порядковому номеру
     cabin_id = await db.select([db.Cabins.id]).order_by(db.Cabins.id.asc()).offset(value - 1).limit(1).gino.scalar()
 

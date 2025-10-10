@@ -14,6 +14,15 @@ from service.keyboards import decor_vars, gen_type_change_content
 
 @bot.on.private_message(PayloadRule({"Decor": "add"}), StateRule(f"{Admin.SELECT_ACTION}_Decor"), AdminRule())
 async def add_decor(m: Message):
+    """
+    Создание нового декора.
+
+    Инициализирует процесс добавления нового декора, создает запись в БД
+    и переводит пользователя в состояние ввода названия.
+
+    Args:
+        m (Message): Входящее сообщение от пользователя
+    """
     decor = await db.Decor.create()
     states.set(m.from_id, f"{Admin.NAME_DECOR}*{decor.id}")
     await m.answer("Введите название декора:", keyboard=Keyboard())
@@ -22,12 +31,33 @@ async def add_decor(m: Message):
 @bot.on.private_message(StateRule(Admin.NAME_DECOR), AdminRule())
 @allow_edit_content("Decor", state=Admin.PRICE_DECOR, text="Название успешно установлено, теперь укажите цену")
 async def name_decor(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка названия декора.
+
+    Сохраняет название декора в базу данных.
+
+    Args:
+        m (Message): Входящее сообщение с названием декора
+        item_id (int): ID декора в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
     await db.Decor.update.values(name=m.text).where(db.Decor.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.PRICE_DECOR), AdminRule(), NumericRule())
 @allow_edit_content("Decor", state=Admin.DESCRIPTION_DECOR, text="Цена успешно установлена. Напишите описание товара")
 async def price_decor(m: Message, value: int, item_id: int, editing_content: bool):
+    """
+    Установка цены декора.
+
+    Сохраняет цену декора в базу данных.
+
+    Args:
+        m (Message): Входящее сообщение с ценой
+        value (int): Числовое значение цены
+        item_id (int): ID декора в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
     await db.Decor.update.values(price=value).where(db.Decor.id == item_id).gino.status()
 
 
@@ -35,6 +65,16 @@ async def price_decor(m: Message, value: int, item_id: int, editing_content: boo
 @allow_edit_content("Decor", state=Admin.IS_FUNC_DECOR, text="Описание успешно установлено. Выберите тип товара:",
                     keyboard=decor_vars)
 async def description_decor(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка описания декора.
+
+    Сохраняет описание декора в базу данных.
+
+    Args:
+        m (Message): Входящее сообщение с описанием
+        item_id (int): ID декора в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
     await db.Decor.update.values(description=m.text).where(db.Decor.id == item_id).gino.status()
 
 
@@ -42,6 +82,16 @@ async def description_decor(m: Message, item_id: int, editing_content: bool):
 @allow_edit_content("Decor", state=Admin.PHOTO_DECOR,
                     text="Тип товара установлен. Теперь пришлите фотографию товара", keyboard=Keyboard())
 async def is_functional_decor(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка типа декора (функциональный/нефункциональный).
+
+    Сохраняет тип декора в базу данных.
+
+    Args:
+        m (Message): Входящее сообщение с типом декора
+        item_id (int): ID декора в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
     is_func = m.payload["is_functional_product"]
     await db.Decor.update.values(is_func=is_func).where(db.Decor.id == item_id).gino.status()
 
@@ -50,6 +100,16 @@ async def is_functional_decor(m: Message, item_id: int, editing_content: bool):
 @allow_edit_content("Decor", text="Товар успешно добавлен",
                     keyboard=gen_type_change_content("Decor"), end=True)
 async def photo_decor(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка фотографии декора.
+
+    Сохраняет фотографию декора в базу данных и файловую систему.
+
+    Args:
+        m (Message): Входящее сообщение с фотографией
+        item_id (int): ID декора в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
     message = await m.get_full_message()
     if not message.attachments or message.attachments[0].type != attach_type.PHOTO:
         await m.answer("Нужно прислать одно фото")
@@ -61,19 +121,39 @@ async def photo_decor(m: Message, item_id: int, editing_content: bool):
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Decor"), PayloadRule({"Decor": "delete"}), AdminRule())
 async def select_number_product_to_delete(m: Message):
+    """
+    Выбор декора для удаления.
+
+    Показывает список всех декоров для выбора того, который нужно удалить.
+
+    Args:
+        m (Message): Входящее сообщение
+
+    Returns:
+        str: Сообщение об отсутствии декоров, если таковых нет
+    """
     reply = "Выберите товар:\n\n"
     decors = await db.select([db.Decor.name]).order_by(db.Decor.id.asc()).gino.all()
     if not decors:
         return "Товары ещё не созданы"
     for i, product in enumerate(decors):
-        reply = f"{reply}{i+1}. {product.name}\n"
+        reply = f"{reply}{i + 1}. {product.name}\n"
     states.set(m.from_id, Admin.ID_DECOR)
     await m.answer(reply, keyboard=Keyboard())
 
 
 @bot.on.private_message(StateRule(Admin.ID_DECOR), NumericRule(), AdminRule())
 async def delete_poduct(m: Message, value: int):
-    decor_id = await db.select([db.Decor.id]).order_by(db.Decor.id.asc()).offset(value-1).limit(1).gino.scalar()
+    """
+    Удаление выбранного декора.
+
+    Удаляет декора из базы данных.
+
+    Args:
+        m (Message): Входящее сообщение с номером декора для удаления
+        value (int): Номер декора в списке
+    """
+    decor_id = await db.select([db.Decor.id]).order_by(db.Decor.id.asc()).offset(value - 1).limit(1).gino.scalar()
     if not decor_id:
         await m.answer("Указан неверный номер товара")
         return
@@ -81,4 +161,3 @@ async def delete_poduct(m: Message, value: int):
     states.set(m.from_id, f"{Admin.SELECT_ACTION}_Decor")
     await m.answer("Товар успешно удалён", keyboard=gen_type_change_content("Decor"))
     await send_content_page(m, "Decor", 1)
-

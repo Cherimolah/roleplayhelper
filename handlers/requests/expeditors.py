@@ -1,3 +1,8 @@
+"""
+Модуль для обработки запросов на подтверждение карт экспедиторов.
+Экспедиторы - пользователи с особыми правами в системе.
+"""
+
 from vkbottle.bot import MessageEvent, Message
 from vkbottle import GroupEventType
 from vkbottle.dispatch.rules.base import PayloadMapRule
@@ -10,32 +15,57 @@ from service.serializers import fields_content, RelatedTable, Field
 from service.utils import send_edit_item
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'request_expeditor_id': int, 'action': 'confirm'}), AdminRule(), ExpeditorRequestAvailable())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent,
+                  PayloadMapRule({'request_expeditor_id': int, 'action': 'confirm'}), AdminRule(),
+                  ExpeditorRequestAvailable())
 async def confirm_expeditor(m: MessageEvent | Message, user: UsersUserFull, name: str, form_id: int, expeditor_id: int):
+    """
+    Подтверждает карту экспедитора и начисляет репутацию.
+
+    Args:
+        m: Событие или сообщение с подтверждением
+        user: Данные пользователя
+        name: Имя пользователя из формы
+        form_id: ID формы пользователя
+        expeditor_id: ID карты экспедитора
+    """
+    # Подтверждаем карту экспедитора
     await db.Expeditor.update.values(is_confirmed=True).where(db.Expeditor.id == expeditor_id).gino.status()
-    data = await db.select([db.ExpeditorRequest.admin_id, db.ExpeditorRequest.message_id]).where(db.ExpeditorRequest.expeditor_id == expeditor_id).gino.all()
+
+    # Получаем данные о запросе для уведомления администраторов
+    data = await db.select([db.ExpeditorRequest.admin_id, db.ExpeditorRequest.message_id]).where(
+        db.ExpeditorRequest.expeditor_id == expeditor_id).gino.all()
+
+    # Определяем администратора, подтвердившего запрос
     if isinstance(m, MessageEvent):
         admin = (await bot.api.users.get(m.user_id))[0]
     else:
         admin = (await bot.api.users.get(m.from_id))[0]
+
+    # Уведомляем всех администраторов о подтверждении
     for admin_id, message_id in data:
         try:
-            await bot.api.messages.send(message=f'✅ Карта экспедитора игрока [id{user.id}|{name} / {user.first_name} {user.last_name}] принята администратором '
-                                                f'[id{admin_id}|{admin.first_name} {admin.last_name}]',
-                                        forward=MessagesForward(
-                                            peer_id=admin_id,
-                                            conversation_message_ids=[message_id],
-                                            is_reply=True
-                                        ).json(),
-                                        peer_id=admin_id)
+            await bot.api.messages.send(
+                message=f'✅ Карта экспедитора игрока [id{user.id}|{name} / {user.first_name} {user.last_name}] принята администратором '
+                        f'[id{admin_id}|{admin.first_name} {admin.last_name}]',
+                forward=MessagesForward(
+                    peer_id=admin_id,
+                    conversation_message_ids=[message_id],
+                    is_reply=True
+                ).json(),
+                peer_id=admin_id)
         except:
             await bot.api.messages.send(
                 message=f'✅ Карта экспедитора игрока [id{user.id}|{name} / {user.first_name} {user.last_name}] принята администратором '
                         f'[id{admin_id}|{admin.first_name} {admin.last_name}]',
                 peer_id=admin_id)
+
+    # Показываем уведомление и удаляем запрос
     if isinstance(m, MessageEvent):
         await m.show_snackbar('Карта экспедитора успешно принята')
     await db.ExpeditorRequest.delete.where(db.ExpeditorRequest.expeditor_id == expeditor_id).gino.status()
+
+    # Начисляем репутацию в зависимости от статуса формы
     status = await db.select([db.Form.status]).where(db.Form.id == form_id).gino.scalar()
     if status == 2:
         fraction_id = await db.select([db.Form.fraction_id]).where(db.Form.id == form_id).gino.scalar()
@@ -48,17 +78,36 @@ async def confirm_expeditor(m: MessageEvent | Message, user: UsersUserFull, name
         fraction_ids = {x[0] for x in await db.select([db.Fraction.id]).gino.all()}
         for fraction_id in fraction_ids:
             await db.change_reputation(user.id, fraction_id, 10)
+
+    # Уведомляем пользователя о принятии карты
     await bot.api.messages.send(message='Поздравляем! Ваша карта экспедитора была принята!\n'
                                         'За заполнение Карты вы также получили бонусную репутацию во всех фракциях!',
                                 peer_id=user.id,
                                 is_notification=True)
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'request_expeditor_id': int, 'action': 'decline'}), AdminRule(), ExpeditorRequestAvailable())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent,
+                  PayloadMapRule({'request_expeditor_id': int, 'action': 'decline'}), AdminRule(),
+                  ExpeditorRequestAvailable())
 async def decline_expeditor_request(m: MessageEvent, user: UsersUserFull, name: str, form_id: int, expeditor_id: int):
+    """
+    Отклоняет карту экспедитора.
+
+    Args:
+        m: Событие сообщения с отклонением
+        user: Данные пользователя
+        name: Имя пользователя из формы
+        form_id: ID формы пользователя
+        expeditor_id: ID карты экспедитора
+    """
+    # Получаем данные о запросе для уведомления
     data = await db.select([db.ExpeditorRequest.admin_id, db.ExpeditorRequest.message_id]).where(
         db.ExpeditorRequest.expeditor_id == expeditor_id).gino.all()
+
+    # Удаляем карту экспедитора
     await db.Expeditor.delete.where(db.Expeditor.id == expeditor_id).gino.status()
+
+    # Уведомляем администраторов об отклонении
     admin = (await bot.api.users.get(m.user_id))[0]
     for admin_id, message_id in data:
         try:
@@ -76,19 +125,36 @@ async def decline_expeditor_request(m: MessageEvent, user: UsersUserFull, name: 
                 message=f'❌ Карта экспедитора игрока [id{user.id}|{name} / {user.first_name} {user.last_name}] отклонена администратором '
                         f'[id{admin_id}|{admin.first_name} {admin.last_name}]',
                 peer_id=admin_id)
+
+    # Показываем уведомление и удаляем запрос
     await m.show_snackbar('Карта экспедитора отклонена')
     await db.ExpeditorRequest.delete.where(db.ExpeditorRequest.expeditor_id == expeditor_id).gino.status()
+
+    # Уведомляем пользователя об отклонении
     await bot.api.messages.send(message='К сожалению, ваша карта экспедитора была отклонена\n'
                                         'Свяжитесь с администрацией для выяснения причины',
                                 peer_id=user.id,
                                 is_notification=True)
 
 
-@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'request_expeditor_id': int, 'action': 'edit'}), AdminRule(), ExpeditorRequestAvailable())
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent,
+                  PayloadMapRule({'request_expeditor_id': int, 'action': 'edit'}), AdminRule(),
+                  ExpeditorRequestAvailable())
 async def edit_expeditor(m: MessageEvent):
+    """
+    Открывает карту экспедитора для редактирования.
+
+    Args:
+        m: Событие сообщения с запросом на редактирование
+    """
     request_expeditor_id = m.payload['request_expeditor_id']
-    expeditor_id = await db.select([db.ExpeditorRequest.expeditor_id]).where(db.ExpeditorRequest.id == request_expeditor_id).gino.scalar()
+
+    # Получаем ID карты экспедитора и данные о ней
+    expeditor_id = await db.select([db.ExpeditorRequest.expeditor_id]).where(
+        db.ExpeditorRequest.id == request_expeditor_id).gino.scalar()
     item = await db.select([*db.Expeditor]).where(db.Expeditor.id == expeditor_id).gino.first()
+
+    # Формируем сообщение с данными карты экспедитора
     reply = ''
     attachment = None
     for i, data in enumerate(fields_content['Expeditor']['fields']):
@@ -104,5 +170,7 @@ async def edit_expeditor(m: MessageEvent):
                 reply += f"{i + 1}. {data.name}: {item[i + 1]}\n"
             else:
                 reply += f"{i + 1}. {data.name}: {await data.serialize_func(item[i + 1])}\n"
+
+    # Отправляем данные карты и открываем режим редактирования
     await m.edit_message(reply, attachment=attachment)
     await send_edit_item(m.user_id, expeditor_id, 'Expeditor')

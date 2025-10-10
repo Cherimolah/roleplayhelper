@@ -1,3 +1,8 @@
+"""
+Модуль для управления ежедневными заданиями (дейликами) в системе администратора.
+Содержит обработчики для создания, настройки и удаления дейликов.
+"""
+
 from vkbottle.bot import Message
 from vkbottle.dispatch.rules.base import PayloadRule
 from vkbottle import Keyboard
@@ -13,6 +18,16 @@ from service import keyboards
 
 @bot.on.private_message(PayloadRule({"Daylic": "add"}), StateRule(f"{Admin.SELECT_ACTION}_Daylic"), AdminRule())
 async def create_daylic(m: Message):
+    """
+    Создание нового дейлика.
+
+    Args:
+        m: Сообщение с payload {"Daylic": "add"}
+
+    Действия:
+        1. Создает запись дейлика в БД
+        2. Устанавливает состояние для ввода названия
+    """
     daylic = await db.Daylic.create()
     states.set(m.from_id, f"{Admin.DAYLIC_NAME}*{daylic.id}")
     await m.answer("Введи название дейлика", keyboard=Keyboard())
@@ -21,6 +36,14 @@ async def create_daylic(m: Message):
 @bot.on.private_message(StateRule(Admin.DAYLIC_NAME), AdminRule())
 @allow_edit_content("Daylic", text="Название дейлика записал. Теперь отправь описание", state=Admin.DAYLIC_DESCRIPTION)
 async def set_name_daylic(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка названия дейлика.
+
+    Args:
+        m: Сообщение с названием
+        item_id: ID дейлика
+        editing_content: Флаг редактирования
+    """
     await db.Daylic.update.values(name=m.text).where(db.Daylic.id == item_id).gino.status()
 
 
@@ -28,12 +51,32 @@ async def set_name_daylic(m: Message, item_id: int, editing_content: bool):
 @allow_edit_content("Daylic", text="Описание установлено, теперь укажи награду за выполнение",
                     state=Admin.DAYLIC_REWARD)
 async def set_description_daylic(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка описания дейлика.
+
+    Args:
+        m: Сообщение с описанием
+        item_id: ID дейлика
+        editing_content: Флаг редактирования
+    """
     await db.Daylic.update.values(description=m.text).where(db.Daylic.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.DAYLIC_REWARD), NumericRule(), AdminRule())
 @allow_edit_content("Daylic", state=Admin.DAYLIC_PROFESSION)
 async def set_daylic_reward(m: Message, value: int, item_id: int, editing_content: bool):
+    """
+    Установка награды за выполнение дейлика.
+
+    Args:
+        m: Сообщение с размером награды
+        value: Числовое значение награды
+        item_id: ID дейлика
+        editing_content: Флаг редактирования
+
+    Действия:
+        Показывает список профессий для привязки
+    """
     await db.Daylic.update.values(reward=value).where(db.Daylic.id == item_id).gino.status()
     if not editing_content:
         reply = 'Укажите к какой профессии будет создан дейлик:\n\n'
@@ -46,6 +89,18 @@ async def set_daylic_reward(m: Message, value: int, item_id: int, editing_conten
 @bot.on.private_message(StateRule(Admin.DAYLIC_PROFESSION), NumericRule(), AdminRule())
 @allow_edit_content("Daylic", state=Admin.DAYLIC_FRACTION)
 async def set_daylic_profession(m: Message, value: int, item_id: int, editing_content: bool):
+    """
+    Привязка дейлика к профессии.
+
+    Args:
+        m: Сообщение с номером профессии
+        value: Номер профессии в списке
+        item_id: ID дейлика
+        editing_content: Флаг редактирования
+
+    Действия:
+        Показывает список фракций для установки бонуса репутации
+    """
     profession_id = await db.select([db.Profession.id]).order_by(db.Profession.id).offset(value - 1).limit(
         1).gino.scalar()
     if not profession_id:
@@ -62,6 +117,14 @@ async def set_daylic_profession(m: Message, value: int, item_id: int, editing_co
 @allow_edit_content("Daylic", text="Дейлик успешно создан без бонуса к репутации", end=True,
                     state=f"{Admin.SELECT_ACTION}_Daylic")
 async def save_daylic_without_bonus(m: Message, item_id: int, editing_content: bool):
+    """
+    Сохранение дейлика без бонуса к репутации.
+
+    Args:
+        m: Сообщение с payload
+        item_id: ID дейлика
+        editing_content: Флаг редактирования
+    """
     await db.Daylic.update.values(fraction_id=None, reputation=0).where(db.Daylic.id == item_id).gino.status()
 
 
@@ -69,6 +132,15 @@ async def save_daylic_without_bonus(m: Message, item_id: int, editing_content: b
 @allow_edit_content("Daylic", text="Номер фракции установлен теперь укажи бонус к репутации числом",
                     state=Admin.DAYLIC_REPUTATTION)
 async def set_daylic_fraction(m: Message, value: int, item_id: int, editing_content: bool):
+    """
+    Привязка дейлика к фракции.
+
+    Args:
+        m: Сообщение с номером фракции
+        value: Номер фракции в списке
+        item_id: ID дейлика
+        editing_content: Флаг редактирования
+    """
     fractions = [x[0] for x in await db.select([db.Fraction.id]).order_by(db.Fraction.id.asc()).gino.all()]
     if value > len(fractions):
         raise FormatDataException("Номер фракции слишком большой")
@@ -79,6 +151,14 @@ async def set_daylic_fraction(m: Message, value: int, item_id: int, editing_cont
 @bot.on.private_message(StateRule(Admin.DAYLIC_REPUTATTION), AdminRule())
 @allow_edit_content("Daylic", text="Дейлик успешно создан с бонусом к репутации", end=True)
 async def save_daylic_with_bonus(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка бонуса к репутации за выполнение дейлика.
+
+    Args:
+        m: Сообщение с размером бонуса
+        item_id: ID дейлика
+        editing_content: Флаг редактирования
+    """
     try:
         value = int(m.text)
     except ValueError:
@@ -97,6 +177,15 @@ async def save_daylic_with_bonus(m: Message, item_id: int, editing_content: bool
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Daylic"), PayloadRule({"Daylic": "delete"}), AdminRule())
 async def select_delete_daylic(m: Message):
+    """
+    Выбор дейлика для удаления.
+
+    Args:
+        m: Сообщение с payload {"Daylic": "delete"}
+
+    Действия:
+        Показывает список всех дейликов для выбора
+    """
     daylics = (await db.select([db.Daylic.name, db.Daylic.reward, db.Profession.name])
                .select_from(db.Daylic.join(db.Profession, db.Daylic.profession_id == db.Profession.id))
                .order_by(db.Daylic.id.asc()).gino.all())
@@ -111,6 +200,13 @@ async def select_delete_daylic(m: Message):
 
 @bot.on.private_message(StateRule(Admin.DAYLIC_SELECT_ID), NumericRule(), AdminRule())
 async def delete_daylic(m: Message, value: int):
+    """
+    Удаление выбранного дейлика.
+
+    Args:
+        m: Сообщение с номером дейлика
+        value: Номер дейлика в списке
+    """
     daylic_id, daylic_name = await db.select([db.Daylic.id, db.Daylic.name]).order_by(db.Daylic.id.asc()).offset(
         value - 1).limit(1).gino.first()
     await db.Daylic.delete.where(db.Daylic.id == daylic_id).gino.status()

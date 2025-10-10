@@ -1,5 +1,13 @@
-from datetime import datetime, timedelta, timezone
+"""
+Модуль обработки различных команд бота:
+- Связь с администрацией
+- Книга жалоб и предложений
+- Квесты и ежедневные задания
+- Настройки пользователя
+- Магазин и покупки
+"""
 
+from datetime import datetime, timedelta, timezone
 from vkbottle.bot import Message
 from vkbottle.dispatch.rules.base import PayloadRule
 from vkbottle import Keyboard, Text, KeyboardButtonColor
@@ -16,11 +24,14 @@ from service.utils import reload_image
 
 @bot.on.private_message(StateRule(Menu.MAIN), PayloadRule({"menu": "call_admin"}))
 async def send_call_admin(m: Message):
+    """Обработчик команды связи с администрацией"""
     await m.answer(messages.call_admin)
 
 
 @bot.on.private_message(StateRule(Menu.MAIN), PayloadRule({"menu": "book"}))
 async def send_book(m: Message):
+    """Обработчик открытия книги жалоб и предложений"""
+    # Устанавливаем состояние написания жалобы/предложения
     states.set(m.from_id, Menu.WRITE_PETITION)
     keyboard = Keyboard().add(
         Text("Назад", {"book": "back"}), KeyboardButtonColor.NEGATIVE
@@ -30,6 +41,7 @@ async def send_book(m: Message):
 
 @bot.on.private_message(StateRule(Menu.WRITE_PETITION), PayloadRule({"book": "back"}))
 async def back_from_write(m: Message):
+    """Возврат из режима написания жалобы/предложения"""
     states.set(m.from_id, Menu.MAIN)
     keyboard = Keyboard().add(
         Text("Связь с администарцией", {"menu": "call_admin"}), KeyboardButtonColor.PRIMARY
@@ -43,18 +55,40 @@ async def back_from_write(m: Message):
 
 @bot.on.private_message(StateRule(Menu.WRITE_PETITION))
 async def save_petition(m: Message):
+    """
+    Сохранение жалобы/предложения с обработкой вложений
+    """
     attachments = []
+
+    # Обработка вложений (фотографий)
     if m.attachments:
         await m.answer("Загружаем вложения")
         for i, attach in enumerate(m.attachments):
             if attach.type == attach.type.PHOTO:
+                # Перезагружаем изображение с уникальным именем
                 attachment = await reload_image(attach, f"book{m.from_id}_{i}.jpg", delete=True)
                 attachments.append(attachment)
+
+    # Формируем строку вложений
     attachment_str = ",".join(attachments)
+
+    # Получаем имя пользователя из базы данных
     name = await db.select([db.Form.name]).where(db.Form.user_id == m.from_id).gino.scalar()
+
+    # Получаем список администраторов
     admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
+
+    # Форматируем текущую дату
     day = datetime.now(timezone(timedelta(hours=3))).strftime("%d.%m.%Y %H:%M:%S")
-    await bot.api.messages.send(peer_ids=admins, message=messages.petition_new.format(f"[id{m.from_id}|{name}]", m.text, day), attachment=attachment_str)
+
+    # Отправляем жалобу администраторам
+    await bot.api.messages.send(
+        peer_ids=admins,
+        message=messages.petition_new.format(f"[id{m.from_id}|{name}]", m.text, day),
+        attachment=attachment_str
+    )
+
+    # Возвращаем пользователя в главное меню
     states.set(m.from_id, Menu.MAIN)
     await m.answer(messages.petition_send, keyboard=await keyboards.main_menu(m.from_id))
 
@@ -64,15 +98,24 @@ async def save_petition(m: Message):
 @bot.on.private_message(PayloadRule({"menu": "quests and daylics"}), StateRule(Menu.DAYLICS))
 @bot.on.private_message(PayloadRule({"daughter_quests": "back"}), StateRule(Menu.DAUGHTER_QUEST_MENU))
 async def quests_or_daylics(m: Message):
+    """
+    Обработчик раздела квестов и ежедневных заданий
+    Показывает меню выбора между квестами и ежедневными заданиями
+    """
     states.set(m.peer_id, Menu.MAIN)
     keyboard = (Keyboard().add(
         Text("Квесты", {"menu": "quests"}), KeyboardButtonColor.PRIMARY
     ).add(
         Text("Ежедневное задание", {"menu": "daylics"}), KeyboardButtonColor.PRIMARY
     ))
+
+    # Проверяем статус пользователя
     status = await db.select([db.Form.status]).where(db.Form.user_id == m.from_id).gino.scalar()
+
+    # Если пользователь имеет статус 2 (дочь), добавляем специальные квесты
     if status == 2:
         keyboard.row().add(Text('Квест для дочерей', {"menu": 'daughter_quests'}), KeyboardButtonColor.PRIMARY)
+
     keyboard.row().add(
         Text("Назад", {"menu": "home"}), KeyboardButtonColor.NEGATIVE
     )
@@ -81,6 +124,7 @@ async def quests_or_daylics(m: Message):
 
 @bot.on.private_message(PayloadRule({"menu": "staff"}), StateRule(Menu.MAIN))
 async def staff(m: Message):
+    """Обработчик раздела персонала"""
     keyboard = Keyboard().add(
         Text("Связь с администарцией", {"menu": "call_admin"}), KeyboardButtonColor.PRIMARY
     ).row().add(

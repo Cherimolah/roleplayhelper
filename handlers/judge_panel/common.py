@@ -3,7 +3,7 @@ from vkbottle.dispatch.rules.base import PayloadRule
 
 from loader import bot, states
 from service.custom_rules import JudgeRule, StateRule
-from service.states import Menu, Judge, Admin
+from service.states import Menu, Judge
 from service import keyboards
 from service.db_engine import db
 

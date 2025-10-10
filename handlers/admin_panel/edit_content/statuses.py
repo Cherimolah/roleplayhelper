@@ -13,6 +13,7 @@ from service.utils import send_content_page, allow_edit_content
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Status"), PayloadRule({"Status": "add"}), AdminRule())
 async def start_create_new_atatus(m: Message):
+    """Начало создания нового статуса"""
     status = await db.Status.create()
     states.set(m.from_id, f"{Admin.ENTER_NAME_STATUS}*{status.id}")
     await m.answer("Введите название статуса", keyboard=Keyboard())
@@ -22,11 +23,13 @@ async def start_create_new_atatus(m: Message):
 @allow_edit_content("Status", state=f"{Admin.SELECT_ACTION}_Status", text="Статус успешно создан",
                     keyboard=keyboards.gen_type_change_content("Status"), end=True)
 async def new_status(m: Message, item_id: int, editing_content: bool):
+    """Создание нового статуса"""
     await db.Status.update.values(name=m.text).where(db.Status.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Status"), PayloadRule({"Status": "delete"}), AdminRule())
 async def select_status_to_delete(m: Message):
+    """Выбор статуса для удаления"""
     statuses = await db.select([db.Status.name]).order_by(db.Status.id.asc()).gino.all()
     if not statuses:
         return "Статусы ещё не созданы"
@@ -39,6 +42,7 @@ async def select_status_to_delete(m: Message):
 
 @bot.on.private_message(StateRule(Admin.ID_STATUS), NumericRule(), AdminRule())
 async def delete_status(m: Message, value: int = None):
+    """Удаление выбранного статуса"""
     status_id = await db.select([db.Status.id]).order_by(db.Status.id.asc()).offset(value - 1).limit(1).gino.scalar()
     await db.Status.delete.where(db.Status.id == status_id).gino.status()
     states.set(m.from_id, f"{Admin.SELECT_ACTION}_Status")
