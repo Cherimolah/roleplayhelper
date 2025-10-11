@@ -5,11 +5,11 @@
 
 from vkbottle.bot import Message
 from vkbottle.dispatch.rules.base import PayloadRule
-from vkbottle import Keyboard
+from vkbottle import Keyboard, KeyboardButtonColor, Text
 
 from loader import bot
 from service.utils import allow_edit_content, send_content_page, parse_daughter_params
-from service.serializers import info_target_reward, parse_reward
+from service.serializers import info_target_reward, parse_reward, info_quest_penalty
 from service.middleware import states
 from service.db_engine import db
 from service.custom_rules import StateRule, AdminRule, NumericRule
@@ -66,9 +66,7 @@ async def daughter_target_description(m: Message, item_id: int, editing_content:
 
 
 @bot.on.private_message(StateRule(Admin.DAUGHTER_TARGET_REWARD), AdminRule())
-@allow_edit_content('DaughterTarget', state=Admin.DAUGHTER_TARGET_PARAMS,
-                    text='Укажите параметры либидо и подчинения, которые будут необходимы для выдачи доп. цели\n\n'
-                         'Например:\n«10 и 15»\n«10 или 15»', keyboard=Keyboard())
+@allow_edit_content('DaughterTarget', state=Admin.DAUGHTER_TARGET_PENALTY)
 async def daughter_target_reward(m: Message, item_id: int, editing_content: bool):
     """
     Установка награды за выполнение дополнительной цели.
@@ -80,11 +78,31 @@ async def daughter_target_reward(m: Message, item_id: int, editing_content: bool
     """
     data = await parse_reward(m.text)
     await db.DaughterTarget.update.values(reward=data).where(db.DaughterTarget.id == item_id).gino.status()
+    if not editing_content:
+        reply, keyboard = await info_quest_penalty()
+        await m.answer(reply, keyboard=keyboard)
+
+
+@bot.on.private_message(StateRule(Admin.DAUGHTER_TARGET_PENALTY), PayloadRule({"without_penalty": True}), AdminRule())
+@allow_edit_content('DaughterTarget', state=Admin.DAUGHTER_TARGET_PARAMS,
+                    text='Укажите параметры либидо и подчинения, которые будут необходимы для выдачи доп. цели\n\n'
+                         'Например:\n«10 и 15»\n«10 или 15»', keyboard=Keyboard())
+async def daughter_target_without_penalty(m: Message, item_id: int, editing_content: bool):
+    await db.DaughterTarget.update.values(penalty=None).where(db.DaughterTarget.id == item_id).gino.status()
+
+
+@bot.on.private_message(StateRule(Admin.DAUGHTER_TARGET_PENALTY), AdminRule())
+@allow_edit_content('DaughterTarget', state=Admin.DAUGHTER_TARGET_PARAMS,
+                    text='Укажите параметры либидо и подчинения, которые будут необходимы для выдачи доп. цели\n\n'
+                         'Например:\n«10 и 15»\n«10 или 15»', keyboard=Keyboard())
+async def daughter_target_penalty(m: Message, item_id: int, editing_content: bool):
+    data = await parse_reward(m.text)
+    await db.DaughterTarget.update.values(penalty=data).where(db.DaughterTarget.id == item_id).gino.status()
 
 
 @bot.on.private_message(StateRule(Admin.DAUGHTER_TARGET_PARAMS), AdminRule())
 @allow_edit_content('DaughterTarget', end=True, text='Доп. цель успешно создана')
-async def aughter_target_params(m: Message, item_id: int, editing_content: bool):
+async def daughter_target_params(m: Message, item_id: int, editing_content: bool):
     """
     Установка параметров либидо и подчинения для дополнительной цели.
 

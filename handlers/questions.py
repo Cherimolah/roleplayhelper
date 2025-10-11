@@ -560,8 +560,7 @@ async def want_daughter(m: Message):
         states.set(m.from_id, Menu.MAIN)
         await db.User.update.values(editing_form=False).where(db.User.user_id == m.from_id).gino.scalar()
         await m.answer('Отредактированная анкета отправлена администрации',
-                       keyboard=await keyboards.main_menu(m.from_id),
-                       is_notification=True)
+                       keyboard=await keyboards.main_menu(m.from_id))
     form_id = await db.select([db.Form.id]).where(db.Form.user_id == m.from_id).gino.scalar()
     user = await m.get_user()
     admins = await get_admin_ids()
@@ -636,6 +635,29 @@ async def q2(m: Message, value: int = None):
                    '1) Да. Она/они помогают себя контролировать\n'
                    '2) Нет. У меня нет врождённых особенностей\n'
                    '3) Да. Она/они усиливают моё половое влечение.', keyboard=keyboard)
+
+
+@bot.on.private_message(StateRule(DaughterQuestions.Q2), NumericRule(max_number=3))
+@bot.on.private_message(StateRule(DaughterQuestions.Q2), PayloadMapRule({'q': 2, 'a': int}))
+async def q3(m: Message, value: int = None):
+    if not m.payload:
+        await db.Form.update.values(libido_bonus=db.Form.libido_bonus + value).where(db.Form.user_id == m.from_id).gino.scalar()
+    else:
+        await db.Form.update.values(libido_bonus=db.Form.libido_bonus + m.payload['a']).where(
+            db.Form.user_id == m.from_id).gino.scalar()
+    states.set(m.from_id, DaughterQuestions.Q3)
+    keyboard = Keyboard().add(
+        Text('1) Да. Она/они помогают себя контролировать'[:40], {'q': 3, 'a': 1}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('2) Нет. У меня нет каких-либо модификаций такого рода'[:40], {'q': 3, 'a': 2}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('3) Да. Она/они усиливают моё половое влечение'[:40], {'q': 3, 'a': 3}),
+        KeyboardButtonColor.SECONDARY
+    )
+    await m.answer('Есть ли у вас приобретённые модификации (генетические или кибернетические), влияющие на контроль ваших физиологических потребностей? \n\n'
+                   '1) Да. Она/они помогают себя контролировать\n'
+                   '2) Нет. У меня нет каких-либо модификаций такого рода\n'
+                   '3) Да. Она/они усиливают моё половое влечение\n', keyboard=keyboard)
 
 
 # ... аналогичные функции для Q3-Q7 ...

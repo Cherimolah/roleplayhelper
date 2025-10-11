@@ -1143,7 +1143,8 @@ fields_content: Dict[str, Dict[str, List[Union[Field, RelatedTable]]]] = {
             Field('Название', Admin.DAUGHTER_TARGET_NAME),
             Field('Описание', Admin.DAUGHTER_TARGET_DESCRIPTION),
             Field('Награда', Admin.DAUGHTER_TARGET_REWARD, info_target_reward, serialize_target_reward),
-            Field('Параметры дочери', Admin.DAUGHTER_TARGET_PARAMS, info_target_daughter_params, serialize_target_daughter_params)
+            Field('Параметры дочери', Admin.DAUGHTER_TARGET_PARAMS, info_target_daughter_params, serialize_target_daughter_params),
+            Field('Штраф', Admin.DAUGHTER_TARGET_PENALTY, info_quest_penalty, serialize_target_reward)
         ]
     },
     'StateDebuff': {

@@ -12,7 +12,7 @@ from loader import bot, states
 from service.custom_rules import StateRule, DaughterRule
 from service.states import Menu
 from service.db_engine import db
-from service.utils import get_current_form_id, serialize_target_reward, parse_cooldown
+from service.utils import get_current_form_id, serialize_target_reward, parse_cooldown, get_available_daughter_target_ids
 from config import ADMINS
 
 
@@ -55,35 +55,17 @@ async def daughter_quest(m: Message):
              f'Остаётся на выполнение: {parse_cooldown(cooldown)}\n\n')
 
     # Обработка дополнительных целей
-    target_ids = []
-    for target_id in quest.target_ids:
-        params = await db.select([db.DaughterTarget.params]).where(db.DaughterTarget.id == target_id).gino.scalar()
-        libido, subordination = await db.select([db.Form.libido_level, db.Form.subordination_level]).where(
-            db.Form.id == form_id).gino.first()
-
-        # Проверка условий доступа к цели
-        if params[1]:  # или
-            if libido >= params[0] or subordination >= params[2]:
-                target_ids.append(target_id)
-        else:
-            if libido >= params[0] and subordination >= params[2]:
-                target_ids.append(target_id)
-
-    # Получение подтвержденных целей
-    confirmed_target_ids = {x[0] for x in await db.select([db.DaughterTargetRequest.target_id]).where(
-        and_(db.DaughterTargetRequest.confirmed.is_(True),
-             db.DaughterTargetRequest.created_at == datetime.date.today(),
-             db.DaughterTargetRequest.form_id == form_id)).gino.all()}
-
-    target_ids = list(set(target_ids) | confirmed_target_ids)
+    target_ids = await get_available_daughter_target_ids(m.from_id)
 
     # Добавление информации о дополнительных целях
     if target_ids:
         reply += 'Дополнительные цели:\n'
         for i, target_id in enumerate(target_ids):
             target = await db.DaughterTarget.get(target_id)
-            reply += (f'{i + 1}. {target.name}\n{target.description}\n'
-                      f'Награда: {await serialize_target_reward(target.reward)}\n\n')
+            reply += (f'{i + 1}. {target.name}\n'
+                      f'Описание: {target.description}\n'
+                      f'Награда: {await serialize_target_reward(target.reward)}\n'
+                      f'Штраф: {await serialize_target_reward(target.penalty)}\n\n')
 
     # Формирование статуса выполнения
     reply += 'Статус выполнения квеста:\n✅ - выполнено; ⚠ - на проверке; ❌ - не выполнено\n'

@@ -80,6 +80,8 @@ class MessagesCategoryExtended(MessagesCategory):
         if peer_id:
             peer_ids = [peer_id]
             del peer_id
+        if not isinstance(peer_ids, list):
+            peer_ids = [peer_ids]
         if is_notification:
             for p in peer_ids:
                 enabled = await db.select([db.User.notification_enabled]).where(db.User.user_id == p).gino.scalar()

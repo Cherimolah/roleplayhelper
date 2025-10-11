@@ -469,6 +469,7 @@ class Database(Gino):
             description = Column(Text)  # Описание
             reward = Column(JSON)  # Награда
             params = Column(ARRAY(Integer), default=[])  # Правило параметров (см. README)
+            penalty = Column(JSON)  # Штраф
 
         self.DaughterTarget = DaughterTarget
 

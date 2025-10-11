@@ -249,6 +249,7 @@ class Admin(metaclass=StateMeta):
     DAUGHTER_TARGET_NAME = 'daughter_target_name'
     DAUGHTER_TARGET_DESCRIPTION = 'daughter_target_description'
     DAUGHTER_TARGET_REWARD = 'daughter_target_reward'
+    DAUGHTER_TARGET_PENALTY = 'daughter_target_penalty'
     DAUGHTER_TARGET_PARAMS = 'daughter_target_params'
     DAUGHTER_TARGET_DELETE = 'daughter_target_delete'
     ITEM_NAME = 'item_name'

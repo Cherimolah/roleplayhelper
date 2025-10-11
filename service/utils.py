@@ -957,10 +957,12 @@ async def update_daughter_levels(user_id: int):
 
     Для либидо формула такая же
     """
+    tz = datetime.timezone(datetime.timedelta(hours=3))
     while True:
-        now = datetime.datetime.now()
+        now = datetime.datetime.now(tz=tz)
         tomorrow = now + datetime.timedelta(days=1)
-        tomorrow = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0)
+        tomorrow = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0, tzinfo=tz)
+        print('sleep', (tomorrow - now).total_seconds())
         await asyncio.sleep((tomorrow - now).total_seconds() - 2)
         form_id = await get_current_form_id(user_id)
         # Проверяем выполнение квеста дочери
@@ -973,9 +975,17 @@ async def update_daughter_levels(user_id: int):
             # Если квест не выполнен - применяем штраф
             if confirmed is None:
                 await apply_reward(user_id, quest.penalty)
-                reply = f' ❌ Вам выписан штраф за невыполнение квеста  «{quest.name}»:\n'
+                reply = f' ❌ Вам выписан штраф за невыполнение квеста «{quest.name}»:\n'
                 reply += await serialize_target_reward(quest.penalty)
                 await bot.api.messages.send(peer_id=user_id, message=reply, is_notification=True)
+                target_ids = await get_available_daughter_target_ids(user_id)
+                for target_id in target_ids:
+                    name, penalty = await db.select([db.DaughterTarget.name, db.DaughterTarget.penalty]).where(
+                        db.DaughterTarget.id == target_id
+                    ).gino.first()
+                    reply = f' ❌ Вам выписан штраф за невыполнение доп. цели «{name}»:\n'
+                    reply += await serialize_target_reward(penalty)
+                    await bot.api.messages.send(peer_id=user_id, message=reply, is_notification=True)
         # Обновляем параметры дочерей
         sub_bonus, lib_bonus, sub_level, lib_level, fraction_id = await db.select(
             [db.Form.subordination_bonus, db.Form.libido_bonus, db.Form.subordination_level, db.Form.libido_level, db.Form.fraction_id]).where(
@@ -989,6 +999,33 @@ async def update_daughter_levels(user_id: int):
         await db.Form.update.values(subordination_level=sub_level, libido_level=lib_level).where(
             db.Form.user_id == user_id).gino.status()
         await asyncio.sleep(15)
+
+
+async def get_available_daughter_target_ids(user_id: int) -> list[int]:
+    form_id = await get_current_form_id(user_id)
+    quest = await db.select([*db.DaughterQuest]).where(db.DaughterQuest.to_form_id == form_id).gino.first()
+    target_ids = []
+    for target_id in quest.target_ids:
+        params = await db.select([db.DaughterTarget.params]).where(db.DaughterTarget.id == target_id).gino.scalar()
+        libido, subordination = await db.select([db.Form.libido_level, db.Form.subordination_level]).where(
+            db.Form.id == form_id).gino.first()
+
+        # Проверка условий доступа к цели
+        if params[1]:  # или
+            if libido >= params[0] or subordination >= params[2]:
+                target_ids.append(target_id)
+        else:
+            if libido >= params[0] and subordination >= params[2]:
+                target_ids.append(target_id)
+
+    # Получение подтвержденных целей
+    confirmed_target_ids = {x[0] for x in await db.select([db.DaughterTargetRequest.target_id]).where(
+        and_(db.DaughterTargetRequest.confirmed.is_(True),
+             db.DaughterTargetRequest.created_at == datetime.date.today(),
+             db.DaughterTargetRequest.form_id == form_id)).gino.all()}
+
+    target_ids = list(set(target_ids) | confirmed_target_ids)
+    return target_ids
 
 
 async def get_admin_ids():
