@@ -921,7 +921,7 @@ async def apply_reward(user_id: int, data: dict):
             await db.change_reputation(user_id, fraction_id, reputation_bonus)
         elif reward['type'] == 'value_bonus':
             bonus = reward['bonus']
-            await db.Form.update.values(balance=db.Form.balance + bonus).gino.status()
+            await db.Form.update.values(balance=db.Form.balance + bonus).where(db.Form.user_id == user_id).gino.status()
         elif reward['type'] == 'daughter_params':
             libido, subordination = await db.select([db.Form.libido_level, db.Form.subordination_level]).where(db.Form.user_id == user_id).gino.first()
             sub_level = min(100, max(0, subordination + reward['subordination']))
