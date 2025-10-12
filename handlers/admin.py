@@ -344,13 +344,9 @@ async def accept_salary_request(m: MessageEvent):
         return
     user_id = await db.select([db.SalaryRequests.user_id]).where(db.SalaryRequests.id == salary_id).gino.scalar()
     await db.SalaryRequests.delete.where(db.SalaryRequests.id == salary_id).gino.status()
-    profession_id, name = await db.select([db.Form.profession, db.Form.name]).where(
-        and_(db.Form.user_id == user_id)
-    ).gino.first()
+    profession_id, name = await db.select([db.Form.profession, db.Form.name]).where(db.Form.user_id == user_id).gino.first()
     salary = await db.select([db.Profession.salary]).where(db.Profession.id == profession_id).gino.scalar()
-    await db.Form.update.values(balance=db.Form.balance + salary).where(
-        and_(db.Form.user_id == user_id)
-    ).gino.status()
+    await db.Form.update.values(balance=db.Form.balance + salary).where(db.Form.user_id == user_id).gino.status()
     await m.edit_message(f"Зарплата выплачена участнику [id{user_id}|{name}]")
     await bot.api.messages.send(peer_id=user_id, message=messages.salary_accepted.format(salary), is_notification=True)
 
