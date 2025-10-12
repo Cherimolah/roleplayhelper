@@ -16,6 +16,7 @@ import openpyxl
 from vkbottle import DocMessagesUploader, Callback, KeyboardButtonColor, Keyboard, GroupEventType
 
 from loader import bot, user_bot
+from messages import balance
 from service.db_engine import db
 import messages
 from service import keyboards
@@ -381,7 +382,7 @@ async def check_daylic(m: MessageEvent):
         db.Daylic.id == daylic_id).gino.first()
     if m.payload['action'] == 'accept':
         await db.CompletedDaylic.update.values(is_checked=True, is_claimed=True).where(db.CompletedDaylic.id == response_id).gino.status()
-        await db.Form.update.values(daylic_completed=True).where(db.Form.user_id == user_id).gino.status()
+        await db.Form.update.values(daylic_completed=True, balance=db.Form.balance + reward).where(db.Form.user_id == user_id).gino.status()
         await bot.api.messages.send(peer_id=user_id, message=f"Вам засчитано выполнения еженедельного задания {daylic_name}\n"
                                      f"Вы получили награду в размере {reward} валюты", is_notification=True)
         await m.edit_message(f"Еженедельное задание {daylic_name} засчитано игроку [id{user_id}|{name}], выдана награда {reward} монет")
