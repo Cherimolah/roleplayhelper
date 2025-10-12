@@ -331,6 +331,7 @@ class Database(Gino):
             # Эти столбцы legacy были еще до изоберетения reward
             fraction_id = Column(Integer, ForeignKey("fractions.id", ondelete='SET NULL'))  # Айди фракции, к которой применится бонус к репутации
             reputation = Column(Integer, default=0)  # Бонус к репутации
+            chill = Column(Boolean)  # Флаг того, что дейлик будет являться типом "Выходной дейлик"
 
         self.Daylic = Daylic
 

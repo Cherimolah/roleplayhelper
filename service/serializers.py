@@ -135,7 +135,7 @@ def parse_cooldown(cooldown: Optional[Union[int, float]]) -> Optional[str]:
     minutes = int((cooldown - days * 86400 - hours * 3600) // 60)
     seconds = int(cooldown - days * 86400 - hours * 3600 - minutes * 60)
     return (f"{f'{days} дней' if days > 0 else ''} {f'{hours} часов' if hours > 0 else ''} "
-            f"{f'{minutes} минут' if minutes > 0 else ''} {f'{seconds} секунд' if seconds > 0 else ''}")
+            f"{f'{minutes} минут' if minutes > 0 else ''} {f'{seconds} секунд' if seconds > 0 else ''}".strip())
 
 
 async def profession_serialize(profession_id: int) -> str:
@@ -1021,6 +1021,23 @@ async def info_debuff_time():
     keyboard = Keyboard().add(Text('Бессрочно', {'debuff_time': 'infinity'}), KeyboardButtonColor.NEGATIVE)
     return reply, keyboard
 
+
+async def info_daylic_chill() -> tuple[str, Keyboard | None]:
+    reply = 'Укажите в какое время будет выдаваться еженедельное задание'
+    keyboard = Keyboard().add(
+        Text('Выходной еженедельник (пн-ср)', {'chill_daylic': True}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text('Обычный еженедельник (чт-вс)', {'chill_daylic': False}), KeyboardButtonColor.PRIMARY
+    )
+    return reply, keyboard
+
+
+async def serialize_daylic_chill(value: bool) -> str:
+    if value:
+        return 'Выходной еженедельник (пн-ср)'
+    else:
+        return 'Обычный еженедельник (чт-вс)'
+
 # Словарь со всеми типами контента
 # Ключом в словаре должна являться строка - название аттрибута объекта db (прямо как в Database.__init__() объявлен)
 # По этому ключу будет получен класс таблицы из db
@@ -1045,7 +1062,8 @@ fields_content: Dict[str, Dict[str, List[Union[Field, RelatedTable]]]] = {
             Field("Награда", Admin.DAYLIC_REWARD),
             Field("Профессия", Admin.DAYLIC_PROFESSION, professions, profession_serialize),
             Field("Фракция", Admin.DAYLIC_FRACTION, info_fraction_daylic, serialize_fraction_daylic),
-            Field("Бонус к репутации", Admin.DAYLIC_REPUTATTION)
+            Field("Бонус к репутации", Admin.DAYLIC_REPUTATTION),
+            Field('Тип', Admin.DAYLIC_CHILL, info_daylic_chill, serialize_daylic_chill)
         ],
         "name": "Дейлик"
     },

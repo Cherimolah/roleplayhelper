@@ -197,6 +197,7 @@ class Admin(metaclass=StateMeta):
     DAYLIC_PROFESSION = "daylic_profession"
     DAYLIC_FRACTION = "daylic_fraction"
     DAYLIC_REPUTATTION = "daylic_reputation"
+    DAYLIC_CHILL = "daylic_chill"
     DAYLIC_SELECT_ID = "daylic_select_id"
     EVENT_NAME = "event_name"
     EVENT_DESCRIPTION = "event_description"

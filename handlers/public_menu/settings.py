@@ -43,7 +43,7 @@ async def change_notifications(m: Message):
 
     if is_enabled:
         await m.answer("Вы больше не будете получать рассылки и уведомления о "
-                       "дейликах, квестах, выплатах и т.д. от бота", keyboard=await get_settings_menu(m.from_id))
+                       "еженедельниках, квестах, выплатах и т.д. от бота", keyboard=await get_settings_menu(m.from_id))
     else:
         await m.answer("Уведомления включены")
         await settings(m)

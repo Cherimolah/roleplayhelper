@@ -49,7 +49,7 @@ async def main_menu(user_id: int):
     ).add(
         Text("Настройки", {"menu": "settings"}), KeyboardButtonColor.PRIMARY
     ).row().add(
-        Text("Квесты и ежедневные задания", {"menu": "quests and daylics"}), KeyboardButtonColor.PRIMARY
+        Text("Квесты и еженедельное задание", {"menu": "quests and daylics"}), KeyboardButtonColor.PRIMARY
     ).row().add(
         Text("Список локаций", {"menu": "locations"}), KeyboardButtonColor.PRIMARY
     ).row().add(
@@ -122,7 +122,7 @@ manage_content = Keyboard().add(
 ).row().add(
     Text("Квесты", {"edit_content": "Quest"}), KeyboardButtonColor.PRIMARY
 ).add(
-    Text("Дейлики", {"edit_content": "Daylic"}), KeyboardButtonColor.PRIMARY
+    Text("Еженедельники", {"edit_content": "Daylic"}), KeyboardButtonColor.PRIMARY
 ).row().add(
     Text("Декор / Функциональные товары", {"edit_content": "Decor"}), KeyboardButtonColor.PRIMARY
 ).add(

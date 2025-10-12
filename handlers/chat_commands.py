@@ -105,12 +105,12 @@ async def order_expensive_alcohol(m: Message):
     await m.reply('Недостаточно средств для оплаты дорогого алкоголя')
 
 
-@bot.on.chat_message(ChatAction('запросить зарплату'), blocking=False)
-@bot.on.chat_message(ChatAction('получить зарплату'), blocking=False)
-@bot.on.chat_message(ChatAction('выдать зарплату'), blocking=False)
-@bot.on.chat_message(ChatAction('хочу зарплату'), blocking=False)
-@bot.on.chat_message(ChatAction('зарплата'), blocking=False)
-@bot.on.chat_message(ChatAction('начислить зарплату'), blocking=False)
+@bot.on.chat_message(ChatAction('запросить сверхурочные'), blocking=False)
+@bot.on.chat_message(ChatAction('получить сверхурочные'), blocking=False)
+@bot.on.chat_message(ChatAction('выдать сверхурочные'), blocking=False)
+@bot.on.chat_message(ChatAction('хочу сверхурочные'), blocking=False)
+@bot.on.chat_message(ChatAction('сверхурочные'), blocking=False)
+@bot.on.chat_message(ChatAction('начислить сверхурочные'), blocking=False)
 @bot.on.chat_message(ChatAction('дай деньги'), blocking=False)
 async def ask_salary_command(m: Message):
     """Запрос выплаты зарплаты"""
@@ -123,7 +123,7 @@ async def ask_salary_command(m: Message):
 @bot.on.chat_message(ChatAction('вот отчет'), blocking=False)
 @bot.on.chat_message(ChatAction('выполнить отчет'), blocking=False)
 @bot.on.chat_message(ChatAction('закончить отчет'), blocking=False)
-@bot.on.chat_message(ChatAction('сдать дейлик'), blocking=False)
+@bot.on.chat_message(ChatAction('сдать еженедельник'), blocking=False)
 async def ask_salary_command(m: Message):
     """
     Сдача отчета о выполнении дейлика или квеста
@@ -139,7 +139,7 @@ async def ask_salary_command(m: Message):
     quest = await db.select([db.Form.active_quest]).where(db.Form.user_id == m.from_id).gino.scalar()
     if quest:
         return await send_ready_quest(m)
-    return await m.reply('У вас нет активного дейлика или квеста')
+    return await m.reply('У вас нет активного еженедельника или квеста')
 
 
 @bot.on.chat_message(RegexRule(deal_pattern), blocking=False)

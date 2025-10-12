@@ -373,7 +373,7 @@ async def check_daylic(m: MessageEvent):
     response_id = int(m.payload.get("daylic_check"))
     checked = await db.select([db.CompletedDaylic.is_checked]).where(db.CompletedDaylic.id == response_id).gino.scalar()
     if checked:
-        await m.edit_message('Этот дейлик уже проверил другой адмнисратор')
+        await m.edit_message('Это еженедельное задание уже проверил другой администратор')
         return
     daylic_id, form_id = await db.select([db.CompletedDaylic.daylic_id, db.CompletedDaylic.form_id]).where(db.CompletedDaylic.id == response_id).gino.first()
     name, user_id = await db.select([db.Form.name, db.Form.user_id]).where(db.Form.id == form_id).gino.first()
@@ -382,17 +382,17 @@ async def check_daylic(m: MessageEvent):
     if m.payload['action'] == 'accept':
         await db.CompletedDaylic.update.values(is_checked=True, is_claimed=True).where(db.CompletedDaylic.id == response_id).gino.status()
         await db.Form.update.values(daylic_completed=True).where(db.Form.user_id == user_id).gino.status()
-        await bot.api.messages.send(peer_id=user_id, message=f"Вам засчитано выполнения дейлика {daylic_name}\n"
+        await bot.api.messages.send(peer_id=user_id, message=f"Вам засчитано выполнения еженедельного задания {daylic_name}\n"
                                      f"Вы получили награду в размере {reward} валюты", is_notification=True)
-        await m.edit_message(f"Дейлик {daylic_name} засчитан игроку [id{user_id}|{name}], выдана награда {reward} монет")
+        await m.edit_message(f"Еженедельное задание {daylic_name} засчитано игроку [id{user_id}|{name}], выдана награда {reward} монет")
     else:
         await db.CompletedDaylic.update.values(is_checked=True, is_claimed=False).where(
             db.CompletedDaylic.id == response_id).gino.status()
         await bot.api.messages.send(peer_id=user_id,
-                                    message=f"К сожалению вам отклонили выполнение дейлика {daylic_name}\n\n"
+                                    message=f"К сожалению вам отклонили выполнение еженедельного задания {daylic_name}\n\n"
                                             f"Завершите выполнение и отправьте отчёт заново",
                                     is_notification=True)
-        await m.edit_message(f"Отклонено выполнение дейлика {daylic_name} участнику [id{user_id}|{name}]")
+        await m.edit_message(f"Отклонено выполнение еженедельного задания {daylic_name} участнику [id{user_id}|{name}]")
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"freeze": str, "user_id": int}))

@@ -577,30 +577,38 @@ async def send_daylics():
     await asyncio.sleep(5)  # Wait for initialize gino
     while True:
         # Считаем время до следующего обновления.
-        # Обновление дейлика происходит раз в 3 дня в 00 часов по Москве
-        last_daylic = await db.select([db.Metadata.last_daylic_date]).gino.scalar()
-        if not last_daylic:
-            seconds = calculate_wait_time(hours=23, minutes=59, seconds=59)
+        today = now()
+        if 0 <= today.weekday() <= 2:
+            next_time = today + datetime.timedelta(days=3-today.weekday())
         else:
-            next_time = last_daylic + datetime.timedelta(days=3)
-            seconds = (next_time - now()).total_seconds()
-        await asyncio.sleep(seconds)  #
+            next_time = today + datetime.timedelta(days=7 - today.weekday())
+        next_time = datetime.datetime(next_time.year, next_time.month, next_time.day, 0, 0, 0,
+                                      tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
+        await asyncio.sleep((next_time - now()).total_seconds())
         data = await db.select([db.Form.id, db.Form.user_id]).where(db.Form.is_request.is_(False)).gino.all()
         for form_id, user_id in data:
             profession_id = await db.select([db.Form.profession]).where(db.Form.id == form_id).gino.scalar()
             # Получаем использованные дейлики
             daylic_used = [x[0] for x in await db.select([db.DaylicHistory.daylic_id]).where(db.DaylicHistory.form_id == form_id).gino.all()]
             # Ищем новый дейлик
-            daylic = await db.select([db.Daylic.id]).where(and_(db.Daylic.profession_id == profession_id, db.Daylic.id.notin_(daylic_used))).order_by(
-                func.random()).gino.scalar()
-            if not daylic:  # all daylics used, try clean pool
-                await db.DaylicHistory.delete.where(db.DaylicHistory.form_id == form_id).gino.status()
-                daylic = await db.select([db.Daylic.id]).where(db.Daylic.profession_id == profession_id).order_by(func.random()).gino.scalar()
+            # Если сейчас день недели пн-ср берем Выходной дейлик (см. README)
+            # Если сейчас день недели чт-вс берем Обычный дейлик
+            if 0 <= next_time.weekday() <= 2:
+                daylic = await db.select([db.Daylic.id]).where(and_(db.Daylic.profession_id == profession_id,
+                                                                             db.Daylic.chill == True)).order_by(func.random()).gino.scalar()
+            else:
+                daylic = await db.select([db.Daylic.id]).where(and_(
+                    db.Daylic.profession_id == profession_id, db.Daylic.id.notin_(daylic_used), db.Daylic.chill == False)).order_by(
+                    func.random()).gino.scalar()
+                if not daylic:  # all daylics used, try clean pool
+                    await db.DaylicHistory.delete.where(db.DaylicHistory.form_id == form_id).gino.status()
+                    daylic = await db.select([db.Daylic.id]).where(
+                        and_(db.Daylic.profession_id == profession_id, db.Daylic.chill == False)).order_by(func.random()).gino.scalar()
             if daylic:
                 # Записываем новый дейлик
                 await db.DaylicHistory.create(form_id=form_id, daylic_id=daylic)
                 await db.Form.update.values(activated_daylic=daylic, daylic_completed=False).where(db.Form.id == form_id).gino.status()
-                await bot.api.messages.send(peer_id=user_id, message="Вам доступно новое ежедневное задание!",
+                await bot.api.messages.send(peer_id=user_id, message="Вам доступно новое еженедельное задание!",
                                             is_notification=True)
         await db.Metadata.update.values(last_daylic_date=datetime.datetime.now()).gino.status()
         await asyncio.sleep(5)
@@ -957,13 +965,11 @@ async def update_daughter_levels(user_id: int):
 
     Для либидо формула такая же
     """
-    tz = datetime.timezone(datetime.timedelta(hours=3))
     while True:
-        now = datetime.datetime.now(tz=tz)
-        tomorrow = now + datetime.timedelta(days=1)
-        tomorrow = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0, tzinfo=tz)
-        print('sleep', (tomorrow - now).total_seconds())
-        await asyncio.sleep((tomorrow - now).total_seconds() - 2)
+        tomorrow = now() + datetime.timedelta(days=1)
+        tomorrow = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0,
+                                     tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
+        await asyncio.sleep((tomorrow - now()).total_seconds() - 2)
         form_id = await get_current_form_id(user_id)
         # Проверяем выполнение квеста дочери
         quest = await db.select([*db.DaughterQuest]).where(db.DaughterQuest.to_form_id == form_id).gino.first()
