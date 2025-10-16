@@ -971,6 +971,10 @@ async def update_daughter_levels(user_id: int):
                                      tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
         await asyncio.sleep((tomorrow - now()).total_seconds() - 2)
         form_id = await get_current_form_id(user_id)
+        # Замороженные анкеты пропускаем
+        freeze = await db.select([db.Form.freeze]).where(db.Form.user_id == user_id).gino.scalar()
+        if freeze:
+            continue
         # Проверяем выполнение квеста дочери
         quest = await db.select([*db.DaughterQuest]).where(db.DaughterQuest.to_form_id == form_id).gino.first()
         if quest:
