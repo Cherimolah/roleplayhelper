@@ -857,6 +857,9 @@ class Database(Gino):
         Устанавливает подлючение к базе данных, создает таблицы и загружает первую необходимую информацию
         """
         await self.set_bind(f"postgresql://{USER}:{PASSWORD}@{HOST}/{DATABASE}")
+        await self.status(self.text('CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;'))
+        await self.status(self.text('CREATE EXTENSION IF NOT EXISTS pg_trgm;'))
+        await self.status(self.text(f'ALTER DATABASE {DATABASE} SET pg_trgm.similarity_threshold = 0.1;'))
         await self.gino.create_all()
         await self.first_load()
 
@@ -864,9 +867,6 @@ class Database(Gino):
         """
         Загрузка первичных данных
         """
-        await db.status(db.text('CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;'))
-        await db.status(db.text('CREATE EXTENSION IF NOT EXISTS pg_trgm;'))
-        await db.status(db.text(f'ALTER DATABASE {DATABASE} SET pg_trgm.similarity_threshold = 0.1;'))
         professions = await self.select([func.count(db.Profession.id)]).gino.scalar()
         if professions == 0:
             await self.Profession.create(name="Тестовая профессия", special=False)

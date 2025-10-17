@@ -347,7 +347,7 @@ async def take_off_payments(form_id: int):
         balance, freeze = info
         # Если баланс отрицательный или анкета заморожена - ждем сутки
         if not balance or balance < 0 or freeze:
-            await asyncio.sleep(86400)  # Ждём сутки, вдруг появятся деньги или анкета разморозиться
+            await asyncio.sleep(86400)  # Ждём сутки, вдруг появятся деньги или анкета разморозится
             continue
         last_payment: datetime.datetime = await db.select([db.Form.last_payment]).where(
             db.Form.id == form_id).gino.scalar()
