@@ -52,6 +52,7 @@ class RelatedTable(Field):
     pass
 
 
+# Поля анкеты, доступны для редактирования обычным пользователям
 fields = (Field("Имя", Registration.PERSONAL_NAME), Field("Должность", Registration.PROFESSION),
           Field("Биологический возраст", Registration.AGE), Field("Рост", Registration.HEIGHT),
           Field("Вес", Registration.WEIGHT), Field("Физиологические особенности", Registration.FEATURES),
@@ -61,6 +62,7 @@ fields = (Field("Имя", Registration.PERSONAL_NAME), Field("Должность
           Field("Фетиши", Registration.FETISHES), Field("Табу", Registration.TABOO),
           Field("Визуальный портрет", Registration.PHOTO), Field("Фракция", Registration.FRACTION))
 
+# Поля анкеты, доступные для редактирования администраторам через админ-панель
 fields_admin = (Field("Имя", Registration.PERSONAL_NAME), Field("Должность", Registration.PROFESSION),
                 Field("Биологический возраст", Registration.AGE), Field("Рост", Registration.HEIGHT),
                 Field("Вес", Registration.WEIGHT), Field("Физиологические особенности", Registration.FEATURES),

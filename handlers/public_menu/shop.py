@@ -448,7 +448,7 @@ async def show_page_item(m: Message | MessageEvent, page: int):
     if page < count:
         keyboard.add(Callback('->', {'item_shop_page': page + 1}), KeyboardButtonColor.PRIMARY)
 
-    if len(keyboard.buttons[-1]) > 0:
+    if keyboard.buttons and len(keyboard.buttons[-1]) > 0:
         keyboard.row()
 
     keyboard.add(

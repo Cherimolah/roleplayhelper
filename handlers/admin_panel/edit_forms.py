@@ -52,6 +52,7 @@ async def send_select_fields(m: Message, value: int = None):
         await m.answer("Указано неверное поле")
         return
     _, form_id = states.get(m.from_id).split("*")
+    # Записываем в стейт название редактируемого поля из fields_admin
     states.set(m.from_id, f"{Admin.ENTER_FIELD_VALUE}*{form_id}*{fields[value - 1].state}")
     reply = messages.new_value_field.format(fields[value - 1].name)
     keyboard = None
@@ -167,7 +168,7 @@ async def enter_field_value(m: Message):
             return
         await db.Form.update.values(libido_level=value).where(db.Form.id == form_id).gino.status()
     else:
-        # Обработка простых текстовых полей
+        # Обработка простых числовых полей
         if m.text.isdigit():
             value = int(m.text)
         else:

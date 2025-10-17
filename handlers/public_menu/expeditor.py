@@ -14,7 +14,7 @@ from loader import bot, states
 from service.states import Menu, ExpeditorQuestions
 from service.custom_rules import StateRule, NumericRule
 from service.db_engine import db
-from service.utils import get_current_form_id, get_admin_ids, show_expeditor
+from service.utils import get_current_form_id, get_admin_ids, show_expeditor, create_mention
 from service import keyboards
 from service.serializers import serialize_race_bonus, serialize_item_group, serialize_item_type, parse_cooldown
 
@@ -265,6 +265,11 @@ async def use_item(m: MessageEvent):
     expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
     await db.ActiveItemToExpeditor.create(expeditor_id=expeditor_id, row_item_id=row_id, remained_use=count_use)
     await m.show_snackbar('✅ Предмет успешно использован')
+    # Сообщаем в чат о том, что пользователь надел предмет
+    item_id = await db.select([db.ExpeditorToItems.item_id]).where(db.ExpeditorToItems.id == row_id).gino.scalar()
+    item_name = await db.select([db.Item.name]).where(db.Item.id == item_id).gino.scalar()
+    chat_id = await db.select([db.UserToChat.chat_id]).where(db.UserToChat.user_id == m.user_id).gino.scalar()
+    await bot.api.messages.send(peer_id=2000000000 + chat_id, message=f'{await create_mention(m.user_id)} использовал предмет {item_name}')
     await show_page_inventory(m, 1, expeditor_id)
 
 
