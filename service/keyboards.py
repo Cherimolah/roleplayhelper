@@ -90,8 +90,6 @@ admin_menu = Keyboard().add(
 ).row().add(
     Text("Рассылки и опросы", {"admin_menu": "mailing"}), KeyboardButtonColor.PRIMARY
 ).row().add(
-    Text("Экспорт", {"admin_menu": "export"}), KeyboardButtonColor.PRIMARY
-).row().add(
     Text("В главное меню", {"admin_menu": "back"}), KeyboardButtonColor.NEGATIVE
 )
 
