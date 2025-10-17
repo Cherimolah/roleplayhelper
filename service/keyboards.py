@@ -209,7 +209,7 @@ bank = Keyboard().add(
 ).row().add(
     Text("История сделок", {"bank_menu": "history"}), KeyboardButtonColor.PRIMARY
 ).add(
-    Text("Запрос зарплаты", {"bank_menu": "ask_salary"}), KeyboardButtonColor.PRIMARY
+    Text("Запрос сверхурочных", {"bank_menu": "ask_salary"}), KeyboardButtonColor.PRIMARY
 ).row().add(
     Text("Постоянные расходы", {"bank_menu": "fixed_costs"}), KeyboardButtonColor.PRIMARY
 ).row().add(
