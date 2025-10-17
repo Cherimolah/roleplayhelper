@@ -342,7 +342,7 @@ async def reputation_form(m: Message):
     for fraction_id, reputation in reputations:
         fraction_name = await db.select([db.Fraction.name]).where(db.Fraction.id == fraction_id).gino.scalar()
         reputation_level = parse_reputation(reputation)
-        reply += f"{fraction_name}: {reputation_level}"
+        reply += f"{fraction_name}: {reputation_level}\n"
     await m.answer(reply)
 
 
