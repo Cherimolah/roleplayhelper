@@ -280,7 +280,7 @@ async def restore_item(m: MessageEvent):
     already_active = await db.select([db.ActiveItemToExpeditor.id]).where(
         db.ActiveItemToExpeditor.row_item_id == row_id).gino.scalar()
     if already_active:
-        await m.show_snackbar('❌ Подождите, когда действвие эффекта спадёт')
+        await m.show_snackbar('❌ Подождите, когда действие эффекта спадёт')
         return
 
     await db.ExpeditorToItems.update.values(count_use=0).where(db.ExpeditorToItems.id == row_id).gino.status()
