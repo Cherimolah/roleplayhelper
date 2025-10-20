@@ -582,9 +582,8 @@ async def send_daylics():
             next_time = today + datetime.timedelta(days=3-today.weekday())
         else:
             next_time = today + datetime.timedelta(days=7 - today.weekday())
-        # next_time = datetime.datetime(next_time.year, next_time.month, next_time.day, 0, 0, 0,
-        #                               tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
-        next_time = now()
+        next_time = datetime.datetime(next_time.year, next_time.month, next_time.day, 0, 0, 0,
+                                      tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
         await asyncio.sleep((next_time - now()).total_seconds())
         data = await db.select([db.Form.id, db.Form.user_id]).where(db.Form.is_request.is_(False)).gino.all()
         for form_id, user_id in data:
