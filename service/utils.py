@@ -604,7 +604,9 @@ async def send_daylics():
                     await db.DaylicHistory.delete.where(db.DaylicHistory.form_id == form_id).gino.status()
                     daylic = await db.select([db.Daylic.id]).where(
                         and_(db.Daylic.profession_id == profession_id, db.Daylic.chill == False)).order_by(func.random()).gino.scalar()
-            if daylic:
+            # У кого анкета заморожена присылать уведомление не будем
+            freeze = await db.select([db.Form.freeze]).where(db.Form.id == form_id).gino.scalar()
+            if daylic and not freeze:
                 # Записываем новый дейлик
                 await db.DaylicHistory.create(form_id=form_id, daylic_id=daylic)
                 await db.Form.update.values(activated_daylic=daylic, daylic_completed=False).where(db.Form.id == form_id).gino.status()
