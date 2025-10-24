@@ -200,6 +200,8 @@ async def select_field_edit(m: Message, value: int = None):
     elif field == "Фракция":
         reply, kb, photo = await page_fractions(1)
         await m.answer(reply, keyboard=kb, attachment=photo)
+    elif field == 'Визуальный портрет':
+        await m.answer('Отправьте новую фотографию вашего персонажа')
     else:
         await m.answer(f"Введите новое значение для поля {fields[value - 1].name}:")
 
