@@ -595,23 +595,23 @@ async def send_daylics():
             # Если сейчас день недели чт-вс берем Обычный дейлик
             if 0 <= next_time.weekday() <= 2:
                 daylic = await db.select([db.Daylic.id]).where(and_(db.Daylic.profession_id == profession_id,
-                                                                             db.Daylic.chill == True)).order_by(func.random()).gino.scalar()
+                                                                             db.Daylic.chill.is_(True))).order_by(func.random()).gino.scalar()
             else:
                 daylic = await db.select([db.Daylic.id]).where(and_(
-                    db.Daylic.profession_id == profession_id, db.Daylic.id.notin_(daylic_used), db.Daylic.chill == False)).order_by(
+                    db.Daylic.profession_id == profession_id, db.Daylic.id.notin_(daylic_used), db.Daylic.chill.is_(False))).order_by(
                     func.random()).gino.scalar()
                 if not daylic:  # all daylics used, try clean pool
                     await db.DaylicHistory.delete.where(db.DaylicHistory.form_id == form_id).gino.status()
                     daylic = await db.select([db.Daylic.id]).where(
-                        and_(db.Daylic.profession_id == profession_id, db.Daylic.chill == False)).order_by(func.random()).gino.scalar()
-            # У кого анкета заморожена присылать уведомление не будем
-            freeze = await db.select([db.Form.freeze]).where(db.Form.id == form_id).gino.scalar()
-            if daylic and not freeze:
-                # Записываем новый дейлик
+                        and_(db.Daylic.profession_id == profession_id, db.Daylic.chill.is_(False))).order_by(func.random()).gino.scalar()
+            if daylic:
                 await db.DaylicHistory.create(form_id=form_id, daylic_id=daylic)
                 await db.Form.update.values(activated_daylic=daylic, daylic_completed=False).where(db.Form.id == form_id).gino.status()
-                await bot.api.messages.send(peer_id=user_id, message="Вам доступно новое еженедельное задание!",
-                                            is_notification=True)
+                # У кого анкета заморожена присылать уведомление не будем
+                freeze = await db.select([db.Form.freeze]).where(db.Form.id == form_id).gino.scalar()
+                if not freeze:
+                    await bot.api.messages.send(peer_id=user_id, message="Вам доступно новое еженедельное задание!",
+                                                is_notification=True)
         await db.Metadata.update.values(last_daylic_date=datetime.datetime.now()).gino.status()
         await asyncio.sleep(5)
 
