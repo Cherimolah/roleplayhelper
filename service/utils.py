@@ -1661,6 +1661,7 @@ async def apply_item(row_id: int):
                 await db.Expeditor.update.values(pregnant=text).where(db.Expeditor.id == expeditor_id).gino.status()
             elif bonus.get('action', '') == 'delete_pregnant':
                 await db.Expeditor.update.values(pregnant=None).where(db.Expeditor.id == expeditor_id).gino.status()
+            # Здесь не применяется сексуальное состояние и характеристики КЭ, т.к. они влияют не на базовые характеристики, а рассчитываются дополнительно
 
 
 async def count_daughter_params(user_id: int) -> tuple[int, int]:

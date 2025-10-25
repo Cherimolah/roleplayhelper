@@ -145,7 +145,7 @@ async def select_element(m: Message, value: int, content_type: str, table):
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, SelectContent(),
                   PayloadMapRule({"item_type": str, "item_id": int, "action": "delete"}),
                   OrRule(JudgeRule(), AdminRule()))
-async def delete_cabin_message_event(m: MessageEvent, content_type: str, table):
+async def delete_message_event(m: MessageEvent, content_type: str, table):
     """
     Удаление элемента контента.
 
