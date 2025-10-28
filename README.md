@@ -1,5 +1,3 @@
-from sqlalchemy.sql import True_from service.utils import allow_edit_contentfrom vkbottle.tools.vkscript_converter.definitions import return_statementfrom vkbottle.tools.vkscript_converter.definitions import return_statementfrom service.states import StateMetafrom sqlalchemy import ForeignKeyfrom sqlalchemy import Columnfrom vkbottle.dispatch.rules.base import StateGroupRulefrom multiprocessing.managers import State
-
 # Документация
 Бот представляет собой систему менеджмента персонажами в многопользовательской текстовой ролевой игре. 
 
