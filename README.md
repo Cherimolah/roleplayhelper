@@ -1,8 +1,12 @@
 from sqlalchemy.sql import True_from service.utils import allow_edit_contentfrom vkbottle.tools.vkscript_converter.definitions import return_statementfrom vkbottle.tools.vkscript_converter.definitions import return_statementfrom service.states import StateMetafrom sqlalchemy import ForeignKeyfrom sqlalchemy import Columnfrom vkbottle.dispatch.rules.base import StateGroupRulefrom multiprocessing.managers import State
 
 # Документация
-Бот представляет собой систему менеджмента персонажами в многопользовательской текстовой ролевой игре.  
-Создан по заказу специально для сообщества VK: [ссылка](https://vk.com/club209903645)  
+Бот представляет собой систему менеджмента персонажами в многопользовательской текстовой ролевой игре. 
+
+**Создан по заказу [Томео](https://t.me/Tomeo_Ando) для проекта [Среди Нас](https://vk.com/club209903645)**
+
+**Автор идеи и гейм-дизайнер: [GitHub](https://github.com/ilya1898), [Telegram](https://t.me/Tomeo_Ando), [VK](https://vk.com/id486697492)**  
+**Основной разработчик: [GitHub](https://github.com/Cherimolah), [Telegram](https://t.me/Cherimolah), [VK](https://vk.com/id32650977)**
 
 Поддерживаются такие фичи как: 
 * Создание анкеты персонажа
