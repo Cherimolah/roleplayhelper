@@ -369,6 +369,14 @@ async def search_user_form(m: Message):
         await m.answer(messages.user_not_found)
         return
 
+    # Могут прислать ссылку или упоминание правильное, но пользователь не зареган в боте
+    registered = await db.select([db.Form.id]).where(
+        and_(db.Form.user_id == user_id, db.Form.is_request.is_(False))
+    ).gino.scalar()
+    if not registered:
+        await m.answer(messages.user_not_found)
+        return
+
     form, photo = await loads_form(user_id, m.from_id)
     keyboard = None
 
