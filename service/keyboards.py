@@ -63,6 +63,9 @@ async def main_menu(user_id: int):
         keyboard.row().add(
             Text("Админ-панель", {"menu": "admin_panel"}), KeyboardButtonColor.NEGATIVE
         )
+    keyboard.row().add(
+        Text("Помощь", {"menu": "help"}), KeyboardButtonColor.SECONDARY
+    )
     return keyboard
 
 

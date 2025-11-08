@@ -22,7 +22,7 @@ from service.states import Registration, Menu, DaughterQuestions, Judge
 import messages
 from service.custom_rules import StateRule, NumericRule, LimitSymbols, CommandWithAnyArgs
 import service.keyboards as keyboards
-from service.utils import loads_form, reload_image, show_fields_edit, page_fractions, get_admin_ids, show_consequences
+from service.utils import loads_form, reload_image, show_fields_edit, page_fractions, get_admin_ids, show_consequences, update_daughter_levels
 from config import OWNER, ADMINS, USER_ID
 
 
@@ -71,6 +71,7 @@ async def api_request(m: Message):
 
 
 @bot.on.chat_message(PayloadRule({'help': 'help'}))
+@bot.on.private_message(PayloadRule({'menu': 'help'}))
 async def help(m: Message):
     """
     Отправка справки по командам в чатах
@@ -96,8 +97,9 @@ async def help(m: Message):
                              '[действие] - совершить действие в экшен-режиме (будет проверка судьи)\n'
                              '[действие @mention] - PvP с пользователем в экшен-режиме (будет проверка судьи)\n'
                              '[отправить сообщение @mention "Текст сообщения"] - отправить сообщение пользователю')
-    await asyncio.sleep(30)
-    await bot.api.messages.delete(cmids=[message.conversation_message_id], peer_id=m.peer_id, delete_for_all=True)
+    if m.peer_id > 2000000000:
+        await asyncio.sleep(30)
+        await bot.api.messages.delete(cmids=[message.conversation_message_id], peer_id=m.peer_id, delete_for_all=True)
 
 
 @bot.on.private_message(PayloadRule({"command": "start"}))
@@ -800,5 +802,5 @@ async def q4(m: Message, value: int = None):
     l_multiplier, s_multiplier = await db.select([db.Fraction.libido_koef, db.Fraction.subordination_koef]).where(db.Fraction.id == fraction_id).gino.first()
     l_level = min(100, max(0, int(2 + 2 * l_multiplier + l_bonus)))
     s_level = min(100, max(0, int(2 + 2 * s_multiplier + s_bonus)))
-    await db.Form.update.values(subordination_level=s_level, libido_level=l_level).where(db.Form.user_id == m.from_id).gino.scalar()
+    await update_daughter_levels(m.from_id, libido_level=l_level, subordination_level=s_level)
     await want_daughter(m)

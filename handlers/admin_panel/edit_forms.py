@@ -18,7 +18,7 @@ from service.custom_rules import AdminRule, StateRule, NumericRule, UserSpecifie
 from service.middleware import states
 from service.states import Admin
 from service.db_engine import db
-from service.utils import loads_form, take_off_payments, reload_image
+from service.utils import loads_form, take_off_payments, reload_image, update_daughter_levels
 
 
 @bot.on.private_message(StateRule(Admin.MENU), PayloadRule({"admin_menu": "edit_form"}), AdminRule())
@@ -91,6 +91,7 @@ async def enter_field_value(m: Message):
     _, form_id, field = states.get(m.from_id).split("*")
     form_id = int(form_id)
     field = field.split('.')[1]
+    user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
 
     # Обработка разных типов полей
     if field == 'name':
@@ -157,7 +158,7 @@ async def enter_field_value(m: Message):
         if not 0 <= value <= 100:
             await m.answer("Число не входит в промежуток от 0 до 100")
             return
-        await db.Form.update.values(subordination_level=value).where(db.Form.id == form_id).gino.status()
+        await update_daughter_levels(user_id, subordination_level=value)
     elif field == 'edit_level_libido':
         if not m.text.isdigit():
             await m.answer("Необходимо указать число от 0 до 100")
@@ -166,7 +167,7 @@ async def enter_field_value(m: Message):
         if not 0 <= value <= 100:
             await m.answer("Число не входит в промежуток от 0 до 100")
             return
-        await db.Form.update.values(libido_level=value).where(db.Form.id == form_id).gino.status()
+        await update_daughter_levels(user_id, libido_level=value)
     else:
         # Обработка простых числовых полей
         if m.text.isdigit():

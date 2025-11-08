@@ -41,9 +41,10 @@ async def daughter_quest(m: Message):
         return
 
     # Расчет времени до сброса квестов
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(tz=datetime.timezone(datetime.timedelta(hours=3)))
     tomorrow = now + datetime.timedelta(days=1)
-    next_day = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0)
+    next_day = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0,
+                                 tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
     cooldown = (next_day - now).total_seconds()
 
     # Формирование информации о квесте

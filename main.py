@@ -10,7 +10,7 @@ from loguru import logger
 from loader import bot, user_bot
 import handlers  # Important
 from service.db_engine import db
-from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity, update_daughter_levels, calculate_time, wait_users_post, wait_take_off_item, wait_disable_debuff, loads_form
+from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity, timer_daughter_levels, calculate_time, wait_users_post, wait_take_off_item, wait_disable_debuff
 from config import ADMINS
 from service.middleware import MaintainenceMiddleware, StateMiddleware, FormMiddleware, ActivityUsersMiddleware, StateMiddlewareME, ActionModeMiddleware
 
@@ -55,7 +55,7 @@ async def on_startup():
 
     daughters_ids = [x[0] for x in await db.select([db.Form.user_id]).where(db.Form.status == 2).gino.all()]
     for user_id in daughters_ids:
-        asyncio.get_event_loop().create_task(update_daughter_levels(user_id))
+        asyncio.get_event_loop().create_task(timer_daughter_levels(user_id))
 
     post_ids = [x[0] for x in await db.select([db.Post.id]).gino.all()]
     for post_id in post_ids:

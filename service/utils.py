@@ -123,7 +123,7 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
         # Показываем бонусные параметры для админов
         admin_request = await db.select([db.User.admin]).where(db.User.user_id == from_user_id).gino.scalar()
         if admin_request:
-            reply += f'Базовое либидо: {form.libido_bonus}\nБазовое подчинение: {form.subordination_bonus}'
+            reply += f'Базовое либидо: {form.libido_level}\nБазовое подчинение: {form.subordination_level}'
     return reply, form.photo
 
 
@@ -928,8 +928,7 @@ async def apply_reward(user_id: int, data: dict):
             libido, subordination = await db.select([db.Form.libido_level, db.Form.subordination_level]).where(db.Form.user_id == user_id).gino.first()
             sub_level = min(100, max(0, subordination + reward['subordination']))
             lib_level = min(100, max(0, libido + reward['libido']))
-            await db.Form.update.values(libido_level=lib_level).where(db.Form.user_id == user_id).gino.status()
-            await db.Form.update.values(subordination_level=sub_level).where(db.Form.user_id == user_id).gino.status()
+            await update_daughter_levels(user_id, lib_level, sub_level)
         elif reward['type'] == 'item':
             item_id = reward['item_id']
             count = reward['count']
@@ -946,12 +945,15 @@ async def apply_reward(user_id: int, data: dict):
             expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
             if not expeditor_id:
                 continue
-            await db.ExpeditorToAttributes.update.values(value=db.ExpeditorToAttributes.value + value).where(
+            current_value = await db.select([db.ExpeditorToAttributes.value]).where(
+                and_(db.ExpeditorToAttributes.attribute_id == attribute_id, db.ExpeditorToAttributes.expeditor_id == expeditor_id)
+            ).gino.scalar()
+            await db.ExpeditorToAttributes.update.values(value=min(max(current_value + value, 0), 200)).where(
                 and_(db.ExpeditorToAttributes.expeditor_id == expeditor_id, db.ExpeditorToAttributes.attribute_id == attribute_id)
             ).gino.scalar()
 
 
-async def update_daughter_levels(user_id: int):
+async def timer_daughter_levels(user_id: int):
     """
     Функция для обновления параметров дочерей и проверке выполнения обязательного квеста для дочерей
 
@@ -997,6 +999,7 @@ async def update_daughter_levels(user_id: int):
                     ).gino.first()
                     reply = f' ❌ Вам выписан штраф за невыполнение доп. цели «{name}»:\n'
                     reply += await serialize_target_reward(penalty)
+                    await apply_reward(user_id, penalty)
                     await bot.api.messages.send(peer_id=user_id, message=reply, is_notification=True)
         # Обновляем параметры дочерей
         sub_bonus, lib_bonus, sub_level, lib_level, fraction_id = await db.select(
@@ -1008,8 +1011,7 @@ async def update_daughter_levels(user_id: int):
             db.Fraction.id == fraction_id).gino.scalar()
         sub_level = min(100, max(0, int(sub_level + 2 + 2 * sub_koef + sub_bonus)))
         lib_level = min(100, max(0, int(lib_level + 2 + 2 * libido_multiplier + lib_bonus)))
-        await db.Form.update.values(subordination_level=sub_level, libido_level=lib_level).where(
-            db.Form.user_id == user_id).gino.status()
+        await update_daughter_levels(user_id, lib_level, sub_level)
         await asyncio.sleep(15)
 
 
@@ -1582,10 +1584,12 @@ async def apply_consequences(action_id: int, con_var: int):
                 await db.ExpeditorToDebuffs.delete.where(db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.status()
             case 'add_libido':
                 bonus = con['bonus']
-                await db.Form.update.values(libido_level=db.Form.libido_level + bonus).where(db.Form.id == form_id).gino.status()
+                current = await db.select([db.Form.libido_level]).where(db.Form.user_id == user_id).gino.scalar()
+                await update_daughter_levels(user_id, libido_level=current + bonus)
             case 'add_subordination':
                 bonus = con['bonus']
-                await db.Form.update.values(subordination_level=db.Form.subordination_level + bonus).where(db.Form.id == form_id).gino.status()
+                current = await db.select([db.Form.subordination_level]).where(db.Form.user_id == user_id).gino.scalar()
+                await update_daughter_levels(user_id, subordination_level=current + bonus)
             case 'set_pregnant':
                 text = con['text']
                 await db.Expeditor.update.values(pregnant=text).where(db.Expeditor.id == expeditor_id).gino.status()
@@ -1771,3 +1775,42 @@ async def create_cabin_chat(user_id: int):
                                            random_id=0)
     await asyncio.sleep(0.5)
     await user_bot.api.messages.delete(message_ids=[message], delete_for_all=True)
+
+
+async def update_daughter_levels(user_id: int, libido_level: int | None = None, subordination_level: int | None = None):
+    """
+    Функция обновляет параметры дочерей и отсылает информацию о том, что параметры пришли к нулю
+    Также отправляет инфу о том, что у игрока появилась новая доп. цель
+
+    Надо отслеживать, когда они придут в ноль поэтому лучше использовать эту функцию, чем менять параметры напрямую
+    """
+    old_target_ids = await get_available_daughter_target_ids(user_id)
+
+    if libido_level is not None and subordination_level is not None:
+        libido_level = min(max(0, libido_level), 100)
+        subordination_level = min(max(0, subordination_level), 100)
+        await db.Form.update.values(subordination_level=subordination_level, libido_level=libido_level).where(db.Form.user_id == user_id).gino.status()
+    elif libido_level is None and subordination_level is not None:
+        subordination_level = min(max(0, subordination_level), 100)
+        await db.Form.update.values(subordination_level=subordination_level).where(db.Form.user_id == user_id).gino.status()
+    elif libido_level is not None and subordination_level is None:
+        libido_level = min(max(0, libido_level), 100)
+        await db.Form.update.values(libido_level=libido_level).where(db.Form.user_id == user_id).gino.status()
+
+    if subordination_level == 0:
+        reply = f'Пользователь {await create_mention(user_id)} достиг уровня 0 по параметру «Подчинение»'
+        await user_bot.api.messages.send(message=reply, random_id=0, peer_id=OWNER)
+    if libido_level == 0:
+        reply = f'Пользователь {await create_mention(user_id)} достиг уровня 0 по параметру «Либидо»'
+        await user_bot.api.messages.send(message=reply, random_id=0, peer_id=OWNER)
+
+    new_target_ids = await get_available_daughter_target_ids(user_id)
+
+    if len(new_target_ids) > len(old_target_ids):
+        target_id = new_target_ids[-1]
+        target_name = await db.select([db.DaughterTarget.name]).where(db.DaughterTarget.id == target_id).gino.scalar()
+        reply = f'Пользователь {await create_mention(user_id)} достиг доп. цели «{target_name}»'
+        await user_bot.api.messages.send(message=reply, random_id=0, peer_id=OWNER)
+
+
+
