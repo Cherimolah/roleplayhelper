@@ -1021,8 +1021,7 @@ async def get_available_daughter_target_ids(user_id: int) -> list[int]:
     target_ids = []
     for target_id in quest.target_ids:
         params = await db.select([db.DaughterTarget.params]).where(db.DaughterTarget.id == target_id).gino.scalar()
-        libido, subordination = await db.select([db.Form.libido_level, db.Form.subordination_level]).where(
-            db.Form.id == form_id).gino.first()
+        libido, subordination = await count_daughter_params(user_id)
 
         # Проверка условий доступа к цели
         if params[1]:  # или
@@ -1642,6 +1641,7 @@ async def apply_item(row_id: int):
     # Активируем предмет
     await db.ActiveItemToExpeditor.create(expeditor_id=expeditor_id, remained_use=action_time, row_item_id=row_id)
     # Применяем все бонусы предмета
+    # !!! Здесь не применяется сексуальное состояние и характеристики КЭ, т.к. они влияют не на базовые характеристики, а рассчитываются дополнительно
     for bonus in data:
         if bonus['type'] == 'state':
             if bonus.get('action', '') in ('add', 'delete'):
@@ -1665,7 +1665,6 @@ async def apply_item(row_id: int):
                 await db.Expeditor.update.values(pregnant=text).where(db.Expeditor.id == expeditor_id).gino.status()
             elif bonus.get('action', '') == 'delete_pregnant':
                 await db.Expeditor.update.values(pregnant=None).where(db.Expeditor.id == expeditor_id).gino.status()
-            # Здесь не применяется сексуальное состояние и характеристики КЭ, т.к. они влияют не на базовые характеристики, а рассчитываются дополнительно
 
 
 async def count_daughter_params(user_id: int) -> tuple[int, int]:
