@@ -199,6 +199,15 @@ async def show_expeditor(expeditor_id: int, from_user_id) -> str:
                         db.StateDebuff.id == active_debuf_id).gino.first()
                     description += f' {"+" if debuff_penalty >= 0 else "-"} {abs(debuff_penalty)} от «{debuff_name}»'
                     summary += debuff_penalty
+
+        # Учитываем штраф от невыполнения доп. целей дочерей
+        penalties = sum([x[0] for x in await db.select([db.AttributePenalties.value]).where(
+            and_(db.AttributePenalties.attribute_id == attribute_id, db.AttributePenalties.expeditor_id == expeditor_id)
+        ).gino.all()])
+        if penalties != 0:
+            description += f' {"+" if penalties >= 0 else "-"} {abs(penalties)} от штрафов за невыполнение квестов дочерей'
+            summary += penalties
+
         reply += f'{attribute}: {summary} ({value} базовое{description})\n'
     # Добавляем информацию о дебафах и предметах
     reply += await serialize_expeditor_debuffs(expeditor_id)
@@ -908,11 +917,13 @@ async def check_last_activity(user_id: int):
                                         peer_ids=admins, is_notification=True)
 
 
-async def apply_reward(user_id: int, data: dict):
+async def apply_reward(user_id: int, data: dict, save_penalty=False):
     """
     Эта функция применяет награду/штраф для пользователя
 
     data: словарь с описанием награды, формат данных смотреть в README
+    save_penalty: параметр сохранять ли штраф в таблице штрафов. По умолчанию False - применяется штраф к базовому значению,
+    если True - записывается в таблицу, чтобы потом была возможность отменить
     """
     if not data:
         return
@@ -945,12 +956,15 @@ async def apply_reward(user_id: int, data: dict):
             expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
             if not expeditor_id:
                 continue
-            current_value = await db.select([db.ExpeditorToAttributes.value]).where(
-                and_(db.ExpeditorToAttributes.attribute_id == attribute_id, db.ExpeditorToAttributes.expeditor_id == expeditor_id)
-            ).gino.scalar()
-            await db.ExpeditorToAttributes.update.values(value=min(max(current_value + value, 0), 200)).where(
-                and_(db.ExpeditorToAttributes.expeditor_id == expeditor_id, db.ExpeditorToAttributes.attribute_id == attribute_id)
-            ).gino.scalar()
+            if not save_penalty:
+                current_value = await db.select([db.ExpeditorToAttributes.value]).where(
+                    and_(db.ExpeditorToAttributes.attribute_id == attribute_id, db.ExpeditorToAttributes.expeditor_id == expeditor_id)
+                ).gino.scalar()
+                await db.ExpeditorToAttributes.update.values(value=min(max(current_value + value, 0), 200)).where(
+                    and_(db.ExpeditorToAttributes.expeditor_id == expeditor_id, db.ExpeditorToAttributes.attribute_id == attribute_id)
+                ).gino.scalar()
+            else:
+                await db.AttributePenalties.create(attribute_id=attribute_id, expeditor_id=expeditor_id, value=value)
 
 
 async def timer_daughter_levels(user_id: int):
@@ -999,7 +1013,7 @@ async def timer_daughter_levels(user_id: int):
                     ).gino.first()
                     reply = f' ❌ Вам выписан штраф за невыполнение доп. цели «{name}»:\n'
                     reply += await serialize_target_reward(penalty)
-                    await apply_reward(user_id, penalty)
+                    await apply_reward(user_id, penalty, save_penalty=True)
                     await bot.api.messages.send(peer_id=user_id, message=reply, is_notification=True)
         # Обновляем параметры дочерей
         sub_bonus, lib_bonus, sub_level, lib_level, fraction_id = await db.select(
@@ -1373,7 +1387,13 @@ async def count_attribute(user_id: int, attribute_id: int) -> int:
     # Считаем штрафы от активных дебафов
     active_debuff_ids = [x[0] for x in await db.select([db.ExpeditorToDebuffs.debuff_id]).where(db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()]
     penalty_debuff = sum([x[0] for x in await db.select([db.StateDebuff.penalty]).where(and_(db.StateDebuff.id.in_(active_debuff_ids), db.StateDebuff.attribute_id == attribute_id)).gino.all()])
-    return min(200, base + item_bonus + penalty_debuff)
+
+    # Считаем штрафы от невыполнения квестов дочерей
+    penalties = sum([x[0] for x in await db.select([db.AttributePenalties.value]).where(
+        and_(db.AttributePenalties.attribute_id == attribute_id, db.AttributePenalties.expeditor_id == expeditor_id)
+    ).gino.all()])
+
+    return max(0, min(200, base + item_bonus + penalty_debuff + penalties))
 
 
 # Типы последствий

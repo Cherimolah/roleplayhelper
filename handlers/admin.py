@@ -16,7 +16,6 @@ import openpyxl
 from vkbottle import DocMessagesUploader, Callback, KeyboardButtonColor, Keyboard, GroupEventType
 
 from loader import bot, user_bot
-from messages import balance
 from service.db_engine import db
 import messages
 from service import keyboards
@@ -24,7 +23,7 @@ from service.states import Menu, Admin
 from service.middleware import states
 from service.custom_rules import StateRule, NumericRule, AdminRule, UserFree
 from service.utils import take_off_payments, parse_reputation, create_mention, check_quest_completed, apply_reward, \
-    serialize_target_reward, create_cabin_chat, move_user
+    serialize_target_reward, create_cabin_chat, move_user, get_current_form_id
 from config import HALL_CHAT_ID
 
 
@@ -706,6 +705,13 @@ async def confirm_daughter_target_request(m: MessageEvent):
     quest_name = await db.select([db.DaughterQuest.name]).where(db.DaughterQuest.id == quest_id).gino.scalar()
     name = await db.select([db.Form.name]).where(db.Form.id == form_id).gino.scalar()
     user = (await bot.api.users.get(user_ids=user_id))[0]
+
+    # Надо удалить накопленные штрафы на характеристики карты экспедитора
+    form_id = await get_current_form_id(m.user_id)
+    expeditor_id = await db.select([db.Expeditor.id]).where(db.Expeditor.form_id == form_id).gino.scalar()
+    if expeditor_id:
+        await db.AttributePenalties.delete.where(db.AttributePenalties.expeditor_id == expeditor_id).gino.status()
+
     await m.edit_message(f'✅ Вы приняли отчёт дочери [id{user_id}|{name} / {user.first_name} {user.last_name}] о '
                          f'выполнении квеста «{quest_name}»')
     await bot.api.messages.send(peer_id=user_id,

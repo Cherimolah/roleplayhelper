@@ -852,6 +852,21 @@ class Database(Gino):
 
         self.ChatRequest = ChatRequest
 
+        class AttributePenalties(self.Model):
+            """
+            Таблица со штрафами по карте экспедитора
+
+            Это нужно, чтобы отменить их после выполнения всех доп. целей дочери
+            """
+            __tablename__ = 'attribute_penalties'
+
+            id = Column(Integer, primary_key=True)
+            expeditor_id = Column(Integer, ForeignKey('expeditors.id', ondelete='CASCADE'))  # Айди экспедитора
+            attribute_id = Column(Integer, ForeignKey('attributes.id', ondelete='CASCADE'), nullable=False)  # Айди аттрибута
+            value = Column(Integer, nullable=False)  # Размер штрафа
+
+        self.AttributePenalties = AttributePenalties
+
     async def connect(self):
         """
         Устанавливает подлючение к базе данных, создает таблицы и загружает первую необходимую информацию
