@@ -1004,7 +1004,7 @@ async def timer_daughter_levels(user_id: int):
             ).gino.scalar()
             # Если квест не выполнен - применяем штраф
             if confirmed is None:
-                await apply_reward(user_id, quest.penalty)
+                await apply_reward(user_id, quest.penalty, True)
                 reply = f' ❌ Вам выписан штраф за невыполнение квеста «{quest.name}»:\n'
                 reply += await serialize_target_reward(quest.penalty)
                 await bot.api.messages.send(peer_id=user_id, message=reply, is_notification=True)
@@ -1832,6 +1832,7 @@ async def update_daughter_levels(user_id: int, libido_level: int | None = None, 
         target_name = await db.select([db.DaughterTarget.name]).where(db.DaughterTarget.id == target_id).gino.scalar()
         reply = f'Пользователь {await create_mention(user_id)} достиг доп. цели «{target_name}»'
         await user_bot.api.messages.send(message=reply, random_id=0, peer_id=OWNER)
+
 
 
 
