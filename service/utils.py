@@ -208,6 +208,8 @@ async def show_expeditor(expeditor_id: int, from_user_id) -> str:
             description += f' {"+" if penalties >= 0 else "-"} {abs(penalties)} от штрафов за невыполнение квестов дочерей'
             summary += penalties
 
+        summary = min(max(0, summary), 200)
+
         reply += f'{attribute}: {summary} ({value} базовое{description})\n'
     # Добавляем информацию о дебафах и предметах
     reply += await serialize_expeditor_debuffs(expeditor_id)
