@@ -791,7 +791,7 @@ async def q4(m: Message, value: int = None):
 
 @bot.on.private_message(StateRule(DaughterQuestions.Q8), NumericRule(max_number=3))
 @bot.on.private_message(StateRule(DaughterQuestions.Q8), PayloadMapRule({'q': 8, 'a': int}))
-async def q4(m: Message, value: int = None):
+async def q8(m: Message, value: int = None):
     if not m.payload:
         await db.Form.update.values(subordination_bonus=db.Form.subordination_bonus + value).where(
         db.Form.user_id == m.from_id).gino.scalar()

@@ -1035,6 +1035,8 @@ async def get_available_daughter_target_ids(user_id: int) -> list[int]:
     form_id = await get_current_form_id(user_id)
     quest = await db.select([*db.DaughterQuest]).where(db.DaughterQuest.to_form_id == form_id).gino.first()
     target_ids = []
+    if not quest:
+        return []
     for target_id in quest.target_ids:
         params = await db.select([db.DaughterTarget.params]).where(db.DaughterTarget.id == target_id).gino.scalar()
         libido, subordination = await count_daughter_params(user_id)
