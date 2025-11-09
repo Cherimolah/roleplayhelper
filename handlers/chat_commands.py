@@ -336,7 +336,7 @@ async def move_to_location(m: Message, match: tuple[str]):
 @bot.on.message(RegexRule(re.compile(r'\[передать сообщение \[id(\d+)\|[^\]]+\] "(.+)"\]', re.IGNORECASE)))
 @bot.on.message(RegexRule(re.compile(r'\[написать сообщение https://vk.com/(\w*) "(.+)"\]', re.IGNORECASE)))
 @bot.on.message(RegexRule(re.compile(r'\[написать https://vk.com/(\w*) "(.+)"\]', re.IGNORECASE)))
-@bot.on.message(RegexRule(re.compile(r'\[сказать https://vk.com/(\w*) "(.]+)"\]', re.IGNORECASE)))
+@bot.on.message(RegexRule(re.compile(r'\[сказать https://vk.com/(\w*) "(.+)"\]', re.IGNORECASE)))
 @bot.on.message(RegexRule(re.compile(r'\[отправь текст https://vk.com/(\w*) "(.+)"\]', re.IGNORECASE)))
 @bot.on.message(RegexRule(re.compile(r'\[сообщение для https://vk.com/(\w*) "(.+)"\]', re.IGNORECASE)))
 @bot.on.message(RegexRule(re.compile(r'\[передать сообщение https://vk.com/(\w*) "(.+)"\]', re.IGNORECASE)))
