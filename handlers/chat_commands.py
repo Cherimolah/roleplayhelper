@@ -26,8 +26,8 @@ moving_pattern2 = re.compile(r'\[\s*перемещение в (.+)\s*\]', re.IGN
 donate_pattern = re.compile(r'\[пожертвовать в храм (\d+)\]', re.IGNORECASE)
 deal_pattern = re.compile(r"\[совершить сделку \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)
 deal_pattern_link = re.compile(r"\[совершить сделку https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)
-message_pattern = re.compile(r'\[отправить сообщение \[id(\d+)\|[^\]]+\] "([^"]+)"\]', re.IGNORECASE)
-message_pattern_link = re.compile(r'\[отправить сообщение https://vk.com/(\w*) "([^"]+)"\]', re.IGNORECASE)
+message_pattern = re.compile(r'\[отправить сообщение \[id(\d+)\|[^\]]+\] "(.+)"\]', re.IGNORECASE)
+message_pattern_link = re.compile(r'\[отправить сообщение https://vk.com/(\w*) "(.+)"\]', re.IGNORECASE)
 
 
 @bot.on.chat_message(AdminRule(), text='/chat_id')
