@@ -21,7 +21,7 @@ from service.utils import move_user, create_mention, get_current_form_id, soft_d
 from config import HALL_CHAT_ID
 
 # Регулярные выражения для обработки команд
-moving_pattern = re.compile(r'\[\s*перемещение в "([^"]+)"\s*\]', re.IGNORECASE)
+moving_pattern = re.compile(r'\[\s*перемещение в "(.+)"\s*\]', re.IGNORECASE)
 moving_pattern2 = re.compile(r'\[\s*перемещение в (.+)\s*\]', re.IGNORECASE)
 donate_pattern = re.compile(r'\[пожертвовать в храм (\d+)\]', re.IGNORECASE)
 deal_pattern = re.compile(r"\[совершить сделку \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)

@@ -989,7 +989,12 @@ async def timer_daughter_levels(user_id: int):
         tomorrow = now() + datetime.timedelta(days=1)
         tomorrow = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0,
                                      tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
-        await asyncio.sleep((tomorrow - now()).total_seconds() - 2)
+        await asyncio.sleep((tomorrow - now()).total_seconds() - 3)
+        # Тут короче надо получить в конце дня список задач, которые нужно было выполнить
+        # Поэтому за 3 секунды до конца дня получаем его
+        target_ids = await get_available_daughter_target_ids(user_id)
+        # Потом, чтобы точно понимать, что мы находимся в новом дне, ждем 5 секунд
+        await asyncio.sleep(5)
         form_id = await get_current_form_id(user_id)
         # Замороженные анкеты пропускаем
         freeze = await db.select([db.Form.freeze]).where(db.Form.user_id == user_id).gino.scalar()
@@ -1000,7 +1005,7 @@ async def timer_daughter_levels(user_id: int):
         if quest:
             confirmed = await db.select([db.DaughterQuestRequest.confirmed]).where(
                 and_(db.DaughterQuestRequest.quest_id == quest.id, db.DaughterQuestRequest.form_id == form_id,
-                     db.DaughterQuestRequest.created_at == datetime.date.today())
+                     db.DaughterQuestRequest.created_at == (now().date() - datetime.timedelta(days=1)))
             ).gino.scalar()
             # Если квест не выполнен - применяем штраф
             if confirmed is None:
@@ -1008,8 +1013,16 @@ async def timer_daughter_levels(user_id: int):
                 reply = f' ❌ Вам выписан штраф за невыполнение квеста «{quest.name}»:\n'
                 reply += await serialize_target_reward(quest.penalty)
                 await bot.api.messages.send(peer_id=user_id, message=reply, is_notification=True)
-                target_ids = await get_available_daughter_target_ids(user_id)
                 for target_id in target_ids:
+                    # Проверяем выполнение доп. цели
+                    confirmed = await db.select([db.DaughterTargetRequest.confirmed]).where(
+                        and_(db.DaughterTargetRequest.target_id == target_id,
+                             db.DaughterTargetRequest.form_id == form_id,
+                             db.DaughterTargetRequest.created_at == (now().date() - datetime.timedelta(days=1))
+                             )
+                    ).gino.scalar()
+                    if confirmed:
+                        continue
                     name, penalty = await db.select([db.DaughterTarget.name, db.DaughterTarget.penalty]).where(
                         db.DaughterTarget.id == target_id
                     ).gino.first()
@@ -1052,7 +1065,7 @@ async def get_available_daughter_target_ids(user_id: int) -> list[int]:
     # Получение подтвержденных целей
     confirmed_target_ids = {x[0] for x in await db.select([db.DaughterTargetRequest.target_id]).where(
         and_(db.DaughterTargetRequest.confirmed.is_(True),
-             db.DaughterTargetRequest.created_at == datetime.date.today(),
+             db.DaughterTargetRequest.created_at == now().date(),
              db.DaughterTargetRequest.form_id == form_id)).gino.all()}
 
     target_ids = list(set(target_ids) | confirmed_target_ids)

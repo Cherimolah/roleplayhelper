@@ -484,7 +484,7 @@ class Database(Gino):
             target_id = Column(Integer, ForeignKey('daughter_targets.id', ondelete='CASCADE'))  # Айди доп. цели
             form_id = Column(Integer, ForeignKey('forms.id', ondelete='CASCADE'))  # Айди анкеты
             confirmed = Column(Boolean, default=False)  # Подтвержден ли запрос администрацией
-            created_at = Column(Date, default=datetime.date.today)  # Дата создания
+            created_at = Column(Date, default=now().date())  # Дата создания
 
         self.DaughterTargetRequest = DaughterTargetRequest
 
@@ -498,7 +498,7 @@ class Database(Gino):
             quest_id = Column(Integer, ForeignKey('daughter_quests.id', ondelete='CASCADE'))  # Айди квеста
             form_id = Column(Integer, ForeignKey('forms.id', ondelete='CASCADE'))  # Айди анкеты
             confirmed = Column(Boolean, default=False)  # Подтвержден ли запрос администрацией
-            created_at = Column(Date, default=datetime.date.today)  # Дата создания
+            created_at = Column(Date, default=now().date())  # Дата создания
 
         self.DaughterQuestRequest = DaughterQuestRequest
 

@@ -11,7 +11,7 @@ from sqlalchemy import and_
 from loader import bot, states
 from service.custom_rules import StateRule, DaughterRule
 from service.states import Menu
-from service.db_engine import db
+from service.db_engine import db, now
 from service.utils import get_current_form_id, serialize_target_reward, parse_cooldown, get_available_daughter_target_ids
 from config import ADMINS
 
@@ -41,11 +41,10 @@ async def daughter_quest(m: Message):
         return
 
     # Расчет времени до сброса квестов
-    now = datetime.datetime.now(tz=datetime.timezone(datetime.timedelta(hours=3)))
-    tomorrow = now + datetime.timedelta(days=1)
+    tomorrow = now() + datetime.timedelta(days=1)
     next_day = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0,
                                  tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
-    cooldown = (next_day - now).total_seconds()
+    cooldown = (next_day - now()).total_seconds()
 
     # Формирование информации о квесте
     reply = ('У вас активен квест:\n\n'
@@ -77,7 +76,7 @@ async def daughter_quest(m: Message):
     for i, target_id in enumerate(target_ids):
         confirmed = await db.select([db.DaughterTargetRequest.confirmed]).where(
             and_(db.DaughterTargetRequest.form_id == form_id,
-                 db.DaughterTargetRequest.created_at == datetime.date.today(),
+                 db.DaughterTargetRequest.created_at == now().date(),
                  db.DaughterTargetRequest.target_id == target_id)
         ).gino.scalar()
 
