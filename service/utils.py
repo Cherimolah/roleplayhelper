@@ -1025,8 +1025,8 @@ async def timer_daughter_levels(user_id: int):
             db.Fraction.id == fraction_id).gino.scalar()
         sub_koef = await db.select([db.Fraction.subordination_koef]).where(
             db.Fraction.id == fraction_id).gino.scalar()
-        sub_level = min(100, max(0, int(sub_level + 2 + 2 * sub_koef + sub_bonus)))
-        lib_level = min(100, max(0, int(lib_level + 2 + 2 * libido_multiplier + lib_bonus)))
+        sub_level = min(100, max(0, int(sub_level + 2 * sub_koef + sub_bonus)))
+        lib_level = min(100, max(0, int(lib_level + 2 * libido_multiplier + lib_bonus)))
         await update_daughter_levels(user_id, lib_level, sub_level)
         await asyncio.sleep(15)
 
