@@ -156,6 +156,19 @@ async def confirm_daughter_target(m: Message):
     form_id = await get_current_form_id(m.from_id)
     quest_id = m.payload['daughter_quest_complete']
 
+    # Проверим, что все доп. цели выполнены
+    target_ids = await get_available_daughter_target_ids(m.from_id)
+    for target_id in target_ids:
+        confirmed = await db.select([db.DaughterTargetRequest.confirmed]).where(
+            and_(db.DaughterTargetRequest.target_id == target_id,
+                 db.DaughterTargetRequest.form_id == form_id,
+                 db.DaughterTargetRequest.created_at == now().date()
+                 )
+        ).gino.scalar()
+        if not confirmed:
+            await m.answer('❌Не все дополнительные цели были выполнены')
+            return
+
     # Создание запроса на подтверждение квеста
     request = await db.DaughterQuestRequest.create(form_id=form_id, quest_id=quest_id)
 
