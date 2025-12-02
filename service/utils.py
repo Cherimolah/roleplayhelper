@@ -986,13 +986,13 @@ async def timer_daughter_levels(user_id: int):
     Для либидо формула такая же
     """
     while True:
-        status = await db.select([db.Form.status]).where(db.Form.user_id == user_id).gino.scalar()
-        if status != 2:
-            return
         tomorrow = now() + datetime.timedelta(days=1)
         tomorrow = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0,
                                      tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
         await asyncio.sleep((tomorrow - now()).total_seconds() - 3)
+        status = await db.select([db.Form.status]).where(db.Form.user_id == user_id).gino.scalar()
+        if status != 2:
+            return
         # Тут короче надо получить в конце дня список задач, которые нужно было выполнить
         # Поэтому за 3 секунды до конца дня получаем его
         target_ids = await get_available_daughter_target_ids(user_id)
