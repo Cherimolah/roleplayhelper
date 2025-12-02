@@ -986,6 +986,9 @@ async def timer_daughter_levels(user_id: int):
     Для либидо формула такая же
     """
     while True:
+        status = await db.select([db.Form.status]).where(db.Form.user_id == user_id).gino.scalar()
+        if status != 2:
+            return
         tomorrow = now() + datetime.timedelta(days=1)
         tomorrow = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0,
                                      tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
