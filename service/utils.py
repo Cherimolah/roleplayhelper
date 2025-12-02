@@ -902,7 +902,7 @@ async def check_last_activity(user_id: int):
 
         # Ждем время до удаления
         time_to_delete = await db.select([db.Metadata.time_to_delete]).gino.scalar()
-        # await asyncio.sleep(time_to_delete - time_to_freeze)
+        await asyncio.sleep(time_to_delete - time_to_freeze)
         last_activity: datetime.datetime = await db.select([db.User.last_activity]).where(
             db.User.user_id == user_id).gino.scalar()
         time_to_delete: int = await db.select([db.Metadata.time_to_delete]).gino.scalar()
