@@ -969,9 +969,64 @@ async def apply_reward(user_id: int, data: dict, save_penalty=False):
                 await db.AttributePenalties.create(attribute_id=attribute_id, expeditor_id=expeditor_id, value=value)
 
 
-async def timer_daughter_levels(user_id: int):
+async def update_daughter_tasks(user_id: int):
     """
-    Функция для обновления параметров дочерей и проверке выполнения обязательного квеста для дочерей
+    Функция для проверки выполнения квестов для дочерей у конкретной дочери
+    """
+    # Тут короче надо получить в конце дня список задач, которые нужно было выполнить
+    # Поэтому за 3 секунды до конца дня получаем его
+    target_ids = await get_available_daughter_target_ids(user_id)
+    # Потом, чтобы точно понимать, что мы находимся в новом дне, ждем 5 секунд
+    await asyncio.sleep(5)
+    form_id = await get_current_form_id(user_id)
+    # Замороженные анкеты пропускаем
+    # Проверяем выполнение квеста дочери
+    quest = await db.select([*db.DaughterQuest]).where(db.DaughterQuest.to_form_id == form_id).gino.first()
+    if quest:
+        confirmed = await db.select([db.DaughterQuestRequest.confirmed]).where(
+            and_(db.DaughterQuestRequest.quest_id == quest.id, db.DaughterQuestRequest.form_id == form_id,
+                 db.DaughterQuestRequest.created_at == (now().date() - datetime.timedelta(days=1)))
+        ).gino.scalar()
+        # Если квест не выполнен - применяем штраф
+        if confirmed is None:
+            await apply_reward(user_id, quest.penalty, True)
+            reply = f' ❌ Вам выписан штраф за невыполнение квеста «{quest.name}»:\n'
+            reply += await serialize_target_reward(quest.penalty)
+            await bot.api.messages.send(peer_id=user_id, message=reply, is_notification=True)
+            for target_id in target_ids:
+                # Проверяем выполнение доп. цели
+                confirmed = await db.select([db.DaughterTargetRequest.confirmed]).where(
+                    and_(db.DaughterTargetRequest.target_id == target_id,
+                         db.DaughterTargetRequest.form_id == form_id,
+                         db.DaughterTargetRequest.created_at == (now().date() - datetime.timedelta(days=1))
+                         )
+                ).gino.scalar()
+                if confirmed:
+                    continue
+                name, penalty = await db.select([db.DaughterTarget.name, db.DaughterTarget.penalty]).where(
+                    db.DaughterTarget.id == target_id
+                ).gino.first()
+                reply = f' ❌ Вам выписан штраф за невыполнение доп. цели «{name}»:\n'
+                reply += await serialize_target_reward(penalty)
+                await apply_reward(user_id, penalty, save_penalty=True)
+                await bot.api.messages.send(peer_id=user_id, message=reply, is_notification=True)
+    # Обновляем параметры дочерей
+    sub_bonus, lib_bonus, sub_level, lib_level, fraction_id = await db.select(
+        [db.Form.subordination_bonus, db.Form.libido_bonus, db.Form.subordination_level, db.Form.libido_level,
+         db.Form.fraction_id]).where(
+        db.Form.user_id == user_id).gino.first()
+    libido_multiplier = await db.select([db.Fraction.libido_koef]).where(
+        db.Fraction.id == fraction_id).gino.scalar()
+    sub_koef = await db.select([db.Fraction.subordination_koef]).where(
+        db.Fraction.id == fraction_id).gino.scalar()
+    sub_level = min(100, max(0, int(sub_level + 2 * sub_koef + sub_bonus)))
+    lib_level = min(100, max(0, int(lib_level + 2 * libido_multiplier + lib_bonus)))
+    await update_daughter_levels(user_id, lib_level, sub_level)
+
+
+async def timer_daughter_levels():
+    """
+    Функция таймер для обновления параметров всех дочерей и проверке выполнения обязательного квеста для дочерей
 
     Каждый день у дочерей вырастают параметры либидо и подчинения
 
@@ -990,60 +1045,11 @@ async def timer_daughter_levels(user_id: int):
         tomorrow = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0,
                                      tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
         await asyncio.sleep((tomorrow - now()).total_seconds() - 3)
-        status = await db.select([db.Form.status]).where(db.Form.user_id == user_id).gino.scalar()
-        if status != 2:
-            return
-        # Тут короче надо получить в конце дня список задач, которые нужно было выполнить
-        # Поэтому за 3 секунды до конца дня получаем его
-        target_ids = await get_available_daughter_target_ids(user_id)
-        # Потом, чтобы точно понимать, что мы находимся в новом дне, ждем 5 секунд
-        await asyncio.sleep(5)
-        form_id = await get_current_form_id(user_id)
-        # Замороженные анкеты пропускаем
-        freeze = await db.select([db.Form.freeze]).where(db.Form.user_id == user_id).gino.scalar()
-        if freeze:
-            continue
-        # Проверяем выполнение квеста дочери
-        quest = await db.select([*db.DaughterQuest]).where(db.DaughterQuest.to_form_id == form_id).gino.first()
-        if quest:
-            confirmed = await db.select([db.DaughterQuestRequest.confirmed]).where(
-                and_(db.DaughterQuestRequest.quest_id == quest.id, db.DaughterQuestRequest.form_id == form_id,
-                     db.DaughterQuestRequest.created_at == (now().date() - datetime.timedelta(days=1)))
-            ).gino.scalar()
-            # Если квест не выполнен - применяем штраф
-            if confirmed is None:
-                await apply_reward(user_id, quest.penalty, True)
-                reply = f' ❌ Вам выписан штраф за невыполнение квеста «{quest.name}»:\n'
-                reply += await serialize_target_reward(quest.penalty)
-                await bot.api.messages.send(peer_id=user_id, message=reply, is_notification=True)
-                for target_id in target_ids:
-                    # Проверяем выполнение доп. цели
-                    confirmed = await db.select([db.DaughterTargetRequest.confirmed]).where(
-                        and_(db.DaughterTargetRequest.target_id == target_id,
-                             db.DaughterTargetRequest.form_id == form_id,
-                             db.DaughterTargetRequest.created_at == (now().date() - datetime.timedelta(days=1))
-                             )
-                    ).gino.scalar()
-                    if confirmed:
-                        continue
-                    name, penalty = await db.select([db.DaughterTarget.name, db.DaughterTarget.penalty]).where(
-                        db.DaughterTarget.id == target_id
-                    ).gino.first()
-                    reply = f' ❌ Вам выписан штраф за невыполнение доп. цели «{name}»:\n'
-                    reply += await serialize_target_reward(penalty)
-                    await apply_reward(user_id, penalty, save_penalty=True)
-                    await bot.api.messages.send(peer_id=user_id, message=reply, is_notification=True)
-        # Обновляем параметры дочерей
-        sub_bonus, lib_bonus, sub_level, lib_level, fraction_id = await db.select(
-            [db.Form.subordination_bonus, db.Form.libido_bonus, db.Form.subordination_level, db.Form.libido_level, db.Form.fraction_id]).where(
-            db.Form.user_id == user_id).gino.first()
-        libido_multiplier = await db.select([db.Fraction.libido_koef]).where(
-            db.Fraction.id == fraction_id).gino.scalar()
-        sub_koef = await db.select([db.Fraction.subordination_koef]).where(
-            db.Fraction.id == fraction_id).gino.scalar()
-        sub_level = min(100, max(0, int(sub_level + 2 * sub_koef + sub_bonus)))
-        lib_level = min(100, max(0, int(lib_level + 2 * libido_multiplier + lib_bonus)))
-        await update_daughter_levels(user_id, lib_level, sub_level)
+        user_ids = [x[0] for x in await db.select([db.Form.user_id]).where(
+            and_(db.Form.status == 2, db.Form.freeze.isnot(True))
+        ).gino.all()]
+        tasks = [update_daughter_tasks(user_id) for user_id in user_ids]
+        await asyncio.gather(*tasks)
         await asyncio.sleep(15)
 
 

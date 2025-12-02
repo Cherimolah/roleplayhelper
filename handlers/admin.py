@@ -68,10 +68,6 @@ async def accept_form(m: MessageEvent):
         except:
             pass
         await move_user(user_id, HALL_CHAT_ID)
-    # Закидываем в луп задачу по обновлению параметров
-    status = await db.select([db.Form.status]).where(db.Form.id == form_id).gino.scalar()
-    if status == 2:
-        asyncio.get_event_loop().create_task(timer_daughter_levels(user_id))
     # Отправляем админам дальнейшую инфу
     name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
     await m.edit_message(f"Анкета участника [id{user_id}|{name}] принята")

@@ -53,10 +53,6 @@ async def on_startup():
     for user_id in user_ids:
         asyncio.get_event_loop().create_task(check_last_activity(user_id))
 
-    daughters_ids = [x[0] for x in await db.select([db.Form.user_id]).where(db.Form.status == 2).gino.all()]
-    for user_id in daughters_ids:
-        asyncio.get_event_loop().create_task(timer_daughter_levels(user_id))
-
     post_ids = [x[0] for x in await db.select([db.Post.id]).gino.all()]
     for post_id in post_ids:
         asyncio.get_event_loop().create_task(wait_users_post(post_id))
@@ -113,4 +109,5 @@ async def exception(e: Exception, peer_id: int = None, message: int = None):
 if __name__ == '__main__':
     bot.loop_wrapper.add_task(on_startup())
     bot.loop_wrapper.add_task(send_daylics())
+    bot.loop_wrapper.add_task(timer_daughter_levels())
     bot.run_forever()
