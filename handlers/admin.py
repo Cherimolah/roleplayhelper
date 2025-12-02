@@ -13,7 +13,7 @@ from vkbottle.bot import MessageEvent, Message
 from vkbottle.dispatch.rules.base import PayloadMapRule, PayloadRule
 from sqlalchemy import and_
 import openpyxl
-from vkbottle import DocMessagesUploader, Callback, KeyboardButtonColor, Keyboard, GroupEventType
+from vkbottle import DocMessagesUploader, Callback, KeyboardButtonColor, Keyboard, GroupEventType, Text
 
 from loader import bot, user_bot
 from service.db_engine import db
@@ -23,7 +23,7 @@ from service.states import Menu, Admin
 from service.middleware import states
 from service.custom_rules import StateRule, NumericRule, AdminRule, UserFree
 from service.utils import take_off_payments, parse_reputation, create_mention, check_quest_completed, apply_reward, \
-    serialize_target_reward, create_cabin_chat, move_user, get_current_form_id, timer_daughter_levels
+    serialize_target_reward, create_cabin_chat, move_user, get_current_form_id, post_form_to_board, update_form_on_board, post_form_to_archive
 from config import HALL_CHAT_ID
 
 
@@ -51,10 +51,14 @@ async def accept_form(m: MessageEvent):
         values = new_form.__values__
         del values['id']
         del values['is_request']
+        public = await db.select([db.Form.board_comment_id]).where(db.Form.id == form_id).gino.scalar()
         await db.Form.delete.where(db.Form.id == form_id).gino.status()
         await db.Form.update.values(**values).where(db.Form.id == old_form_id).gino.status()
         await bot.api.messages.send(peer_ids=user_id, message="Заявка на редактирование анкеты была принята",
                                     is_notification=True)
+        # Если анкета опубликована на доске анкет, редактируем там текст
+        if public:
+            await update_form_on_board(old_form_id)
     else:
         # Зарегистрирована новая анкета
         await db.Form.update.values(is_request=False).where(db.Form.id == form_id).gino.status()
@@ -166,8 +170,25 @@ async def set_cabin_class(m: Message, value: int):
         db.Form.user_id == user_id).gino.status()
     form_id = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
     asyncio.get_event_loop().create_task(take_off_payments(form_id))
+    states.set(m.from_id, Admin.PUBLIC_FORM_BOARD)
+    # Спрашиваем админа нужно ли опубликовать анкету в доску анкет
+    keyboard = Keyboard().add(
+        Text('Опубликовать', {'post_board': True, 'form_id': form_id}), KeyboardButtonColor.POSITIVE
+    ).row().add(
+        Text('Не публиковать', {'post_board': False, 'form_id': form_id}), KeyboardButtonColor.NEGATIVE
+    )
+    await m.answer(messages.cabin_class_succesful, keyboard=keyboard)
+
+
+
+@bot.on.private_message(StateRule(Admin.PUBLIC_FORM_BOARD), PayloadMapRule({'post_board': bool, 'form_id': int}), AdminRule())
+async def select_post_form_to_board(m: Message):
+    if m.payload['post_board']:
+        form_id = m.payload['form_id']
+        await post_form_to_board(form_id)
+        await m.answer('Анкета успешно опубликована')
     states.set(m.from_id, Menu.MAIN)
-    await m.answer(messages.cabin_class_succesful, keyboard=await keyboards.main_menu(m.from_id))
+    await m.answer('Регистрация анкеты завершена', keyboard=await keyboards.main_menu(m.from_id))
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_decline": int}), AdminRule())
@@ -428,16 +449,26 @@ async def accept_delete(m: MessageEvent):
         await m.edit_message("Запрос уже принял другой администратор")
         return
     name = await db.select([db.Form.name]).where(db.Form.user_id == m.payload['user_id']).gino.scalar()
+    user_id = m.payload['user_id']
     if m.payload['delete'] == "accept":
-        await db.User.delete.where(db.User.user_id == m.payload['user_id']).gino.status()
-        await bot.api.messages.send(peer_id=m.payload['user_id'],
-                                    message=f"Ваша анкета в боте была удалена! Приятно было с вами общаться, "
-                                    f"если захотите вернуться напишите «Начать»", keyboard=Keyboard())
-        await m.edit_message(f"Анкета [id{m.payload['user_id']}|{name}] была удалена!")
+        states.set(m.user_id, f'{Admin.REASON_DELETE_FORM}*{user_id}')
+        await m.edit_message(f'Запрос на удаление анкеты пользователя {await create_mention(user_id)} принят')
+        await bot.api.messages.send(m.user_id, message='Напишите причину удаления анкеты', keyboard=Keyboard())
     else:
         await db.Form.update.values(delete_request=False).where(db.Form.user_id == m.payload['user_id']).gino.status()
         await bot.api.messages.send(peer_id=m.payload['user_id'], message="Ваша запрос на удаление анкеты был отклонён", is_notification=True)
         await m.edit_message(f"Запрос на удаление анкеты [id{m.payload['user_id']}|{name}] отклонён")
+
+
+@bot.on.private_message(StateRule(Admin.REASON_DELETE_FORM), AdminRule())
+async def set_reason_delete_form(m: Message):
+    user_id = int(states.get(m.from_id).split('*')[-1])
+    await post_form_to_archive(user_id, m.text)
+    await db.User.delete.where(db.User.user_id == user_id).gino.status()
+    await bot.api.messages.send(peer_id=user_id,
+                                message=f"Ваша анкета в боте была удалена! Приятно было с вами общаться, "
+                                f"если захотите вернуться напишите «Начать»", keyboard=Keyboard())
+    await m.answer(f"Анкета пользователя {create_mention(user_id)} была удалена!")
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_delete": int}), AdminRule())

@@ -27,3 +27,6 @@ USER_ID = int(os.getenv('USER_ID'))  # Айди пользователя юзе�
 GROUP_ID = int(os.getenv('GROUP_ID'))  # Айди группы, к которой подключен бот
 
 HALL_CHAT_ID = int(os.getenv('HALL_CHAT_ID') or 0)  # Айди чата, который будет стартовым при регистрации пользователя
+
+BOARD_FORMS_TOPIC_ID = int(os.getenv('BOARD_FORMS_TOPIC_ID'))  # Айди топика доски действующих анкет
+ARCHIVE_FORMS_TOPIC_ID = int(os.getenv('ARCHIVE_FORMS_TOPIC_ID'))  # Айди топика архива анкет

@@ -6,7 +6,7 @@ import sys
 from vkbottle.bot import Bot, BotLabeler
 from vkbottle import CtxStorage, User
 from loguru import logger
-from vkbottle import PhotoMessageUploader, DocMessagesUploader, VideoUploader
+from vkbottle import PhotoMessageUploader, DocMessagesUploader, VideoUploader, PhotoWallUploader
 
 from config import BOT_TOKEN, USER_BOT_TOKEN
 from bot_extended import (APIExtended, RawBotEventViewExtended,
@@ -26,3 +26,4 @@ logger.add(sys.stderr, level="INFO")
 bot.api.API_URL = 'https://api.vk.ru/method/'
 
 user_bot = User(USER_BOT_TOKEN)
+user_photo_wall_uploader = PhotoWallUploader(user_bot.api)

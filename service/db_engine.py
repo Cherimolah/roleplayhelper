@@ -154,6 +154,7 @@ class Database(Gino):
             subordination_bonus = Column(Integer, default=0)  # Бонус к уровню подчинения (см. примечание в строке выше)
             subordination_level = Column(Integer, default=0)  # Текущий базовый уровень подчинения (без бафов)
             libido_level = Column(Integer, default=0)  # Текущий базовый уровень либидо (без бафов)
+            board_comment_id = Column(Integer)
 
         self.Form = Form
 

@@ -11,7 +11,7 @@ from loader import bot, user_bot
 import handlers  # Important
 from service.db_engine import db
 from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity, timer_daughter_levels, calculate_time, wait_users_post, wait_take_off_item, wait_disable_debuff
-from config import ADMINS
+from config import ADMINS, BOARD_FORMS_TOPIC_ID, ARCHIVE_FORMS_TOPIC_ID, GROUP_ID
 from service.middleware import MaintainenceMiddleware, StateMiddleware, FormMiddleware, ActivityUsersMiddleware, StateMiddlewareME, ActionModeMiddleware
 
 bot.labeler.message_view.register_middleware(MaintainenceMiddleware)
@@ -64,6 +64,11 @@ async def on_startup():
     debuff_ids = [x[0] for x in await db.select([db.ExpeditorToDebuffs.id]).gino.all()]
     for debuff_id in debuff_ids:
         asyncio.get_event_loop().create_task(wait_disable_debuff(debuff_id))
+
+    # Закрываем топики
+    await user_bot.api.request('board.closeTopic', {'group_id': abs(GROUP_ID), 'topic_id': BOARD_FORMS_TOPIC_ID})
+    await asyncio.sleep(0.33)
+    await user_bot.api.request('board.closeTopic', {'group_id': abs(GROUP_ID), 'topic_id': ARCHIVE_FORMS_TOPIC_ID})
 
     asyncio.get_event_loop().create_task(polling())
 

@@ -15,13 +15,13 @@ import aiofiles
 from vkbottle import Keyboard, Callback, KeyboardButtonColor, VKAPIError
 
 from service.db_engine import db, now
-from loader import bot, photo_message_uploader, states, user_bot
+from loader import bot, photo_message_uploader, states, user_bot, user_photo_wall_uploader
 from service.serializers import fields, Field, RelatedTable, sex_types
 import messages
 from bot_extended import AioHTTPClientExtended
 import service.states
 import service.keyboards as keyboards
-from config import OWNER, ADMINS
+from config import OWNER, ADMINS, BOARD_FORMS_TOPIC_ID, ARCHIVE_FORMS_TOPIC_ID, GROUP_ID
 from service.serializers import fields_content, serialize_target_reward, parse_orientation, fraction_levels, parse_cooldown, FormatDataException, serialize_expeditor_debuffs, serialize_expeditor_items
 
 # Регулярные выражения для поиска упоминаний и ссылок
@@ -880,9 +880,11 @@ async def check_last_activity(user_id: int):
     if user_id == 32650977:  # Исключение для конкретного пользователя
         return
     time_to_freeze: int = await db.select([db.Metadata.time_to_freeze]).gino.scalar()
-    await asyncio.sleep(time_to_freeze)
     last_activity: datetime.datetime = await db.select([db.User.last_activity]).where(
         db.User.user_id == user_id).gino.scalar()
+    date_freeze = last_activity + datetime.timedelta(seconds=time_to_freeze)
+    seconds_timeout = (date_freeze - datetime.datetime.now()).total_seconds()
+    await asyncio.sleep(seconds_timeout)
     time_to_freeze: int = await db.select([db.Metadata.time_to_freeze]).gino.scalar()  # Can be updated after sleeping
     freeze, is_request = await db.select([db.Form.freeze, db.Form.is_request]).where(db.Form.user_id == user_id).gino.first()
     # Замораживаем анкету если время без активности превышено
@@ -900,7 +902,7 @@ async def check_last_activity(user_id: int):
 
         # Ждем время до удаления
         time_to_delete = await db.select([db.Metadata.time_to_delete]).gino.scalar()
-        await asyncio.sleep(time_to_delete - time_to_freeze)
+        # await asyncio.sleep(time_to_delete - time_to_freeze)
         last_activity: datetime.datetime = await db.select([db.User.last_activity]).where(
             db.User.user_id == user_id).gino.scalar()
         time_to_delete: int = await db.select([db.Metadata.time_to_delete]).gino.scalar()
@@ -908,16 +910,23 @@ async def check_last_activity(user_id: int):
         # Удаляем анкету если время без активности превышено
         if last_activity and freeze and (
                 datetime.datetime.now() - last_activity).total_seconds() >= time_to_delete and not is_request:
-            await bot.api.messages.send(message=f"❗ В связи с отсутствием вашей активности в течение "
-                                                f"{parse_cooldown(time_to_delete)} ваша анкета автоматически удалена",
-                                        peer_id=user_id, is_notification=True)
-            name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
-            await db.Form.delete.where(db.Form.user_id == user_id).gino.status()
-            user = (await bot.api.users.get(user_id=user_id))[0]
+            # Анкету так просто сразу не удаляем. Сначала админу надо написать причину удаления
             admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
-            await bot.api.messages.send(message=f"❗ Анкета [id{user_id}|{name} / {user.first_name} {user.last_name}] "
-                                                f"была автоматически удалена",
-                                        peer_ids=admins, is_notification=True)
+            name, form_id = await db.select([db.Form.name, db.Form.id]).where(db.Form.user_id == user_id).gino.first()
+
+            kb = Keyboard(inline=True).add(
+                Callback("Удалить", {"delete": "accept", "user_id": user_id}), KeyboardButtonColor.POSITIVE
+            ).add(
+                Callback("Отклонить", {"delete": "decline", "user_id": user_id}), KeyboardButtonColor.NEGATIVE
+            )
+
+            # Помечаем, что запрос отправлен
+            await db.Form.update.values(delete_request=True).where(db.Form.id == form_id).gino.status()
+
+            await bot.api.messages.send(peer_ids=admins,
+                                        message=f"Автоматический запрос на удаление анкеты пользователя "
+                                                f"[id{user_id}|{name}] из-за неактивности",
+                                        keyboard=kb)
 
 
 async def apply_reward(user_id: int, data: dict, save_penalty=False):
@@ -1859,5 +1868,50 @@ async def update_daughter_levels(user_id: int, libido_level: int | None = None, 
         await user_bot.api.messages.send(message=reply, random_id=0, peer_id=OWNER)
 
 
+async def post_form_to_board(form_id: int):
+    user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
+    text, _ = await loads_form(user_id, user_id)
+    # Метод загрузки формы возвращает аттач строку фотографии от имени группы.
+    # Но постить мы можем только от лица пользователя поэтому загружаем фотографию из файла
+    attachments = await user_photo_wall_uploader.upload(f'data/photo{user_id}.jpg', group_id=abs(GROUP_ID))
+    await user_bot.api.request('board.openTopic', {'group_id': abs(GROUP_ID), 'topic_id': BOARD_FORMS_TOPIC_ID})
+    await asyncio.sleep(0.33)
+    response = await user_bot.api.request('board.createComment', {'group_id': abs(GROUP_ID), 'topic_id': BOARD_FORMS_TOPIC_ID,
+                                                                  'text': text, 'attachments': attachments})
+    comment_id = response['response']
+    await db.Form.update.values(board_comment_id=comment_id).where(db.Form.id == form_id).gino.status()
+    await asyncio.sleep(0.33)
+    await user_bot.api.request('board.closeTopic', {'group_id': abs(GROUP_ID), 'topic_id': BOARD_FORMS_TOPIC_ID})
 
 
+async def update_form_on_board(form_id: int):
+    """
+    Функция обновляет описание анкеты в топике (например, после редактирования)
+    """
+    user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
+    text, _ = await loads_form(user_id, user_id)
+    attachments = await user_photo_wall_uploader.upload(f'data/photo{user_id}.jpg', group_id=abs(GROUP_ID))
+    comment_id = await db.select([db.Form.board_comment_id]).where(db.Form.id == form_id).gino.scalar()
+    await user_bot.api.request('board.editComment', {'group_id': abs(GROUP_ID), 'topic_id': BOARD_FORMS_TOPIC_ID,
+                                                                  'text': text, 'attachments': attachments,
+                                                     'comment_id': comment_id})
+
+
+async def post_form_to_archive(user_id: int, reason: str):
+    """
+    Функция отправляет анкету в топик с архивными анкетами
+    """
+    text, _ = await loads_form(user_id, user_id)
+    text += f'\n\nТекущий статус персонажа: {reason}'
+    attachments = await user_photo_wall_uploader.upload(f'data/photo{user_id}.jpg', group_id=abs(GROUP_ID))
+    comment_id = await db.select([db.Form.board_comment_id]).where(db.Form.user_id == user_id).gino.scalar()
+    if comment_id:
+        await user_bot.api.request('board.deleteComment', {'group_id': abs(GROUP_ID), 'topic_id':BOARD_FORMS_TOPIC_ID,
+                                                           'comment_id': comment_id})
+    await asyncio.sleep(0.33)
+    await user_bot.api.request('board.openTopic', {'group_id': abs(GROUP_ID), 'topic_id': ARCHIVE_FORMS_TOPIC_ID})
+    await asyncio.sleep(0.33)
+    await user_bot.api.request('board.createComment',
+                                          {'group_id': abs(GROUP_ID), 'topic_id': ARCHIVE_FORMS_TOPIC_ID,
+                                           'text': text, 'attachments': attachments})
+    await user_bot.api.request('board.closeTopic', {'group_id': abs(GROUP_ID), 'topic_id': ARCHIVE_FORMS_TOPIC_ID})
