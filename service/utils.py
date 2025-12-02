@@ -1032,7 +1032,7 @@ async def timer_daughter_levels():
     Каждый день у дочерей вырастают параметры либидо и подчинения
 
     Формула:
-    sub_level = sub_level + 2 + 2 * multiplier + sub_bonus
+    sub_level = sub_level + 2 * multiplier + sub_bonus
 
     Где:
     sub_level - текущий уровень подчинения, принадлежит промежутку [0; 100]
