@@ -468,7 +468,7 @@ async def set_reason_delete_form(m: Message):
     await bot.api.messages.send(peer_id=user_id,
                                 message=f"Ваша анкета в боте была удалена! Приятно было с вами общаться, "
                                 f"если захотите вернуться напишите «Начать»", keyboard=Keyboard())
-    await m.answer(f"Анкета пользователя {create_mention(user_id)} была удалена!")
+    await m.answer(f"Анкета пользователя {await create_mention(user_id)} была удалена!")
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_delete": int}), AdminRule())
@@ -476,11 +476,10 @@ async def delete_form(m: MessageEvent):
     """
     Удаление анкеты
     """
-    user_id, name = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.id == m.payload['form_delete']).gino.first()
-    user = (await bot.api.users.get(user_ids=user_id))[0]
-    user_name = f"{user.first_name} {user.last_name}"
-    await db.Form.delete.where(db.Form.id == m.payload['form_delete']).gino.status()
-    await m.edit_message(f"Анкета [id{user_id}|{name} / {user_name}] была удалена")
+    user_id = await db.select([db.Form.user_id]).where(db.Form.id == m.payload['form_delete']).gino.scalar()
+    await m.edit_message(f'Запрос на удаление анкеты пользователя {await create_mention(user_id)}')
+    states.set(m.user_id, f'{Admin.REASON_DELETE_FORM}*{user_id}')
+    await bot.api.messages.send(peer_id=m.user_id, message='Укажите причину удаления анкеты', keyboard=Keyboard())
 
 
 @bot.on.private_message(PayloadMapRule({"form_reputation": int}), StateRule(Menu.SHOW_FORM), AdminRule())
