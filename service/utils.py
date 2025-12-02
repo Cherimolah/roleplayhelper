@@ -123,7 +123,8 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
         # Показываем бонусные параметры для админов
         admin_request = await db.select([db.User.admin]).where(db.User.user_id == from_user_id).gino.scalar()
         if admin_request:
-            reply += f'Базовое либидо: {form.libido_level}\nБазовое подчинение: {form.subordination_level}'
+            reply += (f'Базовое либидо: {form.libido_level}\nБазовое подчинению: {form.subordination_level}\n'
+                      f'Бонус к либидо: {form.libido_bonus}\nБонус к подчинению: {form.subordination_bonus}')
     return reply, form.photo
 
 
