@@ -23,7 +23,7 @@ from service.states import Menu, Admin
 from service.middleware import states
 from service.custom_rules import StateRule, NumericRule, AdminRule, UserFree
 from service.utils import take_off_payments, parse_reputation, create_mention, check_quest_completed, apply_reward, \
-    serialize_target_reward, create_cabin_chat, move_user, get_current_form_id
+    serialize_target_reward, create_cabin_chat, move_user, get_current_form_id, timer_daughter_levels
 from config import HALL_CHAT_ID
 
 
@@ -45,16 +45,22 @@ async def accept_form(m: MessageEvent):
     old_form_id = await db.select([db.Form.id]).where(
         and_(db.Form.user_id == user_id, db.Form.is_request.is_(False))).gino.scalar()
     if old_form_id:
+        # Срабатывает, если подтверждается редактируемая анкета
+        # Обновляем старую анкету, чтобы сохранить зависимости. Новую удаляем
         new_form = await db.Form.get(form_id)
         values = new_form.__values__
         del values['id']
         del values['is_request']
         await db.Form.delete.where(db.Form.id == form_id).gino.status()
         await db.Form.update.values(**values).where(db.Form.id == old_form_id).gino.status()
+        await bot.api.messages.send(peer_ids=user_id, message="Заявка на редактирование анкеты была принята",
+                                    is_notification=True)
     else:
+        # Зарегистрирована новая анкета
         await db.Form.update.values(is_request=False).where(db.Form.id == form_id).gino.status()
-    state = await db.select([db.User.state]).where(db.User.user_id == user_id).gino.scalar()
-    if str(state) == "Registration.wait":
+        # Закидываем в луп задачу по обновлению параметров
+        asyncio.get_event_loop().create_task(timer_daughter_levels(user_id))
+        # Приветствуем человека
         await db.User.update.values(state=str(Menu.MAIN)).where(db.User.user_id == user_id).gino.status()
         await bot.api.messages.send(peer_ids=user_id, message=messages.form_accepted,
                                     keyboard=await keyboards.main_menu(user_id))
@@ -64,9 +70,7 @@ async def accept_form(m: MessageEvent):
         except:
             pass
         await move_user(user_id, HALL_CHAT_ID)
-    else:
-        await bot.api.messages.send(peer_ids=user_id, message="Заявка на редактирование анкеты была принята",
-                                    is_notification=True)
+    # Отправляем админам дальнейшую инфу
     name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
     await m.edit_message(f"Анкета участника [id{user_id}|{name}] принята")
     current_profession, cabin = await db.select([db.Form.profession, db.Form.cabin]).where(
