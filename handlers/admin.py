@@ -10,7 +10,7 @@ import shutil
 import json
 
 from vkbottle.bot import MessageEvent, Message
-from vkbottle.dispatch.rules.base import PayloadMapRule, PayloadRule
+from vkbottle.dispatch.rules.base import PayloadMapRule, PayloadRule, FromPeerRule, AttachmentTypeRule
 from sqlalchemy import and_
 import openpyxl
 from vkbottle import DocMessagesUploader, Callback, KeyboardButtonColor, Keyboard, GroupEventType, Text
@@ -23,8 +23,8 @@ from service.states import Menu, Admin
 from service.middleware import states
 from service.custom_rules import StateRule, NumericRule, AdminRule, UserFree
 from service.utils import take_off_payments, parse_reputation, create_mention, check_quest_completed, apply_reward, \
-    serialize_target_reward, create_cabin_chat, move_user, get_current_form_id, post_form_to_board, update_form_on_board, post_form_to_archive
-from config import HALL_CHAT_ID
+    serialize_target_reward, create_cabin_chat, move_user, get_current_form_id, post_form_to_board, update_form_on_board, post_form_to_archive, download_image
+from config import HALL_CHAT_ID, GROUP_ID
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_accept": int}), AdminRule(),
@@ -775,4 +775,9 @@ async def decline_daughter_target(m: MessageEvent):
         reply = f' ❌ Вам выписан штраф за невыполнение квеста «{name}»:\n'
         reply += await serialize_target_reward(penalty)
         await bot.api.messages.send(peer_id=user_id, message=reply, is_notification=True)
+
+
+@user_bot.on.private_message(FromPeerRule(GROUP_ID), AttachmentTypeRule('photo'), text='/скачать <user_id:int>')
+async def download_photo_user(m: Message, user_id: int):
+    await download_image(m.attachments[0].photo, f'data/photo{user_id}.jpg')
 

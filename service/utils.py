@@ -9,7 +9,7 @@ import re
 import random
 
 from sqlalchemy import and_, func
-from vkbottle_types.objects import PhotosPhotoSizes
+from vkbottle_types.objects import PhotosPhotoSizes, PhotosPhoto
 from vkbottle.bot import Message, MessageEvent
 import aiofiles
 from vkbottle import Keyboard, Callback, KeyboardButtonColor, VKAPIError
@@ -21,7 +21,7 @@ import messages
 from bot_extended import AioHTTPClientExtended
 import service.states
 import service.keyboards as keyboards
-from config import OWNER, ADMINS, BOARD_FORMS_TOPIC_ID, ARCHIVE_FORMS_TOPIC_ID, GROUP_ID
+from config import OWNER, ADMINS, BOARD_FORMS_TOPIC_ID, ARCHIVE_FORMS_TOPIC_ID, GROUP_ID, USER_ID
 from service.serializers import fields_content, serialize_target_reward, parse_orientation, fraction_levels, parse_cooldown, FormatDataException, serialize_expeditor_debuffs, serialize_expeditor_items
 
 # Регулярные выражения для поиска упоминаний и ссылок
@@ -52,7 +52,8 @@ def get_max_size_url(sizes: List[PhotosPhotoSizes]) -> str:
     return sizes[index].url
 
 
-async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, form_id: int = None, absolute_params: bool = False) -> Tuple[
+async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, form_id: int = None, absolute_params: bool = False,
+                     photo_group: bool = True) -> Tuple[
     str, Optional[str]]:
     """
     Функция, которая сериализует анкету пользователя
@@ -62,6 +63,7 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
     репутации других игроков
     is_request: True - чтобы получить анкету, которая была еще не принята. Используется, когда надо отправить анкету,
     которую пользователь отправил на проверку (после регистрации или редактирования). По умолчанию отправляется уже принятая (проверенная) анкета
+    photo_group: параметр, который отвечает от бота или от группы вернуть фотку
     """
     if form_id:
         form = await db.select([*db.Form]).where(db.Form.id == form_id).gino.first()
@@ -125,7 +127,18 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
         if admin_request:
             reply += (f'Базовое либидо: {form.libido_level}\nБазовое подчинению: {form.subordination_level}\n'
                       f'Бонус к либидо: {form.libido_bonus}\nБонус к подчинению: {form.subordination_bonus}')
-    return reply, form.photo
+    if photo_group:
+        return reply, form.photo
+    if not os.path.exists(f'data/photo{user_id}.jpg'):
+        # Если фотка не скачана, загружаем её
+        # Мы не можем получить из апи ссылку по айди фотки напрямую. Т.к. фотка была загружена от группы,
+        # метод photos.getById не работает с группами, а у юзер-бота нету доступа к фотке группы.
+        # Выход из этой ситуации отправить фотку юзерботу, чтобы можно было скачать
+        message = (await bot.api.messages.send(message=f'/скачать {user_id}', attachment=form.photo, peer_id=USER_ID))[0]
+        await asyncio.sleep(3)
+        await bot.api.messages.delete(cmids=message.conversation_message_id, peer_id=USER_ID, delete_for_all=True)
+    photo = await user_photo_wall_uploader.upload(f'data/photo{user_id}.jpg')
+    return reply, photo
 
 
 async def show_expeditor(expeditor_id: int, from_user_id) -> str:
@@ -280,13 +293,12 @@ async def get_mention_from_message(m: Message, many_users=False) -> Optional[Uni
     return None
 
 
-async def reload_image(attachment, name: str, delete: bool = False):
+async def download_image(attachment: PhotosPhoto, name: str):
     """
-    Функция, для "перезагрузки изображения". Т.к. айди фотографий пользователей со временем могут стать для бота
-    недоступны, рекомендуется скачать и загрузить фото от лица бота
+    Функция для загрузки изображения на диск
     """
     # Получаем URL самой большой версии фото
-    photo_url = get_max_size_url(attachment.photo.sizes)
+    photo_url = get_max_size_url(attachment.sizes)
     # Скачиваем изображение
     response = await client.request_content(photo_url)
     # Создаем директорию если нужно
@@ -295,6 +307,15 @@ async def reload_image(attachment, name: str, delete: bool = False):
     # Сохраняем файл
     async with aiofiles.open(name, mode="wb") as file:
         await file.write(response)
+
+
+
+async def reload_image(attachment, name: str, delete: bool = False):
+    """
+    Функция, для "перезагрузки изображения". Т.к. айди фотографий пользователей со временем могут стать для бота
+    недоступны, рекомендуется скачать и загрузить фото от лица бота
+    """
+    await download_image(attachment.photo, name)
     # Загружаем фото от имени бота
     photo = None
     for i in range(5):
@@ -1870,14 +1891,15 @@ async def update_daughter_levels(user_id: int, libido_level: int | None = None, 
 
 async def post_form_to_board(form_id: int):
     user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
-    text, _ = await loads_form(user_id, user_id)
+    text, photo = await loads_form(user_id, user_id, photo_group=False)
     # Метод загрузки формы возвращает аттач строку фотографии от имени группы.
     # Но постить мы можем только от лица пользователя поэтому загружаем фотографию из файла
-    attachments = await user_photo_wall_uploader.upload(f'data/photo{user_id}.jpg', group_id=abs(GROUP_ID))
+    # К тому же не всегда фотка вообще скачана на диск
+
     await user_bot.api.request('board.openTopic', {'group_id': abs(GROUP_ID), 'topic_id': BOARD_FORMS_TOPIC_ID})
     await asyncio.sleep(0.33)
     response = await user_bot.api.request('board.createComment', {'group_id': abs(GROUP_ID), 'topic_id': BOARD_FORMS_TOPIC_ID,
-                                                                  'text': text, 'attachments': attachments})
+                                                                  'text': text, 'attachments': photo})
     comment_id = response['response']
     await db.Form.update.values(board_comment_id=comment_id).where(db.Form.id == form_id).gino.status()
     await asyncio.sleep(0.33)
@@ -1889,11 +1911,10 @@ async def update_form_on_board(form_id: int):
     Функция обновляет описание анкеты в топике (например, после редактирования)
     """
     user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
-    text, _ = await loads_form(user_id, user_id)
-    attachments = await user_photo_wall_uploader.upload(f'data/photo{user_id}.jpg', group_id=abs(GROUP_ID))
+    text, photo = await loads_form(user_id, user_id, photo_group=False)
     comment_id = await db.select([db.Form.board_comment_id]).where(db.Form.id == form_id).gino.scalar()
     await user_bot.api.request('board.editComment', {'group_id': abs(GROUP_ID), 'topic_id': BOARD_FORMS_TOPIC_ID,
-                                                                  'text': text, 'attachments': attachments,
+                                                                  'text': text, 'attachments': photo,
                                                      'comment_id': comment_id})
 
 
@@ -1901,9 +1922,8 @@ async def post_form_to_archive(user_id: int, reason: str):
     """
     Функция отправляет анкету в топик с архивными анкетами
     """
-    text, _ = await loads_form(user_id, user_id)
+    text, photo = await loads_form(user_id, user_id, photo_group=False)
     text += f'\n\nТекущий статус персонажа: {reason}'
-    attachments = await user_photo_wall_uploader.upload(f'data/photo{user_id}.jpg', group_id=abs(GROUP_ID))
     comment_id = await db.select([db.Form.board_comment_id]).where(db.Form.user_id == user_id).gino.scalar()
     if comment_id:
         await user_bot.api.request('board.deleteComment', {'group_id': abs(GROUP_ID), 'topic_id':BOARD_FORMS_TOPIC_ID,
@@ -1913,5 +1933,5 @@ async def post_form_to_archive(user_id: int, reason: str):
     await asyncio.sleep(0.33)
     await user_bot.api.request('board.createComment',
                                           {'group_id': abs(GROUP_ID), 'topic_id': ARCHIVE_FORMS_TOPIC_ID,
-                                           'text': text, 'attachments': attachments})
+                                           'text': text, 'attachments': photo})
     await user_bot.api.request('board.closeTopic', {'group_id': abs(GROUP_ID), 'topic_id': ARCHIVE_FORMS_TOPIC_ID})
