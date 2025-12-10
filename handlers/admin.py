@@ -16,7 +16,7 @@ import openpyxl
 from vkbottle import DocMessagesUploader, Callback, KeyboardButtonColor, Keyboard, GroupEventType, Text
 
 from loader import bot, user_bot
-from service.db_engine import db
+from service.db_engine import db, now
 import messages
 from service import keyboards
 from service.states import Menu, Admin
@@ -390,17 +390,31 @@ async def decline_salary_request(m: MessageEvent):
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"daylic_check": int, "action": str}), AdminRule())
 async def check_daylic(m: MessageEvent):
     response_id = int(m.payload.get("daylic_check"))
-    checked = await db.select([db.CompletedDaylic.is_checked]).where(db.CompletedDaylic.id == response_id).gino.scalar()
-    if checked:
+    response = await db.CompletedDaylic.get(response_id)
+    if response.is_checked:
         await m.edit_message('Это еженедельное задание уже проверил другой администратор')
         return
-    daylic_id, form_id = await db.select([db.CompletedDaylic.daylic_id, db.CompletedDaylic.form_id]).where(db.CompletedDaylic.id == response_id).gino.first()
-    name, user_id = await db.select([db.Form.name, db.Form.user_id]).where(db.Form.id == form_id).gino.first()
+    name, user_id = await db.select([db.Form.name, db.Form.user_id]).where(db.Form.id == response.form_id).gino.first()
     reward, daylic_name = await db.select([db.Daylic.reward, db.Daylic.name]).where(
-        db.Daylic.id == daylic_id).gino.first()
+        db.Daylic.id == response.daylic_id).gino.first()
     if m.payload['action'] == 'accept':
         await db.CompletedDaylic.update.values(is_checked=True, is_claimed=True).where(db.CompletedDaylic.id == response_id).gino.status()
-        await db.Form.update.values(daylic_completed=True, balance=db.Form.balance + reward).where(db.Form.user_id == user_id).gino.status()
+        # По идее, когда игрок выполняет дейлик, надо отметить, что на сегодня он его выполнил, чтобы заблокировать выполнение (пока не появится новый).
+        # Но может произойти такая ситуация, что отчет был устаревший, поэтому нужно проверить, что выполненный дейлик входит или не входит в текущий промежуток
+        today = now()
+        # Здесь получаем границы текущего промежутка еженедельного задания
+        if today.day <= 2:
+            # Для выходных заданий это [пн; ср]
+            min_date = (today - datetime.timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0)
+            max_date = (today + datetime.timedelta(days=2 - today.weekday())).replace(hour=23, minute=59, second=59)
+        else:
+            # Для обычных заданий [чт; вс]
+            min_date = (today - datetime.timedelta(days=today.weekday() - 3)).replace(hour=0, minute=0, second=0)
+            max_date = (today + datetime.timedelta(days=6 - today.weekday())).replace(hour=23, minute=59, second=59)
+        if not response.created_at or min_date <= response.created_at.astimezone(datetime.timezone(datetime.timedelta(hours=3))) <= max_date:
+            await db.Form.update.values(daylic_completed=True, balance=db.Form.balance + reward).where(db.Form.user_id == user_id).gino.status()
+        else:
+            await db.Form.update.values(balance=db.Form.balance + reward).where(db.Form.user_id == user_id).gino.status()
         await bot.api.messages.send(peer_id=user_id, message=f"Вам засчитано выполнения еженедельного задания {daylic_name}\n"
                                      f"Вы получили награду в размере {reward} валюты", is_notification=True)
         await m.edit_message(f"Еженедельное задание {daylic_name} засчитано игроку [id{user_id}|{name}], выдана награда {reward} монет")

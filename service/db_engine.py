@@ -350,6 +350,7 @@ class Database(Gino):
             daylic_id = Column(Integer, ForeignKey("daylics.id", ondelete='CASCADE'))  # Айди дейлика
             is_claimed = Column(Boolean, default=False)  # Получена ли награда
             is_checked = Column(Boolean, default=False)  # Проверен ли запрос администратором
+            created_at = Column(DateTime(timezone=True), default=now)  # Время создания запроса
 
         self.CompletedDaylic = CompletedDaylic
 
