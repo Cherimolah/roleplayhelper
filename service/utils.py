@@ -908,6 +908,8 @@ async def check_last_activity(user_id: int):
     await asyncio.sleep(seconds_timeout)
     time_to_freeze: int = await db.select([db.Metadata.time_to_freeze]).gino.scalar()  # Can be updated after sleeping
     freeze, is_request = await db.select([db.Form.freeze, db.Form.is_request]).where(db.Form.user_id == user_id).gino.first()
+    last_activity: datetime.datetime = await db.select([db.User.last_activity]).where(
+        db.User.user_id == user_id).gino.scalar()
     # Замораживаем анкету если время без активности превышено
     if (datetime.datetime.now() - last_activity).total_seconds() >= time_to_freeze and not freeze and not is_request:
         await db.Form.update.values(freeze=True).where(db.Form.user_id == user_id).gino.status()
