@@ -35,6 +35,7 @@ def get_skip_button(field: str):
     return Keyboard().add(Text("Пропустить", {field: "skip"}), KeyboardButtonColor.SECONDARY)
 
 
+    
 async def main_menu(user_id: int):
     """
     Возвращает клавиатуру основного меню
@@ -53,6 +54,7 @@ async def main_menu(user_id: int):
     ).row().add(
         Text("Список локаций", {"menu": "locations"}), KeyboardButtonColor.PRIMARY
     ).row().add(
+       Text("👁️ Режим от 1-го лица", {"menu": "first_person"}),KeyboardButtonColor.SECONDARY
         Text("Администрация проекта", {"menu": "staff"}), KeyboardButtonColor.NEGATIVE
     ))
     if judge:
@@ -67,7 +69,18 @@ async def main_menu(user_id: int):
         Text("Помощь", {"menu": "help"}), KeyboardButtonColor.SECONDARY
     )
     return keyboard
-
+    
+def first_person_menu() -> Keyboard:
+    """
+    Клавиатура для режима от первого лица
+    """
+    keyboard = Keyboard(inline=True)
+    keyboard.add(Text("Написать сообщение", {"action": "first_person_write"}))
+    keyboard.row()
+    keyboard.add(Text("Моя текущая локация", {"action": "first_person_location"}))
+    keyboard.row()
+    keyboard.add(Text("Выйти из режима", {"menu": "first_person"}))
+    return keyboard
 
 # Клавиатура для указания причины отклонения анкеты администратором
 reason_decline_form = Keyboard().add(
@@ -551,3 +564,4 @@ chat_settings_panel = Keyboard().add(
 ).row().add(
     Text('В главное меню', {'chat_settings': 'save'}), KeyboardButtonColor.NEGATIVE
 )
+
