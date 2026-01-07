@@ -997,5 +997,19 @@ class FirstPersonMode(self.Model):
 
 self.FirstPersonMode = FirstPersonMode
 
+class UserChatHistory(self.Model):
+    """История чатов пользователя для восстановления"""
+    __tablename__ = 'user_chat_history'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.vk_id', ondelete='CASCADE'))
+    chat_id = Column(Integer, ForeignKey('chats.id', ondelete='CASCADE'))
+    joined_at = Column(DateTime, default=datetime.now)
+    left_at = Column(DateTime, nullable=True)
+    is_restored = Column(Boolean, default=False)
+
+self.UserChatHistory = UserChatHistory
+
 db = Database()
+
 
