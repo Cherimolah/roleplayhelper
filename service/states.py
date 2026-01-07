@@ -327,3 +327,16 @@ class Judge(metaclass=StateMeta):
     CONSEQUENCES_DATA = 'consequences_data'
     OTHER_CONSEQUENCE = 'other_consequence'
     DELETE_CONSEQUENCES = 'delete_consequences'
+
+class UserState(metaclass=StateMeta):
+    # ... существующие состояния ...
+    FIRST_PERSON_CHAT = 'first_person_chat'
+    FIRST_PERSON_MENU = 'first_person_menu'
+
+class Admin(metaclass=StateMeta):
+    # ... существующие состояния ...
+    BLACKOUT_SINGLE = 'blackout_single'
+    BLACKOUT_PROFESSION = 'blackout_profession'
+    BLACKOUT_ALL = 'blackout_all'
+    BLACKOUT_ALL_CONFIRM = 'blackout_all_confirm'
+    BLACKOUT_REMOVE = 'blackout_remove'
