@@ -365,3 +365,28 @@ async def transmitter(m: Message, match: tuple[str, str]):
                f'«{message}»')
     await bot.api.messages.send(peer_id=user_id, message=message)
     await m.answer('Сообщение успешно отправлено')
+    
+async def handle_chat_message(m: Message):
+    
+    users_in_first_person = await db.FirstPersonMode.query.where(
+        db.FirstPersonMode.is_active == True
+    ).gino.all()
+    
+    for user_mode in users_in_first_person:
+        user = await db.User.query.where(db.User.vk_id == user_mode.user_id).gino.first()
+        if user and user.current_chat_id == chat_id:
+            # Пользователь в этом чате и в режиме от первого лица
+            # Применяем эффекты к тексту
+            processed_text = await apply_text_effects(
+                m.text, 
+                user_mode.user_id,
+                db
+            )
+            
+            # Отправляем обработанное сообщение пользователю
+            await bot.api.messages.send(
+                user_id=user_mode.user_id,
+                message=f"📍 {chat.name} | От {sender_name}:\n\n{processed_text}",
+                random_id=0
+            )
+        
