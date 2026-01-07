@@ -2,11 +2,23 @@ import re
 import random
 from typing import Optional
 
-def limited_visibility(text: str, min_level: float = 0.3, max_level: float = 0.8) -> str:
+async def limited_visibility(text: str, user_id: int, db, min_level: float = None, max_level: float = None) -> str:
     """
-    Ограниченная видимость с рандомным уровнем замазывания для каждого сообщения
+    Ограниченная видимость с рандомным уровнем из настроек пользователя
     """
-    # Генерируем случайный уровень для этого сообщения
+    # Получаем настройки пользователя
+    mode = await db.FirstPersonMode.query.where(
+        db.FirstPersonMode.user_id == user_id
+    ).gino.first()
+    
+    if mode:
+        min_level = min_level or mode.min_vision_level or 0.2
+        max_level = max_level or mode.max_vision_level or 0.9
+    else:
+        min_level = min_level or 0.2
+        max_level = max_level or 0.9
+    
+    # Генерируем случайный уровень для ЭТОГО конкретного сообщения
     level = random.uniform(min_level, max_level)
     
     lines = text.split('\n')
@@ -22,6 +34,7 @@ def limited_visibility(text: str, min_level: float = 0.3, max_level: float = 0.8
             blurred_words = []
             for word in words:
                 if random.random() < level:
+                    # Случайный размер замазывания
                     chunk_size = random.randint(1, len(word))
                     start = random.randint(0, len(word) - chunk_size)
                     blurred = word[:start] + '*' * chunk_size + word[start + chunk_size:]
@@ -30,9 +43,10 @@ def limited_visibility(text: str, min_level: float = 0.3, max_level: float = 0.8
                     blurred_words.append(word)
             processed_lines.append(' '.join(blurred_words))
     
-    return '\n'.join(processed_lines)
-
-
+    # Добавляем информацию об уровне замазывания (только в режиме отладки)
+    debug_info = f"\n\n[Уровень замазывания: {level:.2f}]" if random.random() < 0.1 else ""
+    
+    return '\n'.join(processed_lines) + debug_info
 def concussion(text: str) -> str:
     """Контузия: перемешивает буквы в словах"""
     words = text.split()
