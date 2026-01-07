@@ -986,14 +986,24 @@ class FirstPersonMode(self.Model):
     
     user_id = Column(Integer, ForeignKey('users.vk_id', ondelete='CASCADE'), primary_key=True)
     is_active = Column(Boolean, default=False)
-    blackout_mode = Column(Boolean, default=False)  # Принудительный режим
-    blackout_reason = Column(Text, nullable=True)   # Причина блэкаута
+    blackout_mode = Column(Boolean, default=False)
+    blackout_reason = Column(Text, nullable=True)
+    
+    # Эффекты
     deafness_until = Column(DateTime, nullable=True)
     blindness_until = Column(DateTime, nullable=True)
     concussion_until = Column(DateTime, nullable=True)
     limited_vision_until = Column(DateTime, nullable=True)
+    disorientation_until = Column(DateTime, nullable=True)  # НОВОЕ ПОЛЕ
+    
+    # Настройки рандомизации
+    min_vision_level = Column(Float, default=0.2)  # Минимальный уровень видимости
+    max_vision_level = Column(Float, default=0.9)  # Максимальный уровень видимости
+    
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+self.FirstPersonMode = FirstPersonMode
 
 self.FirstPersonMode = FirstPersonMode
 
@@ -1011,5 +1021,6 @@ class UserChatHistory(self.Model):
 self.UserChatHistory = UserChatHistory
 
 db = Database()
+
 
 
