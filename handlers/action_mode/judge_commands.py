@@ -15,7 +15,10 @@ from service.states import Judge, Menu
 from service.utils import get_mention_from_message, filter_users_expeditors, get_current_turn
 from service import keyboards
 from handlers.questions import start
-
+from handlers.action_mode.disorientation import (
+    apply_disorientation_effects,
+    send_disoriented_action_mode_info,
+    handle_disoriented_post
 
 @bot.on.private_message(StateRule(Judge.PANEL), PayloadRule({'judge_action': 'add_users_active'}), JudgeRule())
 async def select_add_users_active_action_mode(m: Message):
@@ -289,3 +292,57 @@ async def confirm_finish_action_mode(m: MessageEvent):
     await m.edit_message('Экшен режим будет остановлен после проверки игрока', keyboard=Keyboard().get_json())
     await bot.api.messages.send(peer_id=m.user_id,
                                 message='Функции бота будут доступны после окончательного завершения экшен режима')
+
+# В существующие импорты добавить:
+from handlers.action_mode.disorientation import (
+    apply_disorientation_effects,
+    send_disoriented_action_mode_info,
+    handle_disoriented_post
+)
+
+# В функции запуска экшен-режима добавить проверку на дезориентацию
+async def start_action_mode_handler(m: Message):
+    # ... существующий код ...
+    
+    # Проверяем, есть ли у участников эффект дезориентации
+    for participant in participants:
+        mode = await db.FirstPersonMode.query.where(
+            db.FirstPersonMode.user_id == participant.user_id
+        ).gino.first()
+        
+        if mode and mode.disorientation_until and mode.disorientation_until > datetime.now():
+            # Применяем эффекты дезориентации для этого игрока
+            await send_disoriented_action_mode_info(
+                chat_id=action_mode_chat_id,
+                user_id=participant.user_id,
+                action_mode_id=action_mode.id
+            )
+    
+    # ... остальной код ...
+
+# В функции обработки постов добавить:
+async def handle_action_mode_post(m: Message):
+    # ... существующий код ...
+    
+    # Проверяем эффект дезориентации у получателей
+    for participant in participants:
+        mode = await db.FirstPersonMode.query.where(
+            db.FirstPersonMode.user_id == participant.user_id
+        ).gino.first()
+        
+        if mode and mode.disorientation_until and mode.disorientation_until > datetime.now():
+            # Обрабатываем пост для дезориентированного игрока
+            processed_text = await handle_disoriented_post(
+                text=m.text,
+                sender_id=m.from_id,
+                receiver_id=participant.user_id
+            )
+            
+            # Отправляем обработанный текст
+            await bot.api.messages.send(
+                user_id=participant.user_id,
+                message=processed_text,
+                random_id=0
+            )
+    
+    # ... остальной код ...
