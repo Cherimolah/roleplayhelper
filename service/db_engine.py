@@ -981,5 +981,21 @@ class Database(Gino):
                     .order_by(self.UserToFraction.reputation.desc()).gino.all())
         return rows
 
+class FirstPersonMode(self.Model):
+    __tablename__ = 'first_person_mode'
+    
+    user_id = Column(Integer, ForeignKey('users.vk_id', ondelete='CASCADE'), primary_key=True)
+    is_active = Column(Boolean, default=False)
+    blackout_mode = Column(Boolean, default=False)  # Принудительный режим
+    blackout_reason = Column(Text, nullable=True)   # Причина блэкаута
+    deafness_until = Column(DateTime, nullable=True)
+    blindness_until = Column(DateTime, nullable=True)
+    concussion_until = Column(DateTime, nullable=True)
+    limited_vision_until = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+self.FirstPersonMode = FirstPersonMode
 
 db = Database()
+
