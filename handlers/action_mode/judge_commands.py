@@ -12,7 +12,7 @@ from loader import bot, states
 from service.db_engine import db
 from service.custom_rules import StateRule, JudgeRule, NumericRule
 from service.states import Judge, Menu
-from service.utils import get_mention_from_message, filter_users_expeditors, get_current_turn
+from service.utils import get_mention_from_message, filter_users_expeditors, get_current_turn, create_mention
 from service import keyboards
 from handlers.questions import start
 
@@ -64,13 +64,16 @@ async def select_add_users_active_action_mode(m: Message):
     user_ids = list(set([x[0] for x in await db.select([db.UsersToActionMode.user_id]).where(
         db.UsersToActionMode.action_mode_id == action_mode_id).gino.all()]))
 
-    # Формируем список пользователей для удаления
-    users_data = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.user_id.in_(user_ids)).order_by(
-        db.Form.user_id.asc()).gino.all()
-    users = await bot.api.users.get(user_ids=[x[0] for x in users_data])
+    # # Формируем список пользователей для удаления
+    # users_data = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.user_id.in_(user_ids)).order_by(
+    #     db.Form.user_id.asc()).gino.all()
+    # users = await bot.api.users.get(user_ids=[x[0] for x in users_data])
     reply = 'Укажите номера пользователей, кого хотите удалить из экшен режима:\n\n'
-    for i in range(len(users_data)):
-        reply += f'{i + 1}. [id{users_data[i][0]}|{users_data[i][1]} / {users[i].first_name} {users[i].last_name}]\n'
+    # for i in range(len(users_data)):
+    #     reply += f'{i + 1}. [id{users_data[i][0]}|{users_data[i][1]} / {users[i].first_name} {users[i].last_name}]\n'
+
+    for i, user_id in enumerate(user_ids):
+        reply += f'{i+1}. {await create_mention(user_id)}\n'
 
     await m.answer(reply, keyboard=Keyboard())
 
