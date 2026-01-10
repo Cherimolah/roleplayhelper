@@ -61,8 +61,8 @@ async def select_add_users_active_action_mode(m: Message):
     """Начинает процесс удаления пользователей из экшен-режима"""
     states.set(m.from_id, Judge.DELETE_USERS_ACTIVE)
     action_mode_id = await db.select([db.ActionMode.id]).where(db.ActionMode.judge_id == m.from_id).gino.scalar()
-    user_ids = [x[0] for x in await db.select([db.UsersToActionMode.user_id]).where(
-        db.UsersToActionMode.action_mode_id == action_mode_id).gino.all()]
+    user_ids = list(set([x[0] for x in await db.select([db.UsersToActionMode.user_id]).where(
+        db.UsersToActionMode.action_mode_id == action_mode_id).gino.all()]))
 
     # Формируем список пользователей для удаления
     users_data = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.user_id.in_(user_ids)).order_by(
