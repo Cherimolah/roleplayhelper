@@ -41,7 +41,7 @@ async def create_action_mode_request(m: Message):
     name = await db.select([db.Form.name]).where(db.Form.id == form_id).gino.scalar()
     user = await m.get_user()
     try:
-        chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=m.peer_id)).items[0].chat_settings.title
+        chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=[m.peer_id])).items[0].chat_settings.title
     except VKAPIError:
         await m.answer('Предоставьте боту права администратора!')
         return
