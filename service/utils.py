@@ -1261,6 +1261,11 @@ async def next_step(action_mode_id: int):
         await db.User.update.values(state=str(service.states.Menu.MAIN), check_action_id=None).where(db.User.user_id == judge_id).gino.status()
         await bot.api.messages.send(peer_id=judge_id, message='Экшен режим завершен',
                                     keyboard=await keyboards.main_menu(judge_id))
+        # Разрешаем участникам писать сообщения
+        await bot.api.request(
+                'messages.changeConversationMemberRestrictions',
+                {'peer_id': chat_id + 2000000000, 'member_ids': ','.join(map(str, user_ids)),
+                 'action': 'rw'})
         return
     # Если экшен режим не закончился то прописываем следующему пользователю писать пост
     await db.ActionMode.update.values(number_step=db.ActionMode.number_step + 1, number_check=0).where(

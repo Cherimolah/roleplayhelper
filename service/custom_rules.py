@@ -299,13 +299,21 @@ class UserFree(ABCRule):
         else:
             user_id = event.user_id
         user = await db.User.get(user_id)
-        action_mode = await db.select([db.UsersToActionMode.id]).where(db.UsersToActionMode.user_id == user.user_id).gino.scalar()
+        action_mode = await db.select([db.UsersToActionMode.id]).where(db.UsersToActionMode.user_id == user_id).gino.scalar()
         if action_mode:
             if isinstance(event, Message):
                 await event.answer('Необходимо выйти из экшен-режима')
                 return
             else:
                 await event.show_snackbar('Необходимо выйти из экшен-режима')
+        judge_mode = await db.select([db.ActionMode.id]).where(db.ActionMode.judge_id == user_id).gino.scalar()
+        if judge_mode:
+            if isinstance(event, Message):
+                await event.answer('Необходимо освободится от обязанности судьи')
+                return
+            else:
+                await event.show_snackbar('Необходимо освободится от обязанности судьи')
+            return False
         if user.creating_form or user.editing_form or user.editing_content or user.creating_expeditor or user.judge_panel:
             if isinstance(event, Message):
                 await event.answer('Сначала необходимо выйти в главное меню')
