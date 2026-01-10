@@ -71,7 +71,7 @@ async def on_startup():
     await asyncio.sleep(0.33)
     await user_bot.api.request('board.closeTopic', {'group_id': abs(GROUP_ID), 'topic_id': ARCHIVE_FORMS_TOPIC_ID})
 
-    await bot.api.messages.send(peer_id=473105648, message='Панель судьи', keyboard=action_mode_panel)
+    await bot.api.messages.send(peer_id=486697492, message='Панель судьи', keyboard=action_mode_panel)
 
     asyncio.get_event_loop().create_task(polling())
 
