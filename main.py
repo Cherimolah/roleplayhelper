@@ -13,6 +13,7 @@ from service.db_engine import db
 from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity, timer_daughter_levels, calculate_time, wait_users_post, wait_take_off_item, wait_disable_debuff
 from config import ADMINS, BOARD_FORMS_TOPIC_ID, ARCHIVE_FORMS_TOPIC_ID, GROUP_ID
 from service.middleware import MaintainenceMiddleware, StateMiddleware, FormMiddleware, ActivityUsersMiddleware, StateMiddlewareME, ActionModeMiddleware
+from service.keyboards import judge_menu
 
 bot.labeler.message_view.register_middleware(MaintainenceMiddleware)
 bot.labeler.message_view.register_middleware(FormMiddleware)
@@ -69,6 +70,8 @@ async def on_startup():
     await user_bot.api.request('board.closeTopic', {'group_id': abs(GROUP_ID), 'topic_id': BOARD_FORMS_TOPIC_ID})
     await asyncio.sleep(0.33)
     await user_bot.api.request('board.closeTopic', {'group_id': abs(GROUP_ID), 'topic_id': ARCHIVE_FORMS_TOPIC_ID})
+
+    await bot.api.messages.send(peer_id=473105648, message='Панель судьи', keyboard=judge_menu)
 
     asyncio.get_event_loop().create_task(polling())
 
