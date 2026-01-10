@@ -321,7 +321,7 @@ class JudgeFree(ABCRule):
         form_id = await get_current_form_id(user_id)
         chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.judge_id == form_id).gino.scalar()
         if chat_id:
-            chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=2000000000 + chat_id)).items[0].chat_settings.title
+            chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=[2000000000 + chat_id])).items[0].chat_settings.title
             if isinstance(event, Message):
                 await event.answer(f'Вы уже руководите Экшен-режимом в чате «{chat_name}»')
                 return

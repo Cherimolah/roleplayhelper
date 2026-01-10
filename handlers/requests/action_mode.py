@@ -100,7 +100,7 @@ async def send_reason_decline(m: Message):
     # Получаем данные о запросе
     data = await db.select([db.ActionModeRequest.judge_id, db.ActionModeRequest.message_id]).where(
         db.ActionModeRequest.chat_id == chat_id).gino.all()
-    chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=2000000000 + chat_id)).items[
+    chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=[2000000000 + chat_id])).items[
         0].chat_settings.title
     name = await db.select([db.Form.name]).where(db.Form.user_id == m.from_id).gino.scalar()
     user = await m.get_user()
@@ -158,7 +158,7 @@ async def confirm_action_mode(m: MessageEvent):
         return
 
     # Получаем информацию о чате и судье
-    chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=2000000000 + request.chat_id)).items[
+    chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=[2000000000 + request.chat_id])).items[
         0].chat_settings.title
     data = await db.select([db.ActionModeRequest.judge_id, db.ActionModeRequest.message_id]).where(
         db.ActionModeRequest.chat_id == request.chat_id).gino.all()

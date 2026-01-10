@@ -159,7 +159,7 @@ async def start(m: Message):
                 states.set(m.from_id, f"{Judge.SET_CONSEQUENCES}*{action_id}")
                 await m.answer(await show_consequences(action_id), keyboard=keyboard)
                 return
-            chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=2000000000 + chat_id)).items[
+            chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=[2000000000 + chat_id])).items[
                 0].chat_settings.title
             await m.answer(f'Вы сейчас являетесь судьей экшен-режима в чате «{chat_name}»')
             return
