@@ -63,6 +63,7 @@ async def select_add_users_active_action_mode(m: Message):
     action_mode_id = await db.select([db.ActionMode.id]).where(db.ActionMode.judge_id == m.from_id).gino.scalar()
     user_ids = list(set([x[0] for x in await db.select([db.UsersToActionMode.user_id]).where(
         db.UsersToActionMode.action_mode_id == action_mode_id).order_by(db.UsersToActionMode.user_id.asc()).gino.all()]))
+    user_ids.sort()
 
     # # Формируем список пользователей для удаления
     # users_data = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.user_id.in_(user_ids)).order_by(
@@ -92,6 +93,7 @@ async def delete_users_activa_action_mode(m: Message):
                          await db.select([db.UsersToActionMode.user_id]).where(
                              db.UsersToActionMode.action_mode_id == action_mode_id).order_by(
                              db.UsersToActionMode.user_id.asc()).gino.all()]))
+    user_ids.sort()
 
     exited = []
     for number in numbers:
