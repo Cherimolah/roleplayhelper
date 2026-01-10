@@ -354,15 +354,17 @@ async def add_users_to_action_mode(m: Message):
     # Фильтруем пользователей с картой экспедитора
     chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.judge_id == m.from_id).gino.scalar()
     action_mode_id = await db.select([db.ActionMode.id]).where(db.ActionMode.chat_id == chat_id).gino.scalar()
-    user_ids = await filter_users_expeditors(user_ids, chat_id)
+    user_ids = list(sorted(list(set(await filter_users_expeditors(user_ids, chat_id)))))
 
     # Добавляем пользователей в экшен-режим
     for user_id in user_ids:
-        await db.UsersToActionMode.create(action_mode_id=action_mode_id, user_id=user_id)
+        exist = await db.select([db.UsersToActionMode.id]).where(and_(db.UsersToActionMode.user_id == user_id, db.UsersToActionMode.action_mode_id == action_mode_id)).gino.scalar()
+        if not exist:
+            await db.UsersToActionMode.create(action_mode_id=action_mode_id, user_id=user_id)
 
     # Формируем отчет о добавленных пользователях
     reply = 'Добавлены пользователи:\n\n'
-    users_data = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.user_id.in_(user_ids)).gino.all()
+    users_data = await db.select([db.Form.user_id, db.Form.name]).where(db.Form.user_id.in_(user_ids)).order_by(db.Form.user_id.asc()).gino.all()
     users = await bot.api.users.get(user_ids=[x[0] for x in users_data])
     for i in range(len(users_data)):
         reply += f'{i + 1}. [id{users[i].id}|{users_data[i][1]} / {users[i].first_name} {users[i].last_name}]\n'
