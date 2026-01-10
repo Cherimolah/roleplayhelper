@@ -30,7 +30,7 @@ def create_accept_form(form_id: int):
 
 def get_skip_button(field: str):
     """
-    Создает клавиатуру для пропуска какого-то поля пр регистрации
+    Создает клавиатуру для пропуска какого-то поля при регистрации
     """
     return Keyboard().add(Text("Пропустить", {field: "skip"}), KeyboardButtonColor.SECONDARY)
 

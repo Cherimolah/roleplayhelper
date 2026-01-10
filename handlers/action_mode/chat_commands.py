@@ -11,7 +11,7 @@ from sqlalchemy import and_
 from loader import bot
 from service.custom_rules import AdminRule, ActionModeTurn, JudgePostTurn
 from service.db_engine import db
-from service.utils import get_current_form_id, parse_actions, next_round
+from service.utils import get_current_form_id, parse_actions, next_round, next_step
 from service import keyboards
 
 
@@ -91,7 +91,9 @@ async def user_post(m: Message, action_mode_id: int):
 
     if not actions:
         await m.answer(
-            'Вы не указали в своем посте действия в [] или все ваши действия были пропущены из-за невозможности')
+            'Вы не указали в своем посте действия, требующие провери или все ваши действия были пропущены из-за невозможности')
+        action_mode_id = await db.select([db.UsersToActionMode.action_mode_id]).where(db.UsersToActionMode.user_id == m.from_id).gino.scalar()
+        await next_step(action_mode_id)
         return
 
     # Ограничиваем права пользователя на написание сообщений
