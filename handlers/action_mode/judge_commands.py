@@ -18,7 +18,7 @@ from handlers.questions import start
 from handlers.action_mode.disorientation import (
     apply_disorientation_effects,
     send_disoriented_action_mode_info,
-    handle_disoriented_post
+    handle_disoriented_post)
 
 @bot.on.private_message(StateRule(Judge.PANEL), PayloadRule({'judge_action': 'add_users_active'}), JudgeRule())
 async def select_add_users_active_action_mode(m: Message):

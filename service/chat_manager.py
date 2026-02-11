@@ -4,7 +4,7 @@
 
 from datetime import datetime
 from typing import List, Optional
-from loader import db
+from service.db_engine import db
 
 async def save_user_chats_before_first_person(user_id: int):
     """

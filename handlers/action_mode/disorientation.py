@@ -5,7 +5,7 @@
 import random
 from typing import List, Dict
 from datetime import datetime
-from loader import db
+from service.db_engine import db
 
 async def apply_disorientation_effects(action_mode_id: int, user_id: int) -> Dict:
     """

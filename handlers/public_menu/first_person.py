@@ -2,7 +2,7 @@ from vkbottle.bot import Message
 from vkbottle import Keyboard, KeyboardButtonColor, Text
 from datetime import datetime, timedelta
 
-from loader import bot, db, states
+from loader import bot, states
 from service.custom_rules import StateRule, AdminRule
 from service.states import UserState
 from service import keyboards
@@ -12,6 +12,7 @@ from service.chat_manager import (
     restore_user_to_chats,
     clear_user_chat_history
 )
+from service.db_engine import db
 
 @bot.on.private_message(StateRule(UserState.MENU), payload={"menu": "first_person"})
 async def toggle_first_person_mode(m: Message):

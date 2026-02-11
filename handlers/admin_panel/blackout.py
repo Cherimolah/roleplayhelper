@@ -2,10 +2,11 @@ from vkbottle.bot import Message
 from vkbottle import Keyboard, KeyboardButtonColor, Text
 from datetime import datetime, timedelta
 
-from loader import bot, db, states
+from loader import bot, states
 from service.custom_rules import StateRule, AdminRule
 from service.states import Admin
 from service import keyboards
+from service.db_engine import db
 from service.utils import remove_user_from_all_chats
 
 @bot.on.private_message(StateRule(Admin.MENU), payload={"admin": "blackout"})

@@ -337,4 +337,5 @@ class UserState(metaclass=StateMeta):
     # ... существующие состояния ...
     FIRST_PERSON_CHAT = 'first_person_chat'
     FIRST_PERSON_MENU = 'first_person_menu'
+    MENU = 'menu'
 

@@ -5,9 +5,10 @@
 from vkbottle.bot import Message
 from vkbottle import Keyboard, KeyboardButtonColor, Text
 
-from loader import bot, db, states
+from loader import bot, states
 from service.custom_rules import StateRule, AdminRule
 from service.states import Admin
+from service.db_engine import db
 
 @bot.on.private_message(StateRule(Admin.MENU), payload={"admin": "first_person_settings"})
 async def first_person_settings_menu(m: Message):
