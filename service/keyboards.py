@@ -41,7 +41,7 @@ async def main_menu(user_id: int):
     Возвращает клавиатуру основного меню
     """
     admin, judge = await db.select([db.User.admin, db.User.judge]).where(db.User.user_id == user_id).gino.first()
-    keyboard = (Keyboard().add(
+    keyboard = Keyboard().add(
         Text("Анкета", {"menu": "form"}), KeyboardButtonColor.PRIMARY
     ).add(
         Text("Банк", {"menu": "bank"}), KeyboardButtonColor.PRIMARY
@@ -565,5 +565,6 @@ chat_settings_panel = Keyboard().add(
 ).row().add(
     Text('В главное меню', {'chat_settings': 'save'}), KeyboardButtonColor.NEGATIVE
 )
+
 
 
