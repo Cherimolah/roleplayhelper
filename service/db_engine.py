@@ -891,8 +891,8 @@ class Database(Gino):
             min_vision_level = Column(Float, default=0.2)  # Минимальный уровень видимости
             max_vision_level = Column(Float, default=0.9)  # Максимальный уровень видимости
     
-            created_at = Column(DateTime, default=datetime.now)
-            updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+            created_at = Column(DateTime, default=now)
+            updated_at = Column(DateTime, default=now, onupdate=now)
 
         self.FirstPersonMode = FirstPersonMode
 
@@ -905,7 +905,7 @@ class Database(Gino):
             id = Column(Integer, primary_key=True)
             user_id = Column(Integer, ForeignKey('users.vk_id', ondelete='CASCADE'))
             chat_id = Column(Integer, ForeignKey('chats.id', ondelete='CASCADE'))
-            joined_at = Column(DateTime, default=datetime.now)
+            joined_at = Column(DateTime, default=now)
             left_at = Column(DateTime, nullable=True)
             is_restored = Column(Boolean, default=False)
 
@@ -1021,6 +1021,7 @@ class Database(Gino):
         return rows
 
 db = Database()
+
 
 
 
