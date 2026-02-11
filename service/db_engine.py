@@ -872,6 +872,45 @@ class Database(Gino):
 
         self.AttributePenalties = AttributePenalties
 
+        class FirstPersonMode(self.Model):
+            __tablename__ = 'first_person_mode'
+    
+            user_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'), primary_key=True)
+            is_active = Column(Boolean, default=False)
+            blackout_mode = Column(Boolean, default=False)
+            blackout_reason = Column(Text, nullable=True)
+    
+            # Эффекты
+            deafness_until = Column(DateTime, nullable=True)
+            blindness_until = Column(DateTime, nullable=True)
+            concussion_until = Column(DateTime, nullable=True)
+            limited_vision_until = Column(DateTime, nullable=True)
+            disorientation_until = Column(DateTime, nullable=True)  # НОВОЕ ПОЛЕ
+    
+            # Настройки рандомизации
+            min_vision_level = Column(Float, default=0.2)  # Минимальный уровень видимости
+            max_vision_level = Column(Float, default=0.9)  # Максимальный уровень видимости
+    
+            created_at = Column(DateTime, default=datetime.now)
+            updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+        self.FirstPersonMode = FirstPersonMode
+
+        self.FirstPersonMode = FirstPersonMode
+
+        class UserChatHistory(self.Model):
+            """История чатов пользователя для восстановления"""
+            __tablename__ = 'user_chat_history'
+    
+            id = Column(Integer, primary_key=True)
+            user_id = Column(Integer, ForeignKey('users.vk_id', ondelete='CASCADE'))
+            chat_id = Column(Integer, ForeignKey('chats.id', ondelete='CASCADE'))
+            joined_at = Column(DateTime, default=datetime.now)
+            left_at = Column(DateTime, nullable=True)
+            is_restored = Column(Boolean, default=False)
+
+        self.UserChatHistory = UserChatHistory
+
     async def connect(self):
         """
         Устанавливает подлючение к базе данных, создает таблицы и загружает первую необходимую информацию
@@ -981,46 +1020,8 @@ class Database(Gino):
                     .order_by(self.UserToFraction.reputation.desc()).gino.all())
         return rows
 
-class FirstPersonMode(self.Model):
-    __tablename__ = 'first_person_mode'
-    
-    user_id = Column(Integer, ForeignKey('users.vk_id', ondelete='CASCADE'), primary_key=True)
-    is_active = Column(Boolean, default=False)
-    blackout_mode = Column(Boolean, default=False)
-    blackout_reason = Column(Text, nullable=True)
-    
-    # Эффекты
-    deafness_until = Column(DateTime, nullable=True)
-    blindness_until = Column(DateTime, nullable=True)
-    concussion_until = Column(DateTime, nullable=True)
-    limited_vision_until = Column(DateTime, nullable=True)
-    disorientation_until = Column(DateTime, nullable=True)  # НОВОЕ ПОЛЕ
-    
-    # Настройки рандомизации
-    min_vision_level = Column(Float, default=0.2)  # Минимальный уровень видимости
-    max_vision_level = Column(Float, default=0.9)  # Максимальный уровень видимости
-    
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-
-self.FirstPersonMode = FirstPersonMode
-
-self.FirstPersonMode = FirstPersonMode
-
-class UserChatHistory(self.Model):
-    """История чатов пользователя для восстановления"""
-    __tablename__ = 'user_chat_history'
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.vk_id', ondelete='CASCADE'))
-    chat_id = Column(Integer, ForeignKey('chats.id', ondelete='CASCADE'))
-    joined_at = Column(DateTime, default=datetime.now)
-    left_at = Column(DateTime, nullable=True)
-    is_restored = Column(Boolean, default=False)
-
-self.UserChatHistory = UserChatHistory
-
 db = Database()
+
 
 
 
