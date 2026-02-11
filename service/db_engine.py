@@ -903,8 +903,8 @@ class Database(Gino):
             __tablename__ = 'user_chat_history'
     
             id = Column(Integer, primary_key=True)
-            user_id = Column(Integer, ForeignKey('users.vk_id', ondelete='CASCADE'))
-            chat_id = Column(Integer, ForeignKey('chats.id', ondelete='CASCADE'))
+            user_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'))
+            chat_id = Column(Integer, ForeignKey('chats.chat_id', ondelete='CASCADE'))
             joined_at = Column(DateTime, default=now)
             left_at = Column(DateTime, nullable=True)
             is_restored = Column(Boolean, default=False)

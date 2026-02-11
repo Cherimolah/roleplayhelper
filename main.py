@@ -46,8 +46,8 @@ async def on_startup():
         if cooldown:
             asyncio.get_event_loop().create_task(quest_over(cooldown, form_id, quest_id))
     admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
-    if admins:
-        await bot.api.messages.send(peer_ids=admins, message="🎉 Бот запущен!", is_notification=True)
+    # if admins:
+    #     await bot.api.messages.send(peer_ids=admins, message="🎉 Бот запущен!", is_notification=True)
 
     user_ids = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
     for user_id in user_ids:
@@ -66,9 +66,9 @@ async def on_startup():
         asyncio.get_event_loop().create_task(wait_disable_debuff(debuff_id))
 
     # Закрываем топики
-    await user_bot.api.request('board.closeTopic', {'group_id': abs(GROUP_ID), 'topic_id': BOARD_FORMS_TOPIC_ID})
-    await asyncio.sleep(0.33)
-    await user_bot.api.request('board.closeTopic', {'group_id': abs(GROUP_ID), 'topic_id': ARCHIVE_FORMS_TOPIC_ID})
+    # await user_bot.api.request('board.closeTopic', {'group_id': abs(GROUP_ID), 'topic_id': BOARD_FORMS_TOPIC_ID})
+    # await asyncio.sleep(0.33)
+    # await user_bot.api.request('board.closeTopic', {'group_id': abs(GROUP_ID), 'topic_id': ARCHIVE_FORMS_TOPIC_ID})
 
     asyncio.get_event_loop().create_task(polling())
 
