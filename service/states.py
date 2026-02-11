@@ -302,6 +302,11 @@ class Admin(metaclass=StateMeta):
     CHAT_SET_VISIBLE_MESSAGES_COUNT = 'chat_set_visible_messages_count'
     CHAT_ADD_PROFESSION = 'chat_add_profession'
     CHAT_DELETE_PROFESSION = 'chat_delete_profession'
+    BLACKOUT_SINGLE = 'blackout_single'
+    BLACKOUT_PROFESSION = 'blackout_profession'
+    BLACKOUT_ALL = 'blackout_all'
+    BLACKOUT_ALL_CONFIRM = 'blackout_all_confirm'
+    BLACKOUT_REMOVE = 'blackout_remove'
 
 
 class Judge(metaclass=StateMeta):
@@ -333,10 +338,3 @@ class UserState(metaclass=StateMeta):
     FIRST_PERSON_CHAT = 'first_person_chat'
     FIRST_PERSON_MENU = 'first_person_menu'
 
-class Admin(metaclass=StateMeta):
-    # ... существующие состояния ...
-    BLACKOUT_SINGLE = 'blackout_single'
-    BLACKOUT_PROFESSION = 'blackout_profession'
-    BLACKOUT_ALL = 'blackout_all'
-    BLACKOUT_ALL_CONFIRM = 'blackout_all_confirm'
-    BLACKOUT_REMOVE = 'blackout_remove'
