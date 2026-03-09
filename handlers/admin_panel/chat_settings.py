@@ -17,7 +17,7 @@ from service.states import Admin
 from service import keyboards
 from handlers.questions import start
 from config import GROUP_ID
-from service.utils import create_mention
+from service.utils import create_mention, convert_bot_chat_id_to_user
 
 
 @bot.on.chat_message(AdminRule(), VBMLRule('/настройки'), UserFree())
@@ -59,8 +59,9 @@ async def chat_settings(m: Message):
                 await m.answer('Предоставьте доступ к ссылке на чат для админов / всех пользователей')
                 return
             # Устанавливаем ограничения для участников
-            await bot.api.request('messages.changeConversationMemberRestrictions',
-                                  {'peer_id': m.peer_id, 'member_ids': ','.join(list(map(str, member_ids))),
+            await user_bot.api.request('messages.changeConversationMemberRestrictions',
+                                  {'peer_id': 2000000000 + await convert_bot_chat_id_to_user(m.chat_id),
+                                   'member_ids': ','.join(list(map(str, member_ids))),
                                    'action': 'ro'})
             await db.Chat.create(chat_id=m.chat_id)
         chat_id = m.chat_id
@@ -144,6 +145,12 @@ async def connect_private_chat(m: Message, chat_id: int):
         0].chat_settings.acl.can_invite
     if not can_invite:
         return
+    await db.Chat.update.values(user_chat_id=m.chat_id).where(db.Chat.chat_id == chat_id).gino.status()
+
+
+@user_bot.on.chat_message(FromUserRule(GROUP_ID), text='/reg <chat_id:int>')
+async def reg_chat_id(m: Message, chat_id: int):
+    """Обработчик для user-бота: запись айди чата для пользователя"""
     await db.Chat.update.values(user_chat_id=m.chat_id).where(db.Chat.chat_id == chat_id).gino.status()
 
 

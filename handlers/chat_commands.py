@@ -11,13 +11,13 @@ from vkbottle import Keyboard, Callback, KeyboardButtonColor
 from vkbottle_types.objects import UtilsDomainResolvedType
 from fuzzywuzzy import process
 
-from loader import bot
+from loader import bot, user_bot
 from service.custom_rules import ChatAction, AdminRule, ChatInviteMember, RegexRule, UserFree
 from service.db_engine import db
 from handlers.public_menu.bank import ask_salary
 from handlers.public_menu.daylics import send_ready_daylic
 from handlers.public_menu.quests import send_ready_quest
-from service.utils import move_user, create_mention, get_current_form_id, soft_divide
+from service.utils import move_user, create_mention, get_current_form_id, soft_divide, convert_bot_chat_id_to_user
 from config import HALL_CHAT_ID
 
 # Регулярные выражения для обработки команд
@@ -246,8 +246,9 @@ async def test(m: Message, member_id: int):
         return
     chat_allowed = await db.select([db.UserToChat.chat_id]).where(db.UserToChat.user_id == member_id).gino.scalar()
     if not chat_allowed or m.chat_id != chat_allowed:
-        await bot.api.request('messages.changeConversationMemberRestrictions',
-                              {'peer_id': m.peer_id, 'member_ids': member_id, 'action': 'ro'})
+        await user_bot.api.request('messages.changeConversationMemberRestrictions',
+                              {'peer_id': 2000000000 + await convert_bot_chat_id_to_user(m.chat_id),
+                               'member_ids': member_id, 'action': 'ro'})
 
 
 @bot.on.message(RegexRule(moving_pattern), UserFree(), blocking=False)

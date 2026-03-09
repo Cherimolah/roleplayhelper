@@ -8,11 +8,11 @@ from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
 from vkbottle import Keyboard, Callback, KeyboardButtonColor, GroupEventType, Text
 from sqlalchemy import and_
 
-from loader import bot, states
+from loader import bot, states, user_bot
 from service.db_engine import db
 from service.custom_rules import StateRule, JudgeRule, NumericRule
 from service.states import Judge, Menu
-from service.utils import get_mention_from_message, filter_users_expeditors, get_current_turn, create_mention
+from service.utils import get_mention_from_message, filter_users_expeditors, get_current_turn, create_mention, convert_bot_chat_id_to_user
 from service import keyboards
 from handlers.questions import start
 
@@ -243,10 +243,12 @@ async def pass_action_mode(m: Message):
     number_step = await db.select([db.ActionMode.number_step]).where(db.ActionMode.id == action_mode_id).gino.scalar()
     chat_id = await db.select([db.ActionMode.chat_id]).where(db.ActionMode.id == action_mode_id).gino.scalar()
     if number_step == 0:  # Ход судьи
-        await bot.api.request('messages.changeConversationMemberRestrictions',
-                              {'peer_id': 2000000000 + chat_id, 'member_ids': m.from_id, 'action': 'ro'})
-        await bot.api.request('messages.changeConversationMemberRestrictions',
-                              {'peer_id': 2000000000 + chat_id, 'member_ids': judge_id, 'action': 'rw'})
+        await user_bot.api.request('messages.changeConversationMemberRestrictions',
+                              {'peer_id': 2000000000 + await convert_bot_chat_id_to_user(chat_id),
+                               'member_ids': m.from_id, 'action': 'ro'})
+        await user_bot.api.request('messages.changeConversationMemberRestrictions',
+                              {'peer_id': 2000000000 + await convert_bot_chat_id_to_user(chat_id),
+                               'member_ids': judge_id, 'action': 'rw'})
 
     # Уведомляем участников о передаче прав
     name_new = await db.select([db.Form.name]).where(db.Form.user_id == judge_id).gino.scalar()

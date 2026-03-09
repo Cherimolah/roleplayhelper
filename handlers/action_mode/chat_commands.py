@@ -8,10 +8,10 @@ from vkbottle.dispatch.rules.base import VBMLRule, PayloadRule
 from vkbottle import Keyboard, KeyboardButtonColor, Callback, VKAPIError
 from sqlalchemy import and_
 
-from loader import bot
+from loader import bot, user_bot
 from service.custom_rules import AdminRule, ActionModeTurn, JudgePostTurn
 from service.db_engine import db
-from service.utils import get_current_form_id, parse_actions, next_round, next_step
+from service.utils import get_current_form_id, parse_actions, next_round, next_step, convert_bot_chat_id_to_user
 from service import keyboards
 
 
@@ -97,8 +97,9 @@ async def user_post(m: Message, action_mode_id: int):
         return
 
     # Ограничиваем права пользователя на написание сообщений
-    await bot.api.request('messages.changeConversationMemberRestrictions',
-                          {'peer_id': m.peer_id, 'member_ids': m.from_id, 'action': 'ro'})
+    await user_bot.api.request('messages.changeConversationMemberRestrictions',
+                          {'peer_id': 2000000000 + await convert_bot_chat_id_to_user(m.chat_id),
+                           'member_ids': m.from_id, 'action': 'ro'})
 
     # Находим последний пост пользователя
     post_id = await db.select([db.Post.id]).where(
@@ -130,8 +131,9 @@ async def user_post(m: Message, action_mode_id: int):
 async def judge_post_turn(m: Message, action_mode_id: int):
     """Обрабатывает пост судьи в экшен-режиме"""
     # Ограничиваем права судьи на написание сообщений
-    await bot.api.request('messages.changeConversationMemberRestrictions',
-                          {'peer_id': m.peer_id, 'member_ids': m.from_id, 'action': 'ro'})
+    await user_bot.api.request('messages.changeConversationMemberRestrictions',
+                          {'peer_id': 2000000000 + await convert_bot_chat_id_to_user(m.chat_id),
+                           'member_ids': m.from_id, 'action': 'ro'})
 
     # Переходим к следующему раунду
     await next_round(action_mode_id)

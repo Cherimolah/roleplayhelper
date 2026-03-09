@@ -1274,15 +1274,17 @@ async def next_step(action_mode_id: int):
     if not user_id:  # Если все участники написали свой пост, то теперь очередь судьи писать свой пост
         await db.ActionMode.update.values(number_step=0, number_check=0).where(
             db.ActionMode.id == action_mode_id).gino.scalar()
-        await bot.api.request('messages.changeConversationMemberRestrictions',
-                              {'peer_id': 2000000000 + chat_id, 'member_ids': judge_id, 'action': 'rw'})
+        await user_bot.api.request('messages.changeConversationMemberRestrictions',
+                              {'peer_id': 2000000000 + await convert_bot_chat_id_to_user(chat_id),
+                               'member_ids': judge_id, 'action': 'rw'})
         await bot.api.messages.send(peer_id=2000000000 + chat_id, message='Сейчас очередь судьи писать свой пост')
         return
     # Отправляем сообщение о том, чья очередь писать свой пост
     name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
     user = (await bot.api.users.get(user_ids=[user_id]))[0]
-    await bot.api.request('messages.changeConversationMemberRestrictions',
-                          {'peer_id': 2000000000 + chat_id, 'member_ids': user_id, 'action': 'rw'})
+    await user_bot.api.request('messages.changeConversationMemberRestrictions',
+                          {'peer_id': 2000000000 + await convert_bot_chat_id_to_user(chat_id),
+                           'member_ids': user_id, 'action': 'rw'})
     reply = f'Сейчас очередь участника [id{user.id}|{name} / {user.first_name} {user.last_name}] писать свой пост'
     await bot.api.messages.send(peer_id=2000000000 + chat_id, message=reply)
     post = await db.Post.create(user_id=user_id, action_mode_id=action_mode_id)
@@ -1805,8 +1807,9 @@ async def move_user(user_id: int, chat_id: int):
                 pass
         else:
             # Иначе ставим запрет на отправку сообщений
-            await bot.api.request('messages.changeConversationMemberRestrictions',
-                                  {'peer_id': old_chat_id + 2000000000, 'member_ids': user_id, 'action': 'ro'})
+            await user_bot.api.request('messages.changeConversationMemberRestrictions',
+                                  {'peer_id': await convert_bot_chat_id_to_user(old_chat_id) + 2000000000,
+                                   'member_ids': user_id, 'action': 'ro'})
     is_private, count, user_chat_id = await db.select([db.Chat.is_private, db.Chat.visible_messages, db.Chat.user_chat_id]).where(db.Chat.chat_id == chat_id).gino.first()
     chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=[2000000000 + chat_id])).items[0].chat_settings.title
     states.set(user_id, service.states.Menu.MAIN)
@@ -1817,8 +1820,9 @@ async def move_user(user_id: int, chat_id: int):
                                     peer_id=old_chat_id + 2000000000)
     # Обрабатываем новый чат
     if not is_private:
-        await bot.api.request('messages.changeConversationMemberRestrictions',
-                              {'peer_id': chat_id + 2000000000, 'member_ids': user_id, 'action': 'rw'})
+        await user_bot.api.request('messages.changeConversationMemberRestrictions',
+                              {'peer_id': await convert_bot_chat_id_to_user(chat_id) + 2000000000,
+                               'member_ids': user_id, 'action': 'rw'})
         link = (await bot.api.messages.get_invite_link(peer_id=2000000000 + chat_id, visible_messages_count=count)).link
         await bot.api.messages.send(message=f'Вы успешно перешли в чат «{chat_name}»\n'
                                             f'Ссылка на чат: {link}', keyboard=await keyboards.main_menu(user_id),
@@ -1828,8 +1832,9 @@ async def move_user(user_id: int, chat_id: int):
             await user_bot.api.messages.add_chat_user(chat_id=user_chat_id, user_id=user_id, visible_messages_count=count)
         except:
             pass
-        await bot.api.request('messages.changeConversationMemberRestrictions',
-                              {'peer_id': chat_id + 2000000000, 'member_ids': user_id, 'action': 'rw'})
+        await user_bot.api.request('messages.changeConversationMemberRestrictions',
+                              {'peer_id': await convert_bot_chat_id_to_user(chat_id) + 2000000000,
+                               'member_ids': user_id, 'action': 'rw'})
         await bot.api.messages.send(message=f'Вы успешно перешли в чат «{chat_name}»\n',
                                     keyboard=await keyboards.main_menu(user_id), peer_id=user_id)
 
@@ -1942,3 +1947,18 @@ async def post_form_to_archive(user_id: int, reason: str):
                                           {'group_id': abs(GROUP_ID), 'topic_id': ARCHIVE_FORMS_TOPIC_ID,
                                            'text': text, 'attachments': photo})
     await user_bot.api.request('board.closeTopic', {'group_id': abs(GROUP_ID), 'topic_id': ARCHIVE_FORMS_TOPIC_ID})
+
+
+async def convert_bot_chat_id_to_user(chat_id: int) -> int:
+    """
+    Этот метод нужен чтобы зная чат айди у бота получить чат айди для юзера
+    Т.к. иногда нужно вызывать некоторые апи методы от лица пользователя
+    """
+    user_chat_id = await db.select([db.Chat.user_chat_id]).where(db.Chat.chat_id == chat_id).gino.scalar()
+    if not user_chat_id:  # Если в базе нету айди для юзер бота, то регистрируем командой
+        message = (await bot.api.messages.send(peer_id=2000000000 + chat_id, message=f'/reg {chat_id}'))[0]
+        await asyncio.sleep(3)  # Ждем когда хендлер обработает
+        await bot.api.messages.delete(cmids=[message.conversation_message_id], peer_id=2000000000 + chat_id, delete_for_all=True)
+        # осле обработки хендлером юзер бота айди будет лежать в базе
+        user_chat_id = await db.select([db.Chat.user_chat_id]).where(db.Chat.chat_id == chat_id).gino.scalar()
+    return user_chat_id

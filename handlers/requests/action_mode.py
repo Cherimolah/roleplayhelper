@@ -9,12 +9,12 @@ from vkbottle import GroupEventType, Keyboard, KeyboardButtonColor, Text, VKAPIE
 from vkbottle_types.objects import MessagesForward
 from sqlalchemy import and_
 
-from loader import bot, states
+from loader import bot, states, user_bot
 from service.custom_rules import JudgeRule, UserFree, JudgeFree, StateRule
 from service.db_engine import db
 from service.states import Judge
 from handlers.questions import start
-from service.utils import get_mention_from_message, filter_users_expeditors, parse_period
+from service.utils import get_mention_from_message, filter_users_expeditors, parse_period, convert_bot_chat_id_to_user
 from service import keyboards
 
 
@@ -249,8 +249,9 @@ async def start_action_mode(m: Message):
     member_ids = {x.member_id for x in members.items if x.member_id > 0}
     member_ids.remove(judge.id)
     member_ids = list(member_ids)
-    await bot.api.request('messages.changeConversationMemberRestrictions',
-                          {'peer_id': 2000000000 + chat_id, 'member_ids': ','.join(list(map(str, member_ids))),
+    await user_bot.api.request('messages.changeConversationMemberRestrictions',
+                          {'peer_id': 2000000000 + await convert_bot_chat_id_to_user(chat_id),
+                           'member_ids': ','.join(list(map(str, member_ids))),
                            'action': 'ro'})
 
     await bot.api.messages.send(message='Сейчас очередь судьи писать свой пост', peer_id=2000000000 + chat_id)
