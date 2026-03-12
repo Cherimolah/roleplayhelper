@@ -6,6 +6,7 @@
 
 import asyncio
 import datetime
+import os
 import shutil
 import json
 
@@ -56,6 +57,10 @@ async def accept_form(m: MessageEvent):
         await db.Form.update.values(**values).where(db.Form.id == old_form_id).gino.status()
         await bot.api.messages.send(peer_ids=user_id, message="Заявка на редактирование анкеты была принята",
                                     is_notification=True)
+        # Надо перезаписать фотку на новую, если она изменилось
+        if os.path.exists(f"data/photo{user_id}_edit.jpg"):
+            os.remove(f"data/photo{user_id}.jpg")
+            os.rename(f'data/photo{user_id}_edit.jpg', f"data/photo{user_id}.jpg")
         # Если анкета опубликована на доске анкет, редактируем там текст
         if public:
             await update_form_on_board(old_form_id)
@@ -231,6 +236,9 @@ async def reason_decline_form(m: Message):
         await bot.api.messages.send(peer_id=user_id, message=f"{messages.form_decline}\n\n{m.text}", keyboard=keyboard,
                                     is_notification=True)
     else:
+        # Удаляем новую фотку, чтобы не мешалась
+        if os.path.exists(f"data/photo{user_id}_edit.jpg"):
+            os.remove(f"data/photo{user_id}_edit.jpg")
         await bot.api.messages.send(peer_id=user_id, message="Заявка на редактирование анкеты была отклонена",
                                     is_notification=True)
     user = (await bot.api.users.get(user_id))[0]

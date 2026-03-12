@@ -526,12 +526,13 @@ async def set_character(m: Message):
     if not m.attachments or m.attachments[0].type != m.attachments[0].type.PHOTO:
         await m.answer(messages.need_photo)
         return
-    photo = await reload_image(m.attachments[0], f"data/photo{m.from_id}.jpg")
-    await db.Form.update.values(photo=photo).where(
-        and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))
-    ).gino.status()
     creating_form = await db.select([db.User.creating_form]).where(db.User.user_id == m.from_id).gino.scalar()
+    # Здесь надо учесть, что новую фотку надо загрузить под другим именем, чтобы не сбить старую
     if creating_form:
+        photo = await reload_image(m.attachments[0], f"data/photo{m.from_id}.jpg")
+        await db.Form.update.values(photo=photo).where(
+            and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))
+        ).gino.status()
         states.set(m.from_id, Registration.WANT_DAUGHTER)
         keyboard = Keyboard().add(
             Text("Да", {"want_daughter": True}), KeyboardButtonColor.POSITIVE
@@ -541,6 +542,10 @@ async def set_character(m: Message):
         await m.answer('Фото успешно установлено!\n\nОсновная анкета заполнена, хотите ли заполнить дополнительную '
                        'для получения статуса «Дочь❤»?', keyboard=keyboard)
     else:
+        photo = await reload_image(m.attachments[0], f"data/photo{m.from_id}_edit.jpg")
+        await db.Form.update.values(photo=photo).where(
+            and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))
+        ).gino.status()
         await m.answer("Новое значение установлено")
         await show_fields_edit(m.from_id, new=False)
 

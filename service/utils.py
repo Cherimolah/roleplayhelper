@@ -7,6 +7,7 @@ import os
 from typing import List, Tuple, Optional, Union
 import re
 import random
+import os
 
 from sqlalchemy import and_, func
 from vkbottle_types.objects import PhotosPhotoSizes, PhotosPhoto
@@ -1962,3 +1963,13 @@ async def convert_bot_chat_id_to_user(chat_id: int) -> int:
         # осле обработки хендлером юзер бота айди будет лежать в базе
         user_chat_id = await db.select([db.Chat.user_chat_id]).where(db.Chat.chat_id == chat_id).gino.scalar()
     return user_chat_id
+
+
+async def update_photo_token(user_id: int):
+    while True:
+        # await asyncio.sleep(random.randint(172800, 345600))  # Рандомное ожидание 2-4 дня для каждого юзера
+        if os.path.exists(f'data/photo{user_id}.jpg'):
+            photo = await photo_message_uploader.upload(f'data/photo{user_id}.jpg', peer_id=OWNER)
+            print(photo)
+            await db.Form.update.values(photo=photo).where(db.Form.user_id == user_id).gino.status()
+        await asyncio.sleep(65446565)

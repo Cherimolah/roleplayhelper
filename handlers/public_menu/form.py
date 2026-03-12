@@ -4,6 +4,7 @@
 """
 
 from typing import Tuple
+import os
 
 from vkbottle.bot import Message, MessageEvent
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
@@ -171,6 +172,9 @@ async def confirm_edit_fields(m: Message):
 @bot.on.private_message(StateRule(Menu.SELECT_FIELD_EDIT_NUMBER), PayloadRule({"form_edit": "decline"}))
 async def decline_edit_fields(m: Message):
     """Отмена редактирования анкеты."""
+    # Удаляем новую фотку, чтобы не мешалась
+    if os.path.exists(f"data/photo{m.from_id}_edit.jpg"):
+        os.remove(f"data/photo{m.from_id}_edit.jpg")
     await db.User.update.values(editing_form=False).where(db.User.user_id == m.from_id).gino.scalar()
     await db.Form.delete.where(and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))).gino.status()
     await m.answer("Изменения отклонены")

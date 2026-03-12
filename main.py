@@ -10,7 +10,7 @@ from loguru import logger
 from loader import bot, user_bot
 import handlers  # Important
 from service.db_engine import db
-from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity, timer_daughter_levels, calculate_time, wait_users_post, wait_take_off_item, wait_disable_debuff
+from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity, timer_daughter_levels, calculate_time, wait_users_post, wait_take_off_item, wait_disable_debuff, update_photo_token
 from config import ADMINS, BOARD_FORMS_TOPIC_ID, ARCHIVE_FORMS_TOPIC_ID, GROUP_ID
 from service.middleware import MaintainenceMiddleware, StateMiddleware, FormMiddleware, ActivityUsersMiddleware, StateMiddlewareME, ActionModeMiddleware
 
@@ -71,6 +71,11 @@ async def on_startup():
     await user_bot.api.request('board.closeTopic', {'group_id': abs(GROUP_ID), 'topic_id': ARCHIVE_FORMS_TOPIC_ID})
 
     asyncio.get_event_loop().create_task(polling())
+
+    # Закидываем автообновления фотографий пользователям
+    user_ids = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
+    for user_id in user_ids:
+        asyncio.get_event_loop().create_task(update_photo_token(user_id))
 
 
 def number_error():
