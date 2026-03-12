@@ -12,6 +12,7 @@ from loader import bot
 from service.custom_rules import AdminRule, StateRule
 from service.middleware import states
 from service.states import Admin, Menu
+from service.db_engine import db
 
 
 @bot.on.private_message(VBMLRule("/admin"), AdminRule())
@@ -43,4 +44,6 @@ async def back_from_admin_menu(m: Message):
 async def back_to_admin_menu(m: Message):
     """Возврат в главное меню админ-панели из различных разделов"""
     states.set(m.from_id, Admin.MENU)
+    # Иногда не убираются эти флаги
+    await db.User.update.values(editing_form=False, editing_content=False).where(db.User.user_id == m.from_id).gino.status()
     await m.answer(messages.admin_menu, keyboard=keyboards.admin_menu)
