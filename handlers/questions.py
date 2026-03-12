@@ -22,8 +22,8 @@ from service.states import Registration, Menu, DaughterQuestions, Judge
 import messages
 from service.custom_rules import StateRule, NumericRule, LimitSymbols, CommandWithAnyArgs
 import service.keyboards as keyboards
-from service.utils import loads_form, reload_image, show_fields_edit, page_fractions, get_admin_ids, show_consequences, update_daughter_levels
-from config import OWNER, ADMINS, USER_ID
+from service.utils import loads_form, reload_image, show_fields_edit, page_fractions, get_admin_ids, show_consequences, update_daughter_levels, update_photo_token
+from config import OWNER, ADMINS
 
 
 @bot.on.private_message(StateRule(Registration.WAIT))
@@ -120,6 +120,7 @@ async def start(m: Message):
     if not user:
         await db.User.create(user_id=m.from_id, state=Registration.USER_AGREEMENT,
                              admin=2 if m.from_id == OWNER else 1 if m.from_id in ADMINS else 0)
+        asyncio.get_event_loop().run_until_complete(update_photo_token(m.from_id))
     form = await db.select([db.Form.id]).where(db.Form.user_id == m.from_id).gino.scalar()
     if not form:
         await db.Form.create(user_id=m.from_id)

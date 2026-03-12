@@ -1967,9 +1967,7 @@ async def convert_bot_chat_id_to_user(chat_id: int) -> int:
 
 async def update_photo_token(user_id: int):
     while True:
-        # await asyncio.sleep(random.randint(172800, 345600))  # Рандомное ожидание 2-4 дня для каждого юзера
+        await asyncio.sleep(random.randint(172800, 345600))  # Рандомное ожидание 2-4 дня для каждого юзера
         if os.path.exists(f'data/photo{user_id}.jpg'):
             photo = await photo_message_uploader.upload(f'data/photo{user_id}.jpg', peer_id=OWNER)
-            print(photo)
             await db.Form.update.values(photo=photo).where(db.Form.user_id == user_id).gino.status()
-        await asyncio.sleep(65446565)
