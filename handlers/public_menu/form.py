@@ -107,7 +107,7 @@ async def confirm_renew_daughter(m: MessageEvent):
     """Подтверждение сброса параметров дочерей."""
     await db.Form.update.values(is_request=True, libido_bonus=0, subordination_bonus=0).where(
         db.Form.user_id == m.user_id).gino.status()
-    await db.User.update.values(editing_form=True).where(db.Form.user_id == m.user_id).gino.status()
+    await db.User.update.values(editing_form=True).where(db.User.user_id == m.user_id).gino.status()
     await m.edit_message('Заполняются заново вопросы', keyboard=Keyboard().get_json())
     await q1(m)
 
