@@ -138,7 +138,13 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
         message = (await bot.api.messages.send(message=f'/скачать {user_id}', attachment=form.photo, peer_id=USER_ID))[0]
         await asyncio.sleep(3)
         await bot.api.messages.delete(cmids=message.conversation_message_id, peer_id=USER_ID, delete_for_all=True)
-    photo = await user_photo_wall_uploader.upload(f'data/photo{user_id}.jpg')
+    for _ in range(5):
+        try:
+            photo = await user_photo_wall_uploader.upload(f'data/photo{user_id}.jpg')
+            break
+        except:
+            await asyncio.sleep(3)
+            raise Exception('ВКонтакте, разрешите загружать фотки!!!!!')
     return reply, photo
 
 
