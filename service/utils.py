@@ -612,10 +612,7 @@ async def send_daylics():
     while True:
         # Считаем время до следующего обновления.
         today = now()
-        if 0 <= today.weekday() <= 2:
-            next_time = today + datetime.timedelta(days=3-today.weekday())
-        else:
-            next_time = today + datetime.timedelta(days=7 - today.weekday())
+        next_time = today + datetime.timedelta(days=7 - today.weekday())
         next_time = datetime.datetime(next_time.year, next_time.month, next_time.day, 0, 0, 0,
                                       tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
         await asyncio.sleep((next_time - now()).total_seconds())
@@ -625,19 +622,13 @@ async def send_daylics():
             # Получаем использованные дейлики
             daylic_used = [x[0] for x in await db.select([db.DaylicHistory.daylic_id]).where(db.DaylicHistory.form_id == form_id).gino.all()]
             # Ищем новый дейлик
-            # Если сейчас день недели пн-ср берем Выходной дейлик (см. README)
-            # Если сейчас день недели чт-вс берем Обычный дейлик
-            if 0 <= next_time.weekday() <= 2:
-                daylic = await db.select([db.Daylic.id]).where(and_(db.Daylic.profession_id == profession_id,
-                                                                             db.Daylic.chill.is_(True))).order_by(func.random()).gino.scalar()
-            else:
-                daylic = await db.select([db.Daylic.id]).where(and_(
-                    db.Daylic.profession_id == profession_id, db.Daylic.id.notin_(daylic_used), db.Daylic.chill.is_(False))).order_by(
-                    func.random()).gino.scalar()
-                if not daylic:  # all daylics used, try clean pool
-                    await db.DaylicHistory.delete.where(db.DaylicHistory.form_id == form_id).gino.status()
-                    daylic = await db.select([db.Daylic.id]).where(
-                        and_(db.Daylic.profession_id == profession_id, db.Daylic.chill.is_(False))).order_by(func.random()).gino.scalar()
+            daylic = await db.select([db.Daylic.id]).where(and_(
+                db.Daylic.profession_id == profession_id, db.Daylic.id.notin_(daylic_used), db.Daylic.chill.is_(False))).order_by(
+                func.random()).gino.scalar()
+            if not daylic:  # all daylics used, try clean pool
+                await db.DaylicHistory.delete.where(db.DaylicHistory.form_id == form_id).gino.status()
+                daylic = await db.select([db.Daylic.id]).where(
+                    and_(db.Daylic.profession_id == profession_id, db.Daylic.chill.is_(False))).order_by(func.random()).gino.scalar()
             if daylic:
                 await db.DaylicHistory.create(form_id=form_id, daylic_id=daylic)
                 await db.Form.update.values(activated_daylic=daylic, daylic_completed=False).where(db.Form.id == form_id).gino.status()
