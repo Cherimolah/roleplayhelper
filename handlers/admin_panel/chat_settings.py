@@ -59,11 +59,11 @@ async def chat_settings(m: Message):
                 await m.answer('Предоставьте доступ к ссылке на чат для админов / всех пользователей')
                 return
             # Устанавливаем ограничения для участников
+            await db.Chat.create(chat_id=m.chat_id)
             await user_bot.api.request('messages.changeConversationMemberRestrictions',
                                   {'peer_id': 2000000000 + await convert_bot_chat_id_to_user(m.chat_id),
                                    'member_ids': ','.join(list(map(str, member_ids))),
                                    'action': 'ro'})
-            await db.Chat.create(chat_id=m.chat_id)
         chat_id = m.chat_id
         # Сохраняем состояние для настройки чата
         await db.User.update.values(state=f'{Admin.CHAT_SETTINGS}*{chat_id}').where(

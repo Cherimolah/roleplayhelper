@@ -1957,7 +1957,7 @@ async def convert_bot_chat_id_to_user(chat_id: int) -> int:
         message = (await bot.api.messages.send(peer_id=2000000000 + chat_id, message=f'/reg {chat_id}'))[0]
         await asyncio.sleep(3)  # Ждем когда хендлер обработает
         await bot.api.messages.delete(cmids=[message.conversation_message_id], peer_id=2000000000 + chat_id, delete_for_all=True)
-        # осле обработки хендлером юзер бота айди будет лежать в базе
+        # После обработки хендлером юзер бота айди будет лежать в базе
         user_chat_id = await db.select([db.Chat.user_chat_id]).where(db.Chat.chat_id == chat_id).gino.scalar()
     return user_chat_id
 
