@@ -120,7 +120,7 @@ async def start(m: Message):
     if not user:
         await db.User.create(user_id=m.from_id, state=Registration.USER_AGREEMENT,
                              admin=2 if m.from_id == OWNER else 1 if m.from_id in ADMINS else 0)
-        asyncio.get_event_loop().run_until_complete(update_photo_token(m.from_id))
+        asyncio.get_event_loop().create_task(update_photo_token(m.from_id))
     form = await db.select([db.Form.id]).where(db.Form.user_id == m.from_id).gino.scalar()
     if not form:
         await db.Form.create(user_id=m.from_id)
