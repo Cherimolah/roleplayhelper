@@ -53,14 +53,9 @@ async def send_daylics(m: Message):
         )
 
         today = now()
-        if 0 <= today.weekday() <= 2:
-            end_date = today + datetime.timedelta(days=2-today.weekday())
-            end_date = datetime.datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59,
-                                         tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
-        else:
-            end_date = today + datetime.timedelta(days=6 - today.weekday())
-            end_date = datetime.datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59,
-                                         tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
+        end_date = today + datetime.timedelta(days=6 - today.weekday())
+        end_date = datetime.datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59,
+                                     tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
 
         await m.answer(f"У вас активировано еженедельное задание «{daylic.name}»\n"
                        f"Описание: {daylic.description}\n"
