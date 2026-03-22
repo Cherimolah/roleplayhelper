@@ -316,7 +316,7 @@ async def set_weight(m: Message, value: int = None):
         await show_fields_edit(m.from_id, new=False)
 
 
-@bot.on.private_message(StateRule(Registration.FEATURES), LimitSymbols(1000))
+@bot.on.private_message(StateRule(Registration.FEATURES), LimitSymbols(3000))
 async def set_features(m: Message):
     """
     Установка особенностей персонажа
