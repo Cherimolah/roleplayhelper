@@ -265,6 +265,11 @@ async def save_profession(m: Message):
 @bot.on.chat_message(AdminRule(), text='/каюта <cabin_number:int>')
 async def set_cabin_number(m: Message, cabin_number: int):
     """Привязка каюты к чату"""
+    try:
+        await bot.api.messages.get_conversation_members(peer_id=m.peer_id)
+    except VKAPIError:
+        await m.answer('Выдайте права админа в этом чате')
+        return
     user_id = await db.select([db.Form.user_id]).where(db.Form.cabin == cabin_number).gino.scalar()
     exist = await db.select([db.Chat.visible_messages]).where(db.Chat.cabin_user_id == user_id).gino.scalar()
     if exist is not None:
