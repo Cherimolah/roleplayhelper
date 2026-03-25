@@ -126,12 +126,12 @@ async def start(m: Message):
         await db.Form.create(user_id=m.from_id)
         states.set(m.from_id, Registration.USER_AGREEMENT)
         await db.User.update.values(creating_form=True).where(db.User.user_id == m.from_id).gino.status()
-        attachment = await doc_messages_uploader.upload('Дисклеймер для проекта.docx', peer_id=m.from_id)
-        await m.answer('Перед использованием функций бота, необходимо согласие с пользовательским соглашением',
+        # attachment = await doc_messages_uploader.upload('Дисклеймер для проекта.docx', peer_id=m.from_id)
+        await m.answer('Перед использованием функций бота, необходимо согласие с пользовательским соглашением\n'
+                       'https://disk.yandex.ru/i/OkyDhQ3PTIMmbw',
                        keyboard=Keyboard().add(
                            Text('Я согласен(-на)', {'user_agreement': 'accept'}), KeyboardButtonColor.POSITIVE)
-                       .row().add(Text('Отказаться', {'user_agreement': 'reject'}), KeyboardButtonColor.NEGATIVE),
-                       attachment=attachment)
+                       .row().add(Text('Отказаться', {'user_agreement': 'reject'}), KeyboardButtonColor.NEGATIVE))
     else:
         creating_form, editing_form, creating_expeditor = await db.select(
             [db.User.creating_form, db.User.editing_form, db.User.creating_expeditor]).where(
