@@ -10,6 +10,7 @@ from vkbottle.bot import Message
 from vkbottle import Keyboard, Callback, KeyboardButtonColor
 from vkbottle_types.objects import UtilsDomainResolvedType
 from fuzzywuzzy import process
+from sqlalchemy import and_
 
 from loader import bot, user_bot
 from service.custom_rules import ChatAction, AdminRule, ChatInviteMember, RegexRule, UserFree
@@ -309,7 +310,7 @@ async def move_to_location(m: Message, match: tuple[str]):
                 await move_user(m.from_id, chat_id)
                 return
             admin_ids = [x[0] for x in
-                         await db.select([db.Form.user_id]).where(db.Form.profession.in_(profession_ids)).gino.all()]
+                         await db.select([db.Form.user_id]).where(and_(db.Form.profession.in_(profession_ids), db.Form.is_request.is_(False))).gino.all()]
         for admin_id in admin_ids:
             request = await db.ChatRequest.create(chat_id=chat_id, admin_id=admin_id, user_id=m.from_id)
             reply = f'Пользователь {await create_mention(m.from_id)} запрашивает доступ в чат «{chat_name}»'
