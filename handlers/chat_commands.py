@@ -21,13 +21,13 @@ from service.utils import move_user, create_mention, get_current_form_id, soft_d
 from config import HALL_CHAT_ID
 
 # Регулярные выражения для обработки команд
-moving_pattern = re.compile(r'\[\s*перемещение в "(.+)"\s*\]', re.IGNORECASE)
-moving_pattern2 = re.compile(r'\[\s*перемещение в (.+)\s*\]', re.IGNORECASE)
-donate_pattern = re.compile(r'\[пожертвовать в храм (\d+)\]', re.IGNORECASE)
-deal_pattern = re.compile(r"\[совершить сделку \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)
-deal_pattern_link = re.compile(r"\[совершить сделку https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)
-message_pattern = re.compile(r'\[отправить сообщение \[id(\d+)\|[^\]]+\] "(.+)"\]', re.IGNORECASE)
-message_pattern_link = re.compile(r'\[отправить сообщение https://vk.com/(\w*) "(.+)"\]', re.IGNORECASE)
+moving_pattern = re.compile(r'\[\s*\s*перемещение\s+в\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)
+moving_pattern2 = re.compile(r'\[\s*\s*перемещение\s+в\s+(.+)\s*\]', re.IGNORECASE)
+donate_pattern = re.compile(r'\[\s*пожертвовать\s+в\s+храм\s+(\d+)\s*\]', re.IGNORECASE)
+deal_pattern = re.compile(r"\[\s*совершить\s+сделку\s+\[id(\d+)\|[^\]]+\]\s+(\d+)\s*\]", re.IGNORECASE)
+deal_pattern_link = re.compile(r"\[\s*совершить\s+сделку\s+https://vk.com/(\w*)\s+(\d+)\s*\]", re.IGNORECASE)
+message_pattern = re.compile(r'\[\s*отправить\s+сообщение\s+\[id(\d+)\|[^\]]+\]\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)
+message_pattern_link = re.compile(r'\[\s*отправить\s+сообщение\s+https://vk.com/(\w*)\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)
 
 
 @bot.on.chat_message(AdminRule(), text='/chat_id')
@@ -144,20 +144,20 @@ async def ask_salary_command(m: Message):
 
 @bot.on.chat_message(RegexRule(deal_pattern), blocking=False)
 @bot.on.chat_message(RegexRule(deal_pattern_link), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r"\[перевести деньги https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r"\[отправить деньги https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r"\[перевести валюту https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r"\[сделка с https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r"\[передать деньги https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r"\[отдать сумму https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r"\[перечислить сумму https://vk.com/(\w*) (\d+)\]", re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r"\[перевести деньги \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r"\[отправить деньги \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r"\[сделка с \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r"\[передать деньги \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r"\[отдать сумму \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r"\[перечислить сумму \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r"\[перевести валюту \[id(\d+)\|[^\]]+\] (\d+)\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[\s*перевести\s+деньги\s+https://vk.com/(\w*)\s+(\d+)\s*\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[\s*отправить\s+деньги\s+https://vk.com/(\w*)\s+(\d+)\s*\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[\s*перевести\s+валюту\s+https://vk.com/(\w*)\s+(\d+)\s*\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[\s*сделка\s+с\s+https://vk.com/(\w*)\s+(\d+)\s*\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[\s*передать\s+деньги\s+https://vk.com/(\w*)\s+(\d+)\s*\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[\s*отдать\s+сумму\s+https://vk.com/(\w*)\s+(\d+)\s*\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[\s*перечислить\s+сумму\s+https://vk.com/(\w*)\s+(\d+)\s*\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[\s*перевести\s+деньги\s+\[id(\d+)\|[^\]]+\]\s+(\d+)\s*\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[\s*отправить\s+деньги\s+\[id(\d+)\|[^\]]+\]\s+(\d+)\s*\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[\s*сделка\s+с\s+\[id(\d+)\|[^\]]+\]\s+(\d+)\s*\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[\s*передать\s+деньги\s+\[id(\d+)\|[^\]]+\]\s+(\d+)\s*\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[\s*отдать\s+сумму\s+\[id(\d+)\|[^\]]+\]\s+(\d+)\s*\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[\s*перечислить\s+сумму\s+\[id(\d+)\|[^\]]+\]\s+(\d+)\s*\]", re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r"\[\s*перевести\s+валюту\s+\[id(\d+)\|[^\]]+\]\s+(\d+)\s*\]", re.IGNORECASE)), blocking=False)
 async def create_transaction(m: Message, match: tuple[str]):
     """
     Создание транзакции между пользователями
@@ -204,12 +204,12 @@ async def create_transaction(m: Message, match: tuple[str]):
 
 
 @bot.on.chat_message(RegexRule(donate_pattern), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r'\[отдать в храм (\d+)\]', re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r'\[внести пожертвование (\d+)\]', re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r'\[жертва храму (\d+)\]', re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r'\[подношение храму (\d+)\]', re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r'\[сделать пожертвование (\d+)\]', re.IGNORECASE)), blocking=False)
-@bot.on.chat_message(RegexRule(re.compile(r'\[отдать сумму в храм (\d+)\]', re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r'\[\s*отдать\s+в\s+храм\s+(\d+)\s*\]', re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r'\[\s*внести\s+пожертвование\s+(\d+)\s*\]', re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r'\[\s*жертва\s+храму\s+(\d+)\s*\]', re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r'\[\s*подношение\s+храму\s+(\d+)\s*\]', re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r'\[\s*сделать\s+пожертвование\s+(\d+)\s*\]', re.IGNORECASE)), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r'\[\s*отдать\s+сумму\s+в\s+храм\s+(\d+)\s*\]', re.IGNORECASE)), blocking=False)
 async def create_donate_command(m: Message, match: tuple[str]):
     """
     Создание пожертвования в храм
@@ -253,13 +253,13 @@ async def test(m: Message, member_id: int):
 
 @bot.on.message(RegexRule(moving_pattern), UserFree(), blocking=False)
 @bot.on.message(RegexRule(moving_pattern2), UserFree(), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[\s*переместиться в (.+)\s*\]', re.IGNORECASE)), UserFree(), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[\s*перейти в (.+)\s*\]', re.IGNORECASE)), UserFree(), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[\s*идти в (.+)\s*\]', re.IGNORECASE)), UserFree(), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[\s*отправиться в (.+)\s*\]', re.IGNORECASE)), UserFree(), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[\s*телепорт в (.+)\s*\]', re.IGNORECASE)), UserFree(), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[\s*хочу в (.+)\s*\]', re.IGNORECASE)), UserFree(), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[\s*локация (.+)\s*\]', re.IGNORECASE)), UserFree(), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*переместиться\s+в\s+(.+)\s*\]', re.IGNORECASE)), UserFree(), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*перейти\s+в\s+(.+)\s*\]', re.IGNORECASE)), UserFree(), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*идти\s+в\s+(.+)\s*\]', re.IGNORECASE)), UserFree(), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*отправиться\s+в\s+(.+)\s*\]', re.IGNORECASE)), UserFree(), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*телепорт\s+в\s+(.+)\s*\]', re.IGNORECASE)), UserFree(), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*хочу\s+в\s+(.+)\s*\]', re.IGNORECASE)), UserFree(), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*локация\s+(.+)\s*\]', re.IGNORECASE)), UserFree(), blocking=False)
 async def move_to_location(m: Message, match: tuple[str]):
     """
     Перемещение пользователя между чатами-локациями
@@ -329,18 +329,18 @@ async def move_to_location(m: Message, match: tuple[str]):
 
 @bot.on.message(RegexRule(message_pattern), blocking=False)
 @bot.on.message(RegexRule(message_pattern_link), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[написать сообщение \[id(\d+)\|[^\]]+\] "(.+)"\]', re.IGNORECASE)), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[написать \[id(\d+)\|[^\]]+\] "(.+)"\]', re.IGNORECASE)), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[сказать \[id(\d+)\|[^\]]+\] "(.+)"\]', re.IGNORECASE)), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[отправь текст \[id(\d+)\|[^\]]+\] "(.+)"\]', re.IGNORECASE)), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[сообщение для \[id(\d+)\|[^\]]+\] "(.+)"\]', re.IGNORECASE)), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[передать сообщение \[id(\d+)\|[^\]]+\] "(.+)"\]', re.IGNORECASE)), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[написать сообщение https://vk.com/(\w*) "(.+)"\]', re.IGNORECASE)), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[написать https://vk.com/(\w*) "(.+)"\]', re.IGNORECASE)), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[сказать https://vk.com/(\w*) "(.+)"\]', re.IGNORECASE)), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[отправь текст https://vk.com/(\w*) "(.+)"\]', re.IGNORECASE)), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[сообщение для https://vk.com/(\w*) "(.+)"\]', re.IGNORECASE)), blocking=False)
-@bot.on.message(RegexRule(re.compile(r'\[передать сообщение https://vk.com/(\w*) "(.+)"\]', re.IGNORECASE)), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*написать\s+сообщение\s+\[id(\d+)\|[^\]]+\]\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*написать\s+\[id(\d+)\|[^\]]+\]\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*сказать\s+\[id(\d+)\|[^\]]+\]\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*отправь\s+текст\s+\[id(\d+)\|[^\]]+\]\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*сообщение\s+для\s+\[id(\d+)\|[^\]]+\]\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*передать\s+сообщение\s+\[id(\d+)\|[^\]]+\]\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*написать\s+сообщение\s+https://vk.com/(\w*)\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*написать\s+https://vk.com/(\w*)\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*сказать\s+https://vk.com/(\w*)\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*отправь\s+текст\s+https://vk.com/(\w*)\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*сообщение\s+для\s+https://vk.com/(\w*)\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)), blocking=False)
+@bot.on.message(RegexRule(re.compile(r'\[\s*передать\s+сообщение\s+https://vk.com/(\w*)\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)), blocking=False)
 async def transmitter(m: Message, match: tuple[str, str]):
     """
     Отправка приватного сообщения другому пользователю через бота
