@@ -311,7 +311,7 @@ async def move_to_location(m: Message, match: tuple[str]):
                 return
             admin_ids = [x[0] for x in
                          await db.select([db.Form.user_id]).where(and_(db.Form.profession.in_(profession_ids), db.Form.is_request.is_(False))).gino.all()]
-        for admin_id in admin_ids:
+        for admin_id in list(set(admin_ids)):
             request = await db.ChatRequest.create(chat_id=chat_id, admin_id=admin_id, user_id=m.from_id)
             reply = f'Пользователь {await create_mention(m.from_id)} запрашивает доступ в чат «{chat_name}»'
             keyboard = Keyboard(inline=True).add(
