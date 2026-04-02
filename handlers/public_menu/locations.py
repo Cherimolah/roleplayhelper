@@ -44,5 +44,5 @@ async def show_locations(m: Message):
             chat_id, is_private = row
             reply += f'{i + 1}. {"🚪" if is_private else ""} «{names[i]}»\n'
 
-    reply += '\nФормат чатов для кают: RP Among Us Каюта/Кельи № (номер каюты/Кельев)'
+    reply += '\nФормат чатов для кают: RP \"Среди Нас\" Каюта/Кельи № (номер каюты/кельи)'
     await m.answer(reply)

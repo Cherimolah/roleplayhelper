@@ -1842,7 +1842,7 @@ async def create_cabin_chat(user_id: int):
     Функция создает чат с локацией каюты пользователя. Добавляет туда бота и дает ему админку
     """
     cabin_number = await db.select([db.Form.cabin]).where(db.Form.user_id == user_id).gino.scalar()
-    response = await user_bot.api.messages.create_chat(title=f'RP Among Us Каюта/Кельи № {cabin_number}')
+    response = await user_bot.api.messages.create_chat(title=f'RP "Среди Нас" Каюта/Кельи № {cabin_number}')
     await asyncio.sleep(0.5)
     group_id = (await bot.api.groups.get_by_id()).groups[0].id
     await user_bot.api.request('bot.addBotToChat', {'peer_id': response.chat_id + 2000000000, 'bot_id': -(abs(group_id))})
