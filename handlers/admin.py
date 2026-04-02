@@ -25,6 +25,7 @@ from service.middleware import states
 from service.custom_rules import StateRule, NumericRule, AdminRule, UserFree
 from service.utils import take_off_payments, parse_reputation, create_mention, check_quest_completed, apply_reward, \
     serialize_target_reward, create_cabin_chat, move_user, get_current_form_id, post_form_to_board, update_form_on_board, post_form_to_archive, download_image
+from service.serializers import info_cabin
 from config import HALL_CHAT_ID, GROUP_ID
 
 
@@ -92,15 +93,7 @@ async def accept_form(m: MessageEvent):
         return
     elif not cabin:
         states.set(m.user_id, f"{Admin.SELECT_CABIN}*{user_id}")
-        free = []
-        i = 1
-        employed = {x[0] for x in await db.select([db.Form.cabin]).gino.all()}
-        while not free:
-            i += 100
-            numbers = set(range(1, i))
-            free = list(map(str, list(numbers - employed)))
-        reply = f"Укажите номер кабины участника [id{user_id}|{name}]\n\n" \
-                f"Свободные номера: {', '.join(free)}"
+        reply, _ = await info_cabin()
         await m.send_message(reply, keyboard=Keyboard().get_json())
     else:
         states.set(m.user_id, Menu.MAIN)
@@ -119,18 +112,9 @@ async def set_profession_to_user(m: Message, value: int = None):
     """
     profession_id = await db.select([db.Profession.id]).offset(value - 1).limit(1).gino.scalar()
     user_id = int(states.get(m.from_id).split("*")[1])
-    name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
     await db.Form.update.values(profession=profession_id).where(db.Form.user_id == user_id).gino.status()
     states.set(m.from_id, f"{Admin.SELECT_CABIN}*{user_id}")
-    free = []
-    i = 1
-    employed = {x[0] for x in await db.select([db.Form.cabin]).gino.all()}
-    while not free:
-        i += 100
-        numbers = set(range(1, i))
-        free = list(map(str, list(numbers - employed)))
-    reply = f"Укажите номер кабины участника [id{user_id}|{name}]\n\n" \
-            f"Свободные номера: {', '.join(free)}"
+    reply, _ = await info_cabin()
     await m.answer(reply, keyboard=Keyboard())
 
 

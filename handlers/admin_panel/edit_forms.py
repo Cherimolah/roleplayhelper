@@ -19,6 +19,7 @@ from service.middleware import states
 from service.states import Admin
 from service.db_engine import db
 from service.utils import loads_form, take_off_payments, reload_image, update_daughter_levels
+from service.serializers import info_cabin
 
 
 @bot.on.private_message(StateRule(Admin.MENU), PayloadRule({"admin_menu": "edit_form"}), AdminRule())
@@ -64,7 +65,9 @@ async def send_select_fields(m: Message, value: int = None):
             reply = f"{reply}{i + 1}. {prof.name}\n"
     if value == 10:  # Ориентация
         keyboard = keyboards.orientations
-    elif value == 15:  # Каюты
+    elif value == 14:
+        reply, _ = await info_cabin()
+    elif value == 15:  # Класс каюты
         cabins = await db.select([db.Cabins.name]).order_by(db.Cabins.id.asc()).gino.all()
         for i, cabin in enumerate(cabins):
             reply = f"{reply}{i + 1}. {cabin.name}\n"

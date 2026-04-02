@@ -52,30 +52,6 @@ class RelatedTable(Field):
     pass
 
 
-# Поля анкеты, доступны для редактирования обычным пользователям
-fields = (Field("Имя", Registration.PERSONAL_NAME), Field("Должность", Registration.PROFESSION),
-          Field("Биологический возраст", Registration.AGE), Field("Рост", Registration.HEIGHT),
-          Field("Вес", Registration.WEIGHT), Field("Физиологические особенности", Registration.FEATURES),
-          Field("Биография", Registration.BIO), Field("Характер", Registration.CHARACTER),
-          Field("Мотивы нахождения на Space-station", Registration.MOTIVES),
-          Field("Сексуальная ориентация", Registration.ORIENTATION),
-          Field("Фетиши", Registration.FETISHES), Field("Табу", Registration.TABOO),
-          Field("Визуальный портрет", Registration.PHOTO), Field("Фракция", Registration.FRACTION))
-
-# Поля анкеты, доступные для редактирования администраторам через админ-панель
-fields_admin = (Field("Имя", Registration.PERSONAL_NAME), Field("Должность", Registration.PROFESSION),
-                Field("Биологический возраст", Registration.AGE), Field("Рост", Registration.HEIGHT),
-                Field("Вес", Registration.WEIGHT), Field("Физиологические особенности", Registration.FEATURES),
-                Field("Биография", Registration.BIO), Field("Характер", Registration.CHARACTER),
-                Field("Мотивы нахождения на Space-station", Registration.MOTIVES),
-                Field("Сексуальная ориентация", Registration.ORIENTATION),
-                Field("Фетиши", Registration.FETISHES), Field("Табу", Registration.TABOO),
-                Field("Визуальный портрет", Registration.PHOTO), Field("Каюта", Admin.EDIT_CABIN),
-                Field("Класс каюты", Admin.EDIT_CLASS_CABIN), Field("Заморозка", Admin.EDIT_FREEZE),
-                Field("Статус", Admin.EDIT_STATUS), Field("Фракция", Admin.EDIT_FRACTION),
-                Field('Уровень подчинения', Admin.EDIT_LEVEL_SUBORDINATION),
-                Field('Уровень либидо', Admin.EDIT_LEVEL_LIBIDO))
-
 
 class FormatDataException(Exception):
     """
@@ -1040,6 +1016,21 @@ async def serialize_daylic_chill(value: bool) -> str:
     else:
         return 'Обычный еженедельник (чт-вс)'
 
+
+
+async def info_cabin() -> tuple[str, Keyboard | None]:
+    free = []
+    i = 1
+    employed = {x[0] for x in await db.select([db.Form.cabin]).gino.all()}
+    while not free:
+        i += 100
+        numbers = set(range(1, i))
+        free = list(map(str, list(numbers - employed)))
+    reply = f"Укажите номер каюты участника\n\n" \
+            f"Свободные номера: {', '.join(free)}"
+    return reply, None
+
+
 # Словарь со всеми типами контента
 # Ключом в словаре должна являться строка - название аттрибута объекта db (прямо как в Database.__init__() объявлен)
 # По этому ключу будет получен класс таблицы из db
@@ -1216,3 +1207,28 @@ fields_content: Dict[str, Dict[str, List[Union[Field, RelatedTable]]]] = {
         ]
     }
 }
+
+
+# Поля анкеты, доступны для редактирования обычным пользователям
+fields = (Field("Имя", Registration.PERSONAL_NAME), Field("Должность", Registration.PROFESSION),
+          Field("Биологический возраст", Registration.AGE), Field("Рост", Registration.HEIGHT),
+          Field("Вес", Registration.WEIGHT), Field("Физиологические особенности", Registration.FEATURES),
+          Field("Биография", Registration.BIO), Field("Характер", Registration.CHARACTER),
+          Field("Мотивы нахождения на Space-station", Registration.MOTIVES),
+          Field("Сексуальная ориентация", Registration.ORIENTATION),
+          Field("Фетиши", Registration.FETISHES), Field("Табу", Registration.TABOO),
+          Field("Визуальный портрет", Registration.PHOTO), Field("Фракция", Registration.FRACTION))
+
+# Поля анкеты, доступные для редактирования администраторам через админ-панель
+fields_admin = (Field("Имя", Registration.PERSONAL_NAME), Field("Должность", Registration.PROFESSION),
+                Field("Биологический возраст", Registration.AGE), Field("Рост", Registration.HEIGHT),
+                Field("Вес", Registration.WEIGHT), Field("Физиологические особенности", Registration.FEATURES),
+                Field("Биография", Registration.BIO), Field("Характер", Registration.CHARACTER),
+                Field("Мотивы нахождения на Space-station", Registration.MOTIVES),
+                Field("Сексуальная ориентация", Registration.ORIENTATION),
+                Field("Фетиши", Registration.FETISHES), Field("Табу", Registration.TABOO),
+                Field("Визуальный портрет", Registration.PHOTO), Field("Каюта", Admin.EDIT_CABIN, info_cabin),
+                Field("Класс каюты", Admin.EDIT_CLASS_CABIN), Field("Заморозка", Admin.EDIT_FREEZE),
+                Field("Статус", Admin.EDIT_STATUS), Field("Фракция", Admin.EDIT_FRACTION),
+                Field('Уровень подчинения', Admin.EDIT_LEVEL_SUBORDINATION),
+                Field('Уровень либидо', Admin.EDIT_LEVEL_LIBIDO))
