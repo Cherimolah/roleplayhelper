@@ -78,13 +78,6 @@ async def on_startup():
         asyncio.get_event_loop().create_task(update_photo_token(user_id))
 
 
-    chats = await db.select([db.Chat.user_chat_id, db.Chat.cabin_user_id]).where(db.Chat.cabin_user_id.isnot(None)).gino.all()
-    for chat_id, user_id in chats:
-        cabin_number = await db.select([db.Form.cabin]).where(db.Form.user_id == user_id).gino.scalar()
-        await user_bot.api.messages.edit_chat(chat_id, f'RP "Среди нас" Каюта/Кельи № {cabin_number}')
-        await asyncio.sleep(0.5)
-
-
 def number_error():
     i = 1
     while True:
