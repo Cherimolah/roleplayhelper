@@ -383,6 +383,9 @@ async def decline_salary_request(m: MessageEvent):
 async def check_daylic(m: MessageEvent):
     response_id = int(m.payload.get("daylic_check"))
     response = await db.CompletedDaylic.get(response_id)
+    if not response:
+        await m.show_snackbar('Еженедельное задание не найдено')
+        return
     if response.is_checked:
         await m.edit_message('Это еженедельное задание уже проверил другой администратор')
         return
