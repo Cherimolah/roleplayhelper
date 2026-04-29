@@ -1,6 +1,7 @@
 from vkbottle.bot import Message
 from vkbottle import Keyboard, KeyboardButtonColor, Text
 from datetime import datetime, timedelta
+from vkbottle.dispatch.rules.base import PayloadRule
 
 from loader import bot, states
 from service.custom_rules import StateRule, AdminRule
@@ -70,13 +71,13 @@ async def confirm_blackout_all(m: Message):
     """Подтверждение блэкаута для всех"""
     reason = m.text
     
-    # Получаем всех активных пользователей
-    users = await db.User.query.where(db.User.is_active == True).gino.all()
+    # Получаем всех пользователей бота
+    users = [x[0] for x in await db.select([db.User.user_id]).gino.all()]
     
-    for user in users:
+    for user_id in users:
         # Включаем режим от первого лица
         mode = await db.FirstPersonMode.query.where(
-            db.FirstPersonMode.user_id == user.vk_id
+            db.FirstPersonMode.user_id == user_id
         ).gino.first()
         
         if mode:
@@ -87,18 +88,18 @@ async def confirm_blackout_all(m: Message):
             ).apply()
         else:
             await db.FirstPersonMode.create(
-                user_id=user.vk_id,
+                user_id=user_id,
                 is_active=True,
                 blackout_mode=True,
                 blackout_reason=reason
             )
         
         # Удаляем из всех чатов
-        await remove_user_from_all_chats(user.vk_id)
+        await remove_user_from_all_chats(user_id)
         
         # Отправляем уведомление пользователю
         await bot.api.messages.send(
-            user_id=user.vk_id,
+            user_id=user_id,
             message=f"⚫ **ВНИМАНИЕ: АКТИВИРОВАН РЕЖИМ БЛЭКАУТ**\n\n"
                    f"Причина: {reason}\n\n"
                    f"Вы переведены в режим от первого лица.\n"
@@ -111,6 +112,6 @@ async def confirm_blackout_all(m: Message):
     await m.answer(
         f"✅ Режим блэкаут включен для всех {len(users)} игроков.\n"
         f"Причина: {reason}",
-        keyboard=keyboards.admin_menu()
+        keyboard=keyboards.admin_menu
     )
     states.set(m.from_id, Admin.MENU)

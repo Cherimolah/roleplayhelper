@@ -1,8 +1,43 @@
 import re
 import random
-from typing import Optional
+from datetime import datetime
+from typing import Dict, Optional, Tuple
 
-async def limited_visibility(text: str, user_id: int, db, min_level: float = None, max_level: float = None) -> str:
+def _is_dialog_line(line: str) -> bool:
+    stripped = line.strip()
+    return bool(re.match(r"^\s*[-—]\s*", stripped))
+
+
+def is_commands_only(text: str) -> bool:
+    """
+    True, если сообщение состоит только из команд (строки начинаются с '/')
+    и/или пустых строк.
+    """
+    lines = [ln.strip() for ln in text.splitlines()]
+    lines = [ln for ln in lines if ln]
+    if not lines:
+        return True
+    return all(ln.startswith("/") for ln in lines)
+
+
+def is_forwardable_post(text: str, min_chars: int = 330) -> bool:
+    """
+    Антиспам-фильтр для пересылки "постов" в POV:
+    - команды сами по себе не считаем постом
+    - проверяем длину "уникального" текста без пробелов
+    """
+    if is_commands_only(text):
+        return False
+    return check_message_length(text, min_chars=min_chars)
+
+
+async def limited_visibility(
+    text: str,
+    user_id: int,
+    db,
+    min_level: float | None = None,
+    max_level: float | None = None,
+) -> str:
     """
     Ограниченная видимость с рандомным уровнем из настроек пользователя
     """
@@ -25,9 +60,8 @@ async def limited_visibility(text: str, user_id: int, db, min_level: float = Non
     processed_lines = []
     
     for line in lines:
-        stripped_line = line.strip()
-        # Это прямая речь - не трогаем
-        if re.match(r'^\s*[-]{1,}\s*', stripped_line):
+        # Это прямая речь — не трогаем
+        if _is_dialog_line(line):
             processed_lines.append(line)
         else:
             words = line.split()
@@ -43,10 +77,7 @@ async def limited_visibility(text: str, user_id: int, db, min_level: float = Non
                     blurred_words.append(word)
             processed_lines.append(' '.join(blurred_words))
     
-    # Добавляем информацию об уровне замазывания (только в режиме отладки)
-    debug_info = f"\n\n[Уровень замазывания: {level:.2f}]" if random.random() < 0.1 else ""
-    
-    return '\n'.join(processed_lines) + debug_info
+    return '\n'.join(processed_lines)
 def concussion(text: str) -> str:
     """Контузия: перемешивает буквы в словах"""
     words = text.split()
@@ -65,7 +96,7 @@ def concussion(text: str) -> str:
 
 def blindness(text: str) -> str:
     """Слепота: оставляет только прямую речь"""
-    quotes = re.findall(r'^\s*[-]{1,}\s*(.*)$', text, re.MULTILINE)
+    quotes = re.findall(r'^\s*[-—]\s*(.*)$', text, re.MULTILINE)
     if quotes:
         return '\n'.join(quotes)
     return "Вы ничего не видите."
@@ -77,7 +108,7 @@ def deafness(text: str) -> str:
         blurred = '*' * len(content)
         return match.group(0).replace(content, blurred)
     
-    cleaned_text = re.sub(r'^\s*[-]{1,}\s*(.*)$', replace_match, text, flags=re.MULTILINE)
+    cleaned_text = re.sub(r'^\s*[-—]\s*(.*)$', replace_match, text, flags=re.MULTILINE)
     return cleaned_text.strip()
 
 def disorientation(text: str, remove_sender: bool = True) -> str:
@@ -96,28 +127,13 @@ def disorientation(text: str, remove_sender: bool = True) -> str:
             marker in line.lower() for marker in ['от ', 'от:', '@', 'отправитель']
         )]
     
-    # Перемешиваем строки (кроме прямой речи)
-    speech_lines = []
-    other_lines = []
-    
-    for line in lines:
-        if re.match(r'^\s*[-]{1,}\s*', line.strip()):
-            speech_lines.append(line)
-        else:
-            other_lines.append(line)
-    
-    # Перемешиваем не-речь
-    random.shuffle(other_lines)
-    
-    # Собираем обратно, сохраняя относительный порядок речи
-    result_lines = []
-    for line in lines:
-        if re.match(r'^\s*[-]{1,}\s*', line.strip()):
-            # Оставляем речь на месте
-            result_lines.append(line)
-        elif other_lines:
-            # Берем следующую перемешанную строку
-            result_lines.append(other_lines.pop(0))
+    # Перемешиваем именно "не-речь": меняем местами позиции не-речевых строк
+    other_indices = [i for i, line in enumerate(lines) if not _is_dialog_line(line)]
+    shuffled_indices = other_indices.copy()
+    random.shuffle(shuffled_indices)
+    result_lines = list(lines)
+    for src_i, dst_i in zip(other_indices, shuffled_indices):
+        result_lines[dst_i] = lines[src_i]
     
     # Добавляем помехи
     disturbances = [
@@ -177,7 +193,7 @@ async def apply_text_effects(text: str, user_id: int, db, is_action_mode: bool =
     
     if mode.limited_vision_until and mode.limited_vision_until > datetime.now():
         # Используем рандомизированный уровень
-        result['text'] = limited_visibility(result['text'], min_level=0.2, max_level=0.9)
+        result['text'] = await limited_visibility(result['text'], user_id=user_id, db=db)
         result['effects'].append('limited_vision')
     
     return result
@@ -186,7 +202,7 @@ def check_message_length(text: str, min_chars: int = 300) -> bool:
     Проверяет длину сообщения для режима от первого лица
     Убирает команды бота, повторяющиеся слова и пробелы
     """
-    # Убираем команды бота (начинаются с /)
+    # Убираем команды бота (строки начинаются с '/')
     lines = text.split('\n')
     filtered_lines = []
     for line in lines:
@@ -197,7 +213,7 @@ def check_message_length(text: str, min_chars: int = 300) -> bool:
     # Убираем пробелы
     text_no_spaces = ''.join(text.split())
     
-    # Убираем повторяющиеся слова
+    # Убираем повторяющиеся слова (простая защита от "спама одинаковыми словами")
     words = text.split()
     unique_words = []
     seen_words = set()

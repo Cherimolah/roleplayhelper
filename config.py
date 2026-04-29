@@ -7,6 +7,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "y", "on")
+
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN").split(",")  # Токен бота VK API
 
@@ -30,3 +36,7 @@ HALL_CHAT_ID = int(os.getenv('HALL_CHAT_ID') or 0)  # Айди чата, кот�
 
 BOARD_FORMS_TOPIC_ID = int(os.getenv('BOARD_FORMS_TOPIC_ID'))  # Айди топика доски действующих анкет
 ARCHIVE_FORMS_TOPIC_ID = int(os.getenv('ARCHIVE_FORMS_TOPIC_ID'))  # Айди топика архива анкет
+
+# Стартап-настройки (вместо временных закомментированных блоков в коде)
+STARTUP_NOTIFY_ADMINS = _env_bool("STARTUP_NOTIFY_ADMINS", default=False)
+CLOSE_BOARD_TOPICS_ON_STARTUP = _env_bool("CLOSE_BOARD_TOPICS_ON_STARTUP", default=True)

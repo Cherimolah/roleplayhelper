@@ -417,3 +417,21 @@ class RegexRule(ABCRule):
         if match is not None:
             return {'match': match.groups()}
         return False
+
+
+class ForwardablePostRule(ABCRule[Message]):
+    """
+    Правило для POV-пересылки: пропускаем только "посты" достаточной длины,
+    чтобы не триггерить тяжёлую логику на каждом сообщении в чатах.
+    """
+
+    def __init__(self, min_chars: int = 330):
+        self.min_chars = min_chars
+
+    async def check(self, event: Message):
+        # Только чаты (peer_id беседы)
+        if event.peer_id < 2_000_000_000 or not event.text:
+            return False
+        from service.text_processors import is_forwardable_post
+
+        return is_forwardable_post(event.text, min_chars=self.min_chars)

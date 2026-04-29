@@ -1829,6 +1829,35 @@ async def move_user(user_id: int, chat_id: int):
                                     keyboard=await keyboards.main_menu(user_id), peer_id=user_id)
 
 
+async def remove_user_from_all_chats(user_id: int) -> List[int]:
+    """
+    Максимально "жёстко" выводит пользователя из всех чатов-локаций.
+
+    Реально ВК не всегда позволяет кикнуть участника (нет прав/уже не участник),
+    поэтому мы:
+    - пробуем кикнуть из беседы
+    - в любом случае ставим read-only, чтобы игрок не писал в локации
+    """
+    chat_ids = [x[0] for x in await db.select([db.Chat.chat_id]).where(db.Chat.chat_id.isnot(None)).gino.all()]
+    removed: List[int] = []
+
+    for chat_id in chat_ids:
+        try:
+            await bot.api.messages.remove_chat_user(chat_id=chat_id, member_id=user_id)
+        except Exception:
+            pass
+        try:
+            await bot.api.request(
+                "messages.changeConversationMemberRestrictions",
+                {"peer_id": chat_id + 2000000000, "member_ids": user_id, "action": "ro"},
+            )
+        except Exception:
+            pass
+        removed.append(chat_id)
+
+    return removed
+
+
 async def create_cabin_chat(user_id: int):
     """
     Функция создает чат с локацией каюты пользователя. Добавляет туда бота и дает ему админку

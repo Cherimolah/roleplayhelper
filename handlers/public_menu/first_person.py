@@ -1,20 +1,17 @@
 from vkbottle.bot import Message
-from vkbottle import Keyboard, KeyboardButtonColor, Text
-from datetime import datetime, timedelta
 
 from loader import bot, states
-from service.custom_rules import StateRule, AdminRule
-from service.states import UserState
+from service.custom_rules import StateRule
+from service.states import Menu
 from service import keyboards
-from service.text_processors import check_message_length
 from service.chat_manager import (
     save_user_chats_before_first_person,
     restore_user_to_chats,
-    clear_user_chat_history
+    clear_user_chat_history,
 )
 from service.db_engine import db
 
-@bot.on.private_message(StateRule(UserState.MENU), payload={"menu": "first_person"})
+@bot.on.private_message(StateRule(Menu.MAIN), payload={"menu": "first_person"})
 async def toggle_first_person_mode(m: Message):
     """Включение/выключение режима от первого лица"""
     user_id = m.from_id
@@ -35,26 +32,18 @@ async def toggle_first_person_mode(m: Message):
         # Восстанавливаем пользователя во все чаты
         restored_chats = await restore_user_to_chats(user_id)
         
-        # Очищаем историю
-        await clear_user_chat_history(user_id)
-        
-        # Обновляем текущий чат пользователя (ставим главный холл или первый восстановленный)
-        if restored_chats:
-            # Получаем чат холла из конфига
-            from config import HALL_CHAT_ID
-            await db.User.update.values(
-                current_chat_id=HALL_CHAT_ID
-            ).where(db.User.vk_id == user_id).gino.status()
+        # Очищаем только уже восстановленные записи (не теряем историю, если что-то не удалось восстановить)
+        await clear_user_chat_history(user_id, only_restored=True)
         
         await m.answer(
             f"✅ Режим от первого лица выключен.\n"
             f"Вы были восстановлены в {len(restored_chats)} чатах.\n\n"
             f"Теперь вы можете полноценно участвовать в общих беседах.",
-            keyboard=keyboards.main_menu(user_id)
+            keyboard=await keyboards.main_menu(user_id)
         )
         
         # Возвращаем в главное меню
-        states.set(m.from_id, UserState.MENU)
+        states.set(m.from_id, Menu.MAIN)
         
     else:
         # Включаем режим
@@ -74,24 +63,19 @@ async def toggle_first_person_mode(m: Message):
         removed_chats = await remove_user_from_all_chats(user_id)
         
         await m.answer(
-            f"👁️ Вы перешли в режим от первого лица.\n\n"
-            f"📊 **Статистика:**\n"
-            f"- Сохранено чатов: {len(saved_chats)}\n"
-            f"- Удалено из чатов: {len(removed_chats)}\n\n"
-            f"Теперь вы можете играть только через общение с @siren_bot (юзер-бот).\n"
-            f"Все ваши сообщения будут пересылаться в локации, где вы находитесь.\n\n"
-            f"⚠️ **Требования к сообщениям:**\n"
-            f"- Минимум 300 символов без пробелов\n"
-            f"- Без повторяющихся слов\n"
-            f"- Команды бота не учитываются\n\n"
-            f"Чтобы выйти из режима, нажмите кнопку ещё раз.",
+            "👁️ Вы перешли в режим от первого лица.\n\n"
+            "Теперь вы можете играть через общение с юзерботом (Сирена).\n"
+            "Сообщения будут транслироваться в вашу текущую локацию.\n\n"
+            "⚠️ Антиспам для пересылаемых постов: 300–350 символов без пробелов, "
+            "без повторов и без учёта строк-команд.\n\n"
+            "Чтобы выйти из режима — нажмите кнопку ещё раз.",
             keyboard=keyboards.first_person_menu()
         )
         
-        # Переводим в состояние режима от первого лица
-        states.set(m.from_id, UserState.FIRST_PERSON_MENU)
+        # Возвращаем в меню (кнопка выхода остаётся в клавиатуре)
+        states.set(m.from_id, Menu.MAIN)
 
-@bot.on.private_message(StateRule(UserState.FIRST_PERSON_MENU), payload={"action": "first_person_chats"})
+@bot.on.private_message(StateRule(Menu.MAIN), payload={"action": "first_person_chats"})
 async def show_saved_chats(m: Message):
     """Показывает сохраненные чаты пользователя"""
     from service.chat_manager import get_user_chat_history

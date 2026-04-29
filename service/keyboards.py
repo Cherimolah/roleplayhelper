@@ -280,6 +280,12 @@ async def get_settings_menu(user_id: int) -> Keyboard:
         Text(f"{'Разморозить' if freeze else 'Заморозить'} анкету", {"settings": "freeze_request"}),
         KeyboardButtonColor.PRIMARY
     ).row().add(
+        Text(
+            f"Режим от первого лица: {'✅' if (await db.select([db.FirstPersonMode.is_active]).where(db.FirstPersonMode.user_id == user_id).gino.scalar()) else '❌'}",
+            {"menu": "first_person"},
+        ),
+        KeyboardButtonColor.SECONDARY,
+    ).row().add(
         Text("Удалить анкету", {"settings": "delete_request"}), KeyboardButtonColor.NEGATIVE
     ))
     if admin > 0:

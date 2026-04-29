@@ -12,12 +12,13 @@ from vkbottle_types.objects import UtilsDomainResolvedType
 from fuzzywuzzy import process
 
 from loader import bot
-from service.custom_rules import ChatAction, AdminRule, ChatInviteMember, RegexRule
+from service.custom_rules import ChatAction, AdminRule, ChatInviteMember, RegexRule, ForwardablePostRule
 from service.db_engine import db
 from handlers.public_menu.bank import ask_salary
 from handlers.public_menu.daylics import send_ready_daylic
 from handlers.public_menu.quests import send_ready_quest
 from service.utils import move_user, create_mention, get_current_form_id, soft_divide
+from service.text_processors import apply_text_effects, is_forwardable_post
 from config import HALL_CHAT_ID
 
 # Регулярные выражения для обработки команд
@@ -366,27 +367,60 @@ async def transmitter(m: Message, match: tuple[str, str]):
     await bot.api.messages.send(peer_id=user_id, message=message)
     await m.answer('Сообщение успешно отправлено')
     
+@bot.on.chat_message(ForwardablePostRule(), blocking=False)
 async def handle_chat_message(m: Message):
-    
-    users_in_first_person = await db.FirstPersonMode.query.where(
-        db.FirstPersonMode.is_active == True
-    ).gino.all()
-    
-    for user_mode in users_in_first_person:
-        user = await db.User.query.where(db.User.vk_id == user_mode.user_id).gino.first()
-        if user and user.current_chat_id == chat_id:
-            # Пользователь в этом чате и в режиме от первого лица
-            # Применяем эффекты к тексту
-            processed_text = await apply_text_effects(
-                m.text, 
-                user_mode.user_id,
-                db
-            )
-            
-            # Отправляем обработанное сообщение пользователю
-            await bot.api.messages.send(
-                user_id=user_mode.user_id,
-                message=f"📍 {chat.name} | От {sender_name}:\n\n{processed_text}",
-                random_id=0
-            )
-        
+    """
+    Пересылка сообщений игрокам в режиме от первого лица (POV).
+    """
+    if not m.text or not m.from_id:
+        return
+
+    # На всякий случай оставляем быстрый гард (правило уже фильтрует)
+    if not is_forwardable_post(m.text):
+        return
+
+    chat_id = m.chat_id
+    if not chat_id:
+        return
+
+    # Получаем имя чата (для шапки)
+    try:
+        chat_title = (
+            await bot.api.messages.get_conversations_by_id(peer_ids=[2000000000 + chat_id])
+        ).items[0].chat_settings.title
+    except Exception:
+        chat_title = f"чат {chat_id}"
+
+    # Имя отправителя
+    try:
+        sender = (await bot.api.users.get([m.from_id]))[0]
+        sender_name = f"{sender.first_name} {sender.last_name}"
+    except Exception:
+        sender_name = str(m.from_id)
+
+    # Ищем всех POV-игроков, которые "находятся" в этой же локации
+    pov_users = await (
+        db.select([db.FirstPersonMode.user_id])
+        .select_from(db.FirstPersonMode.join(db.UserToChat, db.UserToChat.user_id == db.FirstPersonMode.user_id))
+        .where((db.FirstPersonMode.is_active == True) & (db.UserToChat.chat_id == chat_id))
+        .gino.all()
+    )
+    pov_user_ids = [x[0] for x in pov_users if x and x[0] != m.from_id]
+    if not pov_user_ids:
+        return
+
+    for receiver_id in pov_user_ids:
+        processed = await apply_text_effects(m.text, user_id=receiver_id, db=db)
+
+        header = f"📍 {chat_title}\n"
+        if not processed.get("remove_sender"):
+            header += f"От: {sender_name}\n\n"
+        else:
+            header += "\n"
+
+        await bot.api.messages.send(
+            user_id=receiver_id,
+            message=header + processed["text"],
+            random_id=0,
+            is_notification=True,
+        )
