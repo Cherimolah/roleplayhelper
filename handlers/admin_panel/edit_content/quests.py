@@ -116,7 +116,7 @@ async def quest_forever(m: Message, item_id: int, editing_content: bool):
         await m.answer(reply,
                        keyboard=Keyboard().add(Text('Без дополнительных целей', {"quest_without_targets": True})))
     elif not editing_content:
-        states.set(m.from_id, f'{Admin.QUEST_ADDITIONAL_TARGETS}*{item_id}')
+        states.set(m.from_id, f'{Admin.QUEST_USERS_ALLOWED}*{item_id}')
         await m.answer("Пришлите ссылки на участников для которых будет распространяться квест",
                        keyboard=Keyboard().add(Text('Без ограничений по игрокам', {"quest_for_all": True}), KeyboardButtonColor.PRIMARY))
 
@@ -145,7 +145,7 @@ async def quest_expiration_time(m: Message, item_id: int, editing_content: bool)
         await m.answer(reply,
                        keyboard=Keyboard().add(Text('Без дополнительных целей', {"quest_without_targets": True})))
     elif not editing_content:
-        states.set(m.from_id, f'{Admin.QUEST_ADDITIONAL_TARGETS}*{item_id}')
+        states.set(m.from_id, f'{Admin.QUEST_USERS_ALLOWED}*{item_id}')
         await m.answer("Пришлите ссылки на участников для которых будет распространяться квест",
                        keyboard=Keyboard().add(Text('Без ограничений по игрокам', {"quest_for_all": True}), KeyboardButtonColor.PRIMARY))
 
