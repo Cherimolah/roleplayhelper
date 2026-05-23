@@ -1990,3 +1990,4 @@ async def wait_mandatory_quest(quest_id: int):
     await bot.api.messages.send(peer_id=user_id, message=f'⏳ Время на выполнение обязательного квеста «{quest.name}» истекло\n'
                                                          f'Вам выписан штраф:\n'
                                                          f'{penalty_text}')
+    await db.MandatoryQuest.delete.where(db.MandatoryQuest.id == quest.id).gino.status()

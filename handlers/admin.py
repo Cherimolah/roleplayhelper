@@ -832,5 +832,6 @@ async def reject_mandatory_quest(e: MessageEvent):
         await bot.api.messages.send(peer_id=user_id,
                                     message=f'Вам выписан штраф за невыполнение обязательного квеста «{quest.name}»\n'
                                             f'{penalty_text}')
+        await db.MandatoryQuest.delete.where(db.MandatoryQuest.id == quest.id).gino.status()
 
 
