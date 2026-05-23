@@ -383,6 +383,9 @@ async def required_quest(m: Message, match: tuple[str, str]):
     if user_id not in ('@all', '@все'):
         user_id = int(user_id)
         form_id = await get_current_form_id(user_id)
+        if not form_id:
+            await m.answer('У этого пользователя нет анкеты в боте! Ему нелья выдать задачу')
+            return
         from_form_id = await get_current_form_id(m.from_id)
         quest = await db.MandatoryQuest.create(form_id=form_id, name=name, from_form_id=from_form_id)
         await db.User.update.values(state=f'{Admin.MANDATORY_QUEST_DESCRIPTION}*{quest.id}').where(db.User.user_id == m.from_id).gino.status()
