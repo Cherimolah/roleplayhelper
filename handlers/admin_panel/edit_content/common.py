@@ -37,6 +37,7 @@ from service.db_engine import db
 @bot.on.private_message(PayloadRule({"StateDebuff": "back"}), AdminRule())
 @bot.on.private_message(PayloadRule({"Race": "back"}), AdminRule())
 @bot.on.private_message(PayloadRule({"Expeditor": "back"}), AdminRule())
+@bot.on.private_message(PayloadRule({"MandatoryQuest": "back"}), AdminRule())
 async def select_edit_content(m: Message):
     """
     Выбор раздела для редактирования контента.

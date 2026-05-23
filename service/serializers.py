@@ -1031,6 +1031,20 @@ async def info_cabin() -> tuple[str, Keyboard | None]:
     return reply, None
 
 
+async def info_mandatory_quest_form_ids() -> tuple[str, Keyboard | None]:
+    return 'Отправьте ссылку/упоминание/пересланное сообщение пользователя(-ей), кому вы хотите выдать обязательный квест', None
+
+
+async def serialize_mandatory_quest_form_ids(value: list[int]) -> str:
+    from service.utils import create_mention
+    user_ids = [x[0] for x in await db.select([db.Form.user_id]).where(db.Form.id.in_(value)).gino.all()]
+    mentions = [await create_mention(x) for x in user_ids]
+    return ', '.join(mentions)
+
+async def info_mandatory_quest_cooldown() -> tuple[str, Keyboard | None]:
+    return 'Укажите дату окончания обязательного квеста в формате ДД.ММ.ГГГГ чч:мм:сс', None
+
+
 # Словарь со всеми типами контента
 # Ключом в словаре должна являться строка - название аттрибута объекта db (прямо как в Database.__init__() объявлен)
 # По этому ключу будет получен класс таблицы из db
@@ -1204,6 +1218,16 @@ fields_content: Dict[str, Dict[str, List[Union[Field, RelatedTable]]]] = {
             RelatedTable('Характеристики', Admin.EXPEDITOR_ATTRIBUTES, info_expeditor_attributes, serialize_expeditor_attributes),
             RelatedTable('Состояние (дебафы)', Admin.EXPEDITOR_DEBUFFS, info_expeditor_debuffs, serialize_expeditor_debuffs),
             RelatedTable('Инвентарь', Admin.EXPEDITOR_ITEMS, info_expeditor_items, serialize_expeditor_items)
+        ]
+    },
+    'MandatoryQuest': {
+        'name': 'Обязательные квесты',
+        'fields': [
+            Field('Название', Admin.MANDATORY_QUEST_NAME),
+            Field('Игроки', Admin.MANDATORY_QUEST_FORM_IDS, info_mandatory_quest_form_ids, serialize_mandatory_quest_form_ids),
+            Field('Описание', Admin.MANDATORY_QUEST_DESCRIPTION),
+            Field('Дата окончания', Admin.MANDATORY_QUEST_EXPIRED_AT, info_mandatory_quest_cooldown, parse_datetime_async),
+            Field('Штраф', Admin.MANDATORY_QUEST_PENALTY, info_quest_penalty, serialize_target_reward)
         ]
     }
 }

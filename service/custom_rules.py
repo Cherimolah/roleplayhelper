@@ -432,3 +432,32 @@ class RegexRule(ABCRule):
         if match is not None:
             return {'match': match.groups()}
         return False
+
+class MentionQuestRule(ABCRule):
+    OUTER = re.compile(
+        r'\[\s*выдать\s+задачу\s+'
+        r'((?:(?:\[id\d+\|[^\]]+\]|@all|@все)\s+)+)'
+        r'[«"](.+?)[»"]'
+        r'\s*\]',
+        re.IGNORECASE
+    )
+    MENTION = re.compile(r'\[id(\d+)\|[^\]]+\]|(@all|@все)', re.IGNORECASE)
+
+    async def check(self, event: Message):
+        m = self.OUTER.search(event.text)
+        if not m:
+            return False
+
+        mentions_str, title = m.group(1), m.group(2)
+
+        targets = []
+        for uid, tag in self.MENTION.findall(mentions_str):
+            if uid:
+                targets.append(int(uid))   # конкретный пользователь
+            else:
+                targets.append(tag.lower()) # 'all' или 'все'
+
+        if not targets:
+            return False
+
+        return {'match': (targets, title)}

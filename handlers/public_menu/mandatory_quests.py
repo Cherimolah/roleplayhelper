@@ -3,7 +3,6 @@ from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
 from vkbottle import Keyboard, Callback, KeyboardButtonColor, GroupEventType
 from sqlalchemy import and_, func
 
-import messages
 from loader import bot
 from service.custom_rules import StateRule
 from service.states import Menu
@@ -19,11 +18,11 @@ async def page_mandatory_quest(e: Message | MessageEvent, page: int) -> tuple[st
     else:
         form_id = await get_current_form_id(e.user_id)
     quest: db.MandatoryQuest = await db.select([*db.MandatoryQuest]).where(
-        and_(db.MandatoryQuest.form_id == form_id, db.MandatoryQuest.completed.is_(False),
+        and_(db.MandatoryQuest.form_ids.op('@>')([form_id]), db.MandatoryQuest.completed.is_(False),
              db.MandatoryQuest.expired_at > now())
     ).order_by(db.MandatoryQuest.id.asc()).offset(page - 1).limit(1).gino.first()
     count = await db.select([func.count(db.MandatoryQuest.id)]).where(
-        and_(db.MandatoryQuest.form_id == form_id, db.MandatoryQuest.completed.is_(False),
+        and_(db.MandatoryQuest.form_ids.op('@>')([form_id]), db.MandatoryQuest.completed.is_(False),
              db.MandatoryQuest.expired_at > now())
     ).gino.scalar()
     if not quest:

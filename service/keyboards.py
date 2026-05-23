@@ -141,6 +141,8 @@ manage_content = Keyboard().add(
 ).add(
     Text('Расы', {'edit_content': 'Race'}), KeyboardButtonColor.PRIMARY
 ).row().add(
+    Text('Обязательные квесты', {'edit_content': 'MandatoryQuest'}), KeyboardButtonColor.PRIMARY
+).row().add(
     Text("Назад", {"edit_content": "back"}), KeyboardButtonColor.NEGATIVE
 )
 

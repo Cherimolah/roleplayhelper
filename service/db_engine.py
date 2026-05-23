@@ -881,9 +881,9 @@ class Database(Gino):
 
             id = Column(Integer, primary_key=True)
             name = Column(String)
+            form_ids = Column(ARRAY(Integer))
             description = Column(String)
             expired_at = Column(DateTime(timezone=True))
-            form_id = Column(Integer, ForeignKey('forms.id', ondelete='CASCADE'))
             reward = Column(JSON)
             penalty = Column(JSON)
             completed = Column(Boolean, default=False)
