@@ -8,3 +8,4 @@ from . import daylics
 from . import settings
 from . import daughter_quests
 from . import locations
+from . import mandatory_quests

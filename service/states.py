@@ -302,6 +302,10 @@ class Admin(metaclass=StateMeta):
     CHAT_SET_VISIBLE_MESSAGES_COUNT = 'chat_set_visible_messages_count'
     CHAT_ADD_PROFESSION = 'chat_add_profession'
     CHAT_DELETE_PROFESSION = 'chat_delete_profession'
+    MANDATORY_QUEST_DESCRIPTION = 'mandatory_quest_description'
+    MANDATORY_QUEST_EXPIRED_AT = 'mandatory_quest_expired_at'
+    MANDATORY_QUEST_REWARD = 'mandatory_quest_reward'
+    MANDATORY_QUEST_PENALTY = 'mandatory_quest_penalty'
 
 
 class Judge(metaclass=StateMeta):

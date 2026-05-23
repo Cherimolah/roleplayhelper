@@ -790,3 +790,47 @@ async def decline_daughter_target(m: MessageEvent):
 async def download_photo_user(m: Message, user_id: int):
     await download_image(m.attachments[0].photo, f'data/photo{user_id}.jpg')
 
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'mandatory_quest_request': int, 'action': 'accept'}))
+async def accept_mandatory_quest(e: MessageEvent):
+    request_id = int(e.payload['mandatory_quest_request'])
+    request = await db.MandatoryQuestRequest.get(request_id)
+    if not request or request.checked:
+        await e.edit_message('Данный запрос уже обработал другой администратор')
+        return
+    await db.MandatoryQuestRequest.update.values(checked=True).where(db.MandatoryQuestRequest.id == request_id).gino.status()
+    quest: db.MandatoryQuest = await db.MandatoryQuest.get(request.quest_id)
+    await db.MandatoryQuest.update.values(completed=True).where(db.MandatoryQuest.id == quest.id).gino.status()
+    user_id = await db.select([db.Form.user_id]).where(db.Form.id == quest.form_id).gino.scalar()
+    await apply_reward(user_id, quest.reward)
+    reward_text = await serialize_target_reward(quest.reward)
+    await bot.api.messages.send(peer_id=user_id, message=f'✅ Ваш отчёт о выполнении квеста «{quest.name}» принят администрацией.\n'
+                                        f'Получена награда: {reward_text}')
+    await e.edit_message(f'✅ Вы приняли отчёт игрока {await create_mention(user_id)} о '
+                         f'выполнении обязательного квеста «{quest.name}»')
+
+
+@bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({'mandatory_quest_request': int, 'action': 'reject'}))
+async def reject_mandatory_quest(e: MessageEvent):
+    request_id = int(e.payload['mandatory_quest_request'])
+    request = await db.MandatoryQuestRequest.get(request_id)
+    if not request or request.checked:
+        await e.edit_message('Данный запрос уже обработал другой администратор')
+        return
+    await db.MandatoryQuestRequest.update.values(checked=True).where(
+        db.MandatoryQuestRequest.id == request_id).gino.status()
+    quest: db.MandatoryQuest = await db.MandatoryQuest.get(request.quest_id)
+    user_id = await db.select([db.Form.user_id]).where(db.Form.id == quest.form_id).gino.scalar()
+    await e.edit_message(f'❌ Вы отклонили отчёт игрока {await create_mention(user_id)} о '
+                         f'выполнении обязательного квеста «{quest.name}»')
+    await bot.api.messages.send(peer_id=user_id,
+                                message=f'❌ Ваш отчёт о выполнении квеста «{quest.name}» отклонен администрацией')
+
+    if now() > quest.expired_at:
+        await apply_reward(user_id, quest.penalty)
+        penalty_text = await serialize_target_reward(quest.penalty)
+        await bot.api.messages.send(peer_id=user_id,
+                                    message=f'Вам выписан штраф за невыполнение обязательного квеста «{quest.name}»\n'
+                                            f'{penalty_text}')
+
+

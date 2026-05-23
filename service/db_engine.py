@@ -8,7 +8,7 @@ from typing import List, Tuple
 
 from gino import Gino
 from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, Boolean, TIMESTAMP, func, and_, Float, ARRAY, \
-    JSON, Date, DateTime
+    JSON, Date, DateTime, String
 
 from config import USER, PASSWORD, HOST, DATABASE, HALL_CHAT_ID
 
@@ -84,6 +84,7 @@ class Database(Gino):
             creating_expeditor = Column(Boolean, default=False)  # Создает ли сейчас карту экспедитора
             judge_panel = Column(Boolean, default=False)  # Включена ли панель судьи вместо админ панели
             check_action_id = Column(Integer, ForeignKey('actions.id', ondelete='SET NULL'))  # Текущая проверка действия в экшен режиме (если есть)
+            special_quest = Column(Boolean, default=False)
 
         self.User = User
 
@@ -270,7 +271,7 @@ class Database(Gino):
             fraction = Column(Integer, ForeignKey("fractions.id", ondelete='SET NULL'))  # Фракция, участникам которой доступен квест (если не указано - доступно всем)
             profession = Column(Integer, ForeignKey('professions.id', ondelete='SET NULL'))  # Профессия для каких участников доступна цель
             daughter_params = Column(ARRAY(Integer))  # Необходимые параметры дочери (либидо и подчинение)
-            forms = Column(ARRAY(Integer), default=[])  # Пользователи, которым доступна доп. уель
+            forms = Column(ARRAY(Integer), default=[])  # Пользователи, которым доступна доп. цель
             reward_info = Column(JSON)  # Награда за доп. цель
             for_all_users = Column(Boolean, default=False)  # Доступна всем пользователям или нет
 
@@ -871,6 +872,34 @@ class Database(Gino):
             value = Column(Integer, nullable=False)  # Размер штрафа
 
         self.AttributePenalties = AttributePenalties
+
+        class MandatoryQuest(self.Model):
+            """
+            Обязательные квесты, выдаваемые через команду [выдать задачу @mention "Название"]
+            """
+            __tablename__ = 'mandatory_quests'
+
+            id = Column(Integer, primary_key=True)
+            name = Column(String)
+            description = Column(String)
+            expired_at = Column(DateTime(timezone=True))
+            form_id = Column(Integer, ForeignKey('forms.id', ondelete='CASCADE'))
+            reward = Column(JSON)
+            penalty = Column(JSON)
+            completed = Column(Boolean, default=False)
+            from_form_id = Column(Integer, ForeignKey('forms.id', ondelete='SET NULL'))
+
+        self.MandatoryQuest = MandatoryQuest
+
+        class MandatoryQuestRequest(self.Model):
+            __tablename__ = 'mandatory_quest_requests'
+
+            id = Column(Integer, primary_key=True)
+            quest_id = Column(Integer, ForeignKey('mandatory_quests.id', ondelete='CASCADE'))
+            checked = Column(Boolean, default=False)
+
+        self.MandatoryQuestRequest = MandatoryQuestRequest
+
 
     async def connect(self):
         """

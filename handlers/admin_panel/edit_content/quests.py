@@ -99,20 +99,30 @@ async def end_date_quest(m: Message, item_id: int, editing_content: bool):
 
 
 @bot.on.private_message(StateRule(Admin.QUEST_EXECUTION_TIME), PayloadMapRule({"quest_forever": bool}), AdminRule())
-@allow_edit_content("Quest", text="Пришлите ссылки на участников для которых будет распространяться квест",
-                    state=Admin.QUEST_USERS_ALLOWED,
-                    keyboard=Keyboard().add(Text('Без ограничений по игрокам', {"quest_for_all": True}),
-                                            KeyboardButtonColor.PRIMARY))
+@allow_edit_content("Quest")
 async def quest_forever(m: Message, item_id: int, editing_content: bool):
     """Установка бессрочного времени выполнения квеста"""
     await db.Quest.update.values(execution_time=None).where(db.Quest.id == item_id).gino.status()
+    if await db.select([db.User.special_quest]).where(db.User.user_id == m.from_id).gino.scalar():
+        states.set(m.from_id, f'{Admin.QUEST_ADDITIONAL_TARGETS}*{item_id}')
+        targets = [x[0] for x in
+                   await db.select([db.AdditionalTarget.name]).order_by(db.AdditionalTarget.id.asc()).gino.all()]
+        reply = 'Укажите номера дополнительных целей через запятую:\n\n'
+        if not targets:
+            reply += 'Дополнительных целей на данный момент не создано'
+        else:
+            for i, target in enumerate(targets):
+                reply += f"{i + 1}. {target}\n"
+        await m.answer(reply,
+                       keyboard=Keyboard().add(Text('Без дополнительных целей', {"quest_without_targets": True})))
+    elif not editing_content:
+        states.set(m.from_id, f'{Admin.QUEST_ADDITIONAL_TARGETS}*{item_id}')
+        await m.answer("Пришлите ссылки на участников для которых будет распространяться квест",
+                       keyboard=Keyboard().add(Text('Без ограничений по игрокам', {"quest_for_all": True}), KeyboardButtonColor.PRIMARY))
 
 
 @bot.on.private_message(StateRule(Admin.QUEST_EXECUTION_TIME), AdminRule())
-@allow_edit_content("Quest", text="Пришлите ссылки на участников для которых будет распространяться квест",
-                    state=Admin.QUEST_USERS_ALLOWED,
-                    keyboard=Keyboard().add(Text('Без ограничений по игрокам', {"quest_for_all": True}),
-                                            KeyboardButtonColor.PRIMARY))
+@allow_edit_content("Quest")
 async def quest_expiration_time(m: Message, item_id: int, editing_content: bool):
     """Установка времени выполнения квеста"""
     seconds = parse_period(m.text)
@@ -122,6 +132,22 @@ async def quest_expiration_time(m: Message, item_id: int, editing_content: bool)
     if end_at and seconds > (end_at - start_at).total_seconds():
         raise FormatDataException("Время на выполнение квеста больше, чем время жизни квеста")
     await db.Quest.update.values(execution_time=seconds).where(db.Quest.id == item_id).gino.scalar()
+    if await db.select([db.User.special_quest]).where(db.User.user_id == m.from_id).gino.scalar():
+        states.set(m.from_id, f'{Admin.QUEST_ADDITIONAL_TARGETS}*{item_id}')
+        targets = [x[0] for x in
+                   await db.select([db.AdditionalTarget.name]).order_by(db.AdditionalTarget.id.asc()).gino.all()]
+        reply = 'Укажите номера дополнительных целей через запятую:\n\n'
+        if not targets:
+            reply += 'Дополнительных целей на данный момент не создано'
+        else:
+            for i, target in enumerate(targets):
+                reply += f"{i + 1}. {target}\n"
+        await m.answer(reply,
+                       keyboard=Keyboard().add(Text('Без дополнительных целей', {"quest_without_targets": True})))
+    elif not editing_content:
+        states.set(m.from_id, f'{Admin.QUEST_ADDITIONAL_TARGETS}*{item_id}')
+        await m.answer("Пришлите ссылки на участников для которых будет распространяться квест",
+                       keyboard=Keyboard().add(Text('Без ограничений по игрокам', {"quest_for_all": True}), KeyboardButtonColor.PRIMARY))
 
 
 @bot.on.private_message(StateRule(Admin.QUEST_USERS_ALLOWED), PayloadRule({"quest_for_all": True}), AdminRule())

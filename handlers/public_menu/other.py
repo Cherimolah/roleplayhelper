@@ -107,6 +107,8 @@ async def quests_or_daylics(m: Message):
         Text("Квесты", {"menu": "quests"}), KeyboardButtonColor.PRIMARY
     ).add(
         Text("Еженедельное задание", {"menu": "daylics"}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text('Обязательные задания', {'menu': 'required_quests'}), KeyboardButtonColor.PRIMARY
     ))
 
     # Проверяем статус пользователя

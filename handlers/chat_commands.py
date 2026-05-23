@@ -9,17 +9,20 @@ import re
 from vkbottle.bot import Message
 from vkbottle import Keyboard, Callback, KeyboardButtonColor
 from vkbottle_types.objects import UtilsDomainResolvedType
+from vkbottle.dispatch.rules import OrRule
 from fuzzywuzzy import process
 from sqlalchemy import and_
 
 from loader import bot, user_bot
-from service.custom_rules import ChatAction, AdminRule, ChatInviteMember, RegexRule, UserFree
+from service.custom_rules import ChatAction, AdminRule, ChatInviteMember, RegexRule, UserFree, JudgeRule
 from service.db_engine import db
 from handlers.public_menu.bank import ask_salary
 from handlers.public_menu.daylics import send_ready_daylic
 from handlers.public_menu.quests import send_ready_quest
 from service.utils import move_user, create_mention, get_current_form_id, soft_divide, convert_bot_chat_id_to_user
+from service.states import Admin
 from config import HALL_CHAT_ID
+from service.middleware import states
 
 # Регулярные выражения для обработки команд
 moving_pattern = re.compile(r'\[\s*\s*перемещение\s+в\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)
@@ -367,3 +370,34 @@ async def transmitter(m: Message, match: tuple[str, str]):
                f'«{message}»')
     await bot.api.messages.send(peer_id=user_id, message=message)
     await m.answer('Сообщение успешно отправлено')
+
+
+@bot.on.chat_message(RegexRule(re.compile(r'\[\s*выдать\s+задачу\s+\[id(\d+)\|[^\]]+\]\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)), OrRule(AdminRule(), JudgeRule()), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r'\[\s*выдать\s+задачу\s+(@all)\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)), OrRule(AdminRule(), JudgeRule()), blocking=False)
+@bot.on.chat_message(RegexRule(re.compile(r'\[\s*выдать\s+задачу\s+(@все)\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)), OrRule(AdminRule(), JudgeRule()), blocking=False)
+async def required_quest(m: Message, match: tuple[str, str]):
+    """
+    Команда для создания обязательных квестов. Эти квесты появляются в отдельной вкладке с квестами
+    """
+    user_id, name = match
+    if user_id not in ('@all', '@все'):
+        user_id = int(user_id)
+        form_id = await get_current_form_id(user_id)
+        from_form_id = await get_current_form_id(m.from_id)
+        quest = await db.MandatoryQuest.create(form_id=form_id, name=name, from_form_id=from_form_id)
+        await db.User.update.values(state=f'{Admin.MANDATORY_QUEST_DESCRIPTION}*{quest.id}').where(db.User.user_id == m.from_id).gino.status()
+        await m.answer('Перейдите в личные сообщения для продолжения создания обязательного квеста')
+        await bot.api.messages.send(peer_id=m.from_id, message='Вы создаете обязательный квест для пользователя '
+                                                               f'{await create_mention(user_id)} с названием «{name}»\n\n'
+                                                               f'Напишите описание квеста 👇', keyboard=Keyboard())
+        return
+    _, name = match
+    users = await bot.api.messages.get_conversation_members(m.peer_id)
+    user_ids = [x.member_id for x in users.items if x.member_id > 0]
+    form_ids = [x[0] for x in await db.select([db.Form.id]).where(db.Form.user_id.in_(user_ids)).gino.all()]
+    quest = await db.Quest.create(allowed_forms=[form_ids], name=name)
+    await db.User.update.values(state=f'{Admin.QUEST_DESCRIPTION}*{quest.id}', editing_content=False, special_quest=True).where(
+        db.User.user_id == m.from_id).gino.status()
+    await m.answer('Перейдите в личные сообщения для продолжения создания обязательного квеста')
+    await bot.api.messages.send(peer_id=m.from_id, message=f'Вы создаете квест с названием «{name}»\n\n'
+                                                               f'Напишите описание квеста 👇', keyboard=Keyboard())

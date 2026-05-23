@@ -3,7 +3,6 @@
 """
 import asyncio
 import datetime
-import os
 from typing import List, Tuple, Optional, Union
 import re
 import random
@@ -796,8 +795,14 @@ def allow_edit_content(content_type: str, end: bool = False, text: str = None, s
                     await m.answer(text, keyboard=keyboard)
                 if end:
                     # При завершении возвращаем пользователя в меню выбора контента
-                    await send_content_page(m, content_type, 1)
-                    states.set(m.from_id, str(service.states.Admin.SELECT_ACTION) + "_" + content_type)
+                    await db.User.update.values(special_quest=False).where(db.User.user_id == m.from_id).gino.status()
+                    admin = await db.select([db.User.admin]).where(db.User.user_id == m.from_id).gino.scalar()
+                    if admin > 0:
+                        await send_content_page(m, content_type, 1)
+                        states.set(m.from_id, str(service.states.Admin.SELECT_ACTION) + "_" + content_type)
+                    else:
+                        from handlers.questions import start
+                        await start(m)
             return data
 
         return wrapper
@@ -1968,3 +1973,20 @@ async def update_photo_token(user_id: int):
         if os.path.exists(f'data/photo{user_id}.jpg'):
             photo = await photo_message_uploader.upload(f'data/photo{user_id}.jpg', peer_id=OWNER)
             await db.Form.update.values(photo=photo).where(db.Form.user_id == user_id).gino.status()
+
+
+async def wait_mandatory_quest(quest_id: int):
+    quest: db.MandatoryQuest = await db.MandatoryQuest.get(quest_id)
+    await asyncio.sleep((now() - quest.expired_at).total_seconds())
+    quest: db.MandatoryQuest = await db.MandatoryQuest.get(quest.id)
+    has_active_request = await db.select([db.MandatoryQuestRequest.id]).where(
+        and_(db.MandatoryQuestRequest.quest_id == quest.id, db.MandatoryQuestRequest.checked.is_(False))
+    )
+    if quest.completed or has_active_request:
+        return
+    user_id = await db.select([db.Form.user_id]).where(db.Form.id == quest.form_id).gino.scalar()
+    await apply_reward(user_id, quest.penalty)
+    penalty_text = await serialize_target_reward(quest.penalty)
+    await bot.api.messages.send(peer_id=user_id, message=f'⏳ Время на выполнение обязательного квеста «{quest.name}» истекло\n'
+                                                         f'Вам выписан штраф:\n'
+                                                         f'{penalty_text}')

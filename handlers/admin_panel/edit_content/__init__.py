@@ -14,4 +14,5 @@ from . import items
 from . import debuffs
 from . import races
 from . import expeditors
+from . import mandatory_quests
 from . import common
