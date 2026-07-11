@@ -66,6 +66,10 @@ class Registration(metaclass=StateMeta):
     WANT_DAUGHTER = "want_daughter"
     ACCEPT = "accept"
     WAIT = "wait"
+    SECRET_FEATURES = "secret_features"
+    SECRET_BIO = "secret_bio"
+    SECRET_CHARACTER = "secret_character"
+    SECRET_MOTIVES = "secret_motives"
 
 
 class DaughterQuestions(metaclass=StateMeta):
@@ -179,6 +183,7 @@ class Admin(metaclass=StateMeta):
     ID_STATUS = "id_status"
     SELECT_NUMBER_FORM_EDIT = "select_number_form_edit"
     SELECT_NUMBER_FORM = "select_number_form"
+    CABIN_CHAT_ON_DELETE = "cabin_chat_on_delete"
     ART_PRODUCT = "art_product"
     SELECT_ACTION = "select_action"
     QUEST_NAME = "quest_name"
@@ -275,6 +280,7 @@ class Admin(metaclass=StateMeta):
     DEBUFF_PENALTY = 'debuff_penalty'
     DEBUFF_ACTION_TIME = 'debuff_action_time'
     DEBUFF_TIME = 'debuff_time'
+    DEBUFF_POV_EFFECT = 'debuff_pov_effect'
     DEBUFF_DELETE = 'debuff_delete'
     RACE_NAME = 'race_name'
     RACE_BONUS = 'race_bonus'
@@ -300,13 +306,32 @@ class Admin(metaclass=StateMeta):
     CHAT_SETTINGS = 'chat_settings'
     CHAT_SELECT_TYPE = 'chat_select_type'
     CHAT_SET_VISIBLE_MESSAGES_COUNT = 'chat_set_visible_messages_count'
+    BULK_VISIBLE_MESSAGES_COUNT = 'bulk_visible_messages_count'
     CHAT_ADD_PROFESSION = 'chat_add_profession'
     CHAT_DELETE_PROFESSION = 'chat_delete_profession'
     BLACKOUT_SINGLE = 'blackout_single'
+<<<<<<< Updated upstream
     BLACKOUT_PROFESSION = 'blackout_profession'
     BLACKOUT_ALL = 'blackout_all'
     BLACKOUT_ALL_CONFIRM = 'blackout_all_confirm'
     BLACKOUT_REMOVE = 'blackout_remove'
+=======
+    BLACKOUT_SINGLE_REASON = 'blackout_single_reason'
+    BLACKOUT_PROFESSION = 'blackout_profession'
+    BLACKOUT_PROFESSION_REASON = 'blackout_profession_reason'
+    BLACKOUT_ALL = 'blackout_all'
+    BLACKOUT_ALL_CONFIRM = 'blackout_all_confirm'
+    BLACKOUT_REMOVE = 'blackout_remove'
+    CLASSIFIED_PROFESSION = 'classified_profession_id'
+    CLASSIFIED_FRACTION = 'classified_fraction_id'
+    CLASSIFIED_REPUTATION = 'classified_reputation'
+    AUCTION_SELECT_ITEM = 'auction_select_item'
+    AUCTION_TYPE = 'auction_type'
+    AUCTION_START_PRICE = 'auction_start_price'
+    AUCTION_MIN_BID = 'auction_min_bid'
+    AUCTION_START_AT = 'auction_start_at'
+    AUCTION_END_AT = 'auction_end_at'
+>>>>>>> Stashed changes
 
 
 class Judge(metaclass=StateMeta):
@@ -332,6 +357,11 @@ class Judge(metaclass=StateMeta):
     CONSEQUENCES_DATA = 'consequences_data'
     OTHER_CONSEQUENCE = 'other_consequence'
     DELETE_CONSEQUENCES = 'delete_consequences'
+<<<<<<< Updated upstream
+=======
+    FORCE_QUEST_SELECT = 'force_quest_select'
+    FORCE_QUEST_TARGETS = 'force_quest_targets'
+>>>>>>> Stashed changes
 
 class UserState(metaclass=StateMeta):
     # ... существующие состояния ...

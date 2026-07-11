@@ -23,6 +23,10 @@ import service.states
 import service.keyboards as keyboards
 from config import OWNER, ADMINS, BOARD_FORMS_TOPIC_ID, ARCHIVE_FORMS_TOPIC_ID, GROUP_ID, USER_ID
 from service.serializers import fields_content, serialize_target_reward, parse_orientation, fraction_levels, parse_cooldown, FormatDataException, serialize_expeditor_debuffs, serialize_expeditor_items
+<<<<<<< Updated upstream
+=======
+from service.pov_debuffs import apply_debuff_pov_effect, clear_debuff_pov_effects
+>>>>>>> Stashed changes
 
 # Регулярные выражения для поиска упоминаний и ссылок
 mention_regex = re.compile(r"\[(?P<type>id|club|public)(?P<id>\d*)\|(?P<text>.+)\]")
@@ -52,6 +56,33 @@ def get_max_size_url(sizes: List[PhotosPhotoSizes]) -> str:
     return sizes[index].url
 
 
+<<<<<<< Updated upstream
+=======
+async def can_view_classified(form, viewer_id: int) -> bool:
+    """
+    Проверка доступа к засекреченным блокам анкеты (module classified_profiles):
+    видит только сам владелец анкеты, администраторы бота и игроки с допуском
+    (конкретная профессия или связка фракция + уровень репутации)
+    """
+    if viewer_id == form.user_id:
+        return True
+    is_admin = await db.select([db.User.admin]).where(db.User.user_id == viewer_id).gino.scalar()
+    if is_admin:
+        return True
+    if form.classified_profession_id:
+        viewer_profession = await db.select([db.Form.profession]).where(db.Form.user_id == viewer_id).gino.scalar()
+        if viewer_profession and viewer_profession == form.classified_profession_id:
+            return True
+    if form.classified_fraction_id:
+        reputation = await db.select([db.UserToFraction.reputation]).where(and_(
+            db.UserToFraction.user_id == viewer_id, db.UserToFraction.fraction_id == form.classified_fraction_id
+        )).gino.scalar()
+        if reputation is not None and reputation >= (form.classified_reputation or 0):
+            return True
+    return False
+
+
+>>>>>>> Stashed changes
 async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, form_id: int = None, absolute_params: bool = False,
                      photo_group: bool = True) -> Tuple[
     str, Optional[str]]:
@@ -83,16 +114,33 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
         fraction = None
     rep_fraction, reputation = await get_reputation(from_user_id, user_id)
     status = await db.select([db.Status.name]).where(db.Status.id == form.status).gino.scalar()
+<<<<<<< Updated upstream
+=======
+    # Засекреченные блоки анкеты (module classified_profiles) — видны только владельцу,
+    # админам и игрокам с допуском, для всех остальных строки полностью вырезаются
+    can_view_secret = await can_view_classified(form, from_user_id)
+    secret_features = f"\n🔒 Засекречено: {form.secret_features}" if can_view_secret and form.secret_features else ""
+    secret_bio = f"\n🔒 Засекречено: {form.secret_bio}" if can_view_secret and form.secret_bio else ""
+    secret_character = f"\n🔒 Засекречено: {form.secret_character}" if can_view_secret and form.secret_character else ""
+    secret_motives = f"\n🔒 Засекречено: {form.secret_motives}" if can_view_secret and form.secret_motives else ""
+>>>>>>> Stashed changes
     reply = f"Анкета пользователя [id{user_id}|{user.first_name} {user.last_name}]:\n\n" \
             f"Имя персонажа: {form.name}\n" \
             f"Должность: {profession or 'не установлена'}\n" \
             f"Биологический возраст: {form.age} Земных лет\n" \
             f"Рост: {form.height} см\n" \
             f"Вес: {form.weight} кг\n" \
+<<<<<<< Updated upstream
             f"Физиологические особенности: {form.features}\n" \
             f"Биография: {form.bio or 'не указана'}\n" \
             f"Харарктер: {form.character or 'не указан'}\n" \
             f"Мотивы нахождения на Space station: {form.motives or 'не указаны'}\n" \
+=======
+            f"Физиологические особенности: {form.features}{secret_features}\n" \
+            f"Биография: {form.bio or 'не указана'}{secret_bio}\n" \
+            f"Харарктер: {form.character or 'не указан'}{secret_character}\n" \
+            f"Мотивы нахождения на Space station: {form.motives or 'не указаны'}{secret_motives}\n" \
+>>>>>>> Stashed changes
             f"Сексуальная ориентация: {parse_orientation(form.orientation)}\n" \
             f"Фетиши: {form.fetishes or 'не указаны'}\n" \
             f"Табу: {form.taboo or 'не указаны'}\n" \
@@ -1373,6 +1421,10 @@ async def wait_disable_debuff(row_id: int):
     user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
     item_name = await db.select([db.StateDebuff.name]).where(db.StateDebuff.id == row.debuff_id).gino.scalar()
     await db.ExpeditorToDebuffs.delete.where(db.ExpeditorToDebuffs.id == row_id).gino.status()
+<<<<<<< Updated upstream
+=======
+    await clear_debuff_pov_effects(row.expeditor_id, [row.debuff_id])
+>>>>>>> Stashed changes
     await bot.api.messages.send(peer_id=user_id, message=f'Закончилось время действия дебафа «{item_name}»', is_notification=True)
 
 
@@ -1649,17 +1701,36 @@ async def apply_consequences(action_id: int, con_var: int):
         match type:
             case 'add_debuff':
                 debuff_id = con['debuff_id']
+<<<<<<< Updated upstream
                 await db.ExpeditorToDebuffs.create(expeditor_id=expeditor_id, debuff_id=debuff_id)
             case 'delete_debuff':
                 row_id = con['row_id']
                 await db.ExpeditorToDebuffs.delete.where(db.ExpeditorToDebuffs.id == row_id).gino.status()
+=======
+                row = await db.ExpeditorToDebuffs.create(expeditor_id=expeditor_id, debuff_id=debuff_id)
+                asyncio.get_event_loop().create_task(wait_disable_debuff(row.id))
+                await apply_debuff_pov_effect(expeditor_id, debuff_id)
+            case 'delete_debuff':
+                row_id = con['row_id']
+                removed_debuff_id = await db.select([db.ExpeditorToDebuffs.debuff_id]).where(db.ExpeditorToDebuffs.id == row_id).gino.scalar()
+                await db.ExpeditorToDebuffs.delete.where(db.ExpeditorToDebuffs.id == row_id).gino.status()
+                await clear_debuff_pov_effects(expeditor_id, [removed_debuff_id])
+>>>>>>> Stashed changes
             case 'delete_debuff_type':
                 debuff_type_id = con['debuff_type_id']
                 debuff_ids = [x[0] for x in await db.select([db.ExpeditorToDebuffs.debuff_id]).where(db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()]
                 debuff_ids = [x[0] for x in await db.select([db.StateDebuff.id]).where(and_(db.StateDebuff.type_id == debuff_type_id, db.StateDebuff.id.in_(debuff_ids))).gino.all()]
                 await db.ExpeditorToDebuffs.delete.where(and_(db.ExpeditorToDebuffs.debuff_id.in_(debuff_ids), db.ExpeditorToDebuffs.expeditor_id == expeditor_id)).gino.status()
+<<<<<<< Updated upstream
             case 'delete_all_debuffs':
                 await db.ExpeditorToDebuffs.delete.where(db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.status()
+=======
+                await clear_debuff_pov_effects(expeditor_id, debuff_ids)
+            case 'delete_all_debuffs':
+                removed_debuff_ids = [x[0] for x in await db.select([db.ExpeditorToDebuffs.debuff_id]).where(db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()]
+                await db.ExpeditorToDebuffs.delete.where(db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.status()
+                await clear_debuff_pov_effects(expeditor_id, removed_debuff_ids)
+>>>>>>> Stashed changes
             case 'add_libido':
                 bonus = con['bonus']
                 current = await db.select([db.Form.libido_level]).where(db.Form.user_id == user_id).gino.scalar()
@@ -1728,6 +1799,7 @@ async def apply_item(row_id: int):
                 if bonus['action'] == 'add':
                     row = await db.ExpeditorToDebuffs.create(expeditor_id=expeditor_id, debuff_id=debuff_id)
                     asyncio.get_event_loop().create_task(wait_disable_debuff(row.id))
+<<<<<<< Updated upstream
                 else:
                     await db.ExpeditorToDebuffs.delete.where(and_(db.ExpeditorToDebuffs.expeditor_id == expeditor_id, db.ExpeditorToDebuffs.debuff_id == debuff_id)).gino.status()
             elif bonus.get('action', '') == 'delete_type':
@@ -1738,6 +1810,25 @@ async def apply_item(row_id: int):
                 await db.ExpeditorToDebuffs.delete.where(db.ExpeditorToDebuffs.id.in_(row_ids)).gino.status()
             elif bonus['action'] == 'delete_all':
                 await db.ExpeditorToDebuffs.delete.where(db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()
+=======
+                    await apply_debuff_pov_effect(expeditor_id, debuff_id)
+                else:
+                    await db.ExpeditorToDebuffs.delete.where(and_(db.ExpeditorToDebuffs.expeditor_id == expeditor_id, db.ExpeditorToDebuffs.debuff_id == debuff_id)).gino.status()
+                    await clear_debuff_pov_effects(expeditor_id, [debuff_id])
+            elif bonus.get('action', '') == 'delete_type':
+                type_id = bonus['type_id']
+                rows = await db.select([db.ExpeditorToDebuffs.id, db.ExpeditorToDebuffs.debuff_id]).select_from(
+                    db.ExpeditorToDebuffs.join(db.StateDebuff, db.ExpeditorToDebuffs.debuff_id == db.StateDebuff.id)
+                ).where(and_(db.ExpeditorToItems.expeditor_id == expeditor_id), db.StateDebuff.type_id == type_id).gino.all()
+                row_ids = [x[0] for x in rows]
+                removed_debuff_ids = [x[1] for x in rows]
+                await db.ExpeditorToDebuffs.delete.where(db.ExpeditorToDebuffs.id.in_(row_ids)).gino.status()
+                await clear_debuff_pov_effects(expeditor_id, removed_debuff_ids)
+            elif bonus['action'] == 'delete_all':
+                removed_debuff_ids = [x[0] for x in await db.select([db.ExpeditorToDebuffs.debuff_id]).where(db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()]
+                await db.ExpeditorToDebuffs.delete.where(db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()
+                await clear_debuff_pov_effects(expeditor_id, removed_debuff_ids)
+>>>>>>> Stashed changes
         elif bonus['type'] == 'sex_state':
             if bonus.get('action', '') == 'set_pregnant':
                 text = bonus['text']
@@ -1772,6 +1863,92 @@ async def count_daughter_params(user_id: int) -> tuple[int, int]:
     return libido, subordination
 
 
+<<<<<<< Updated upstream
+=======
+async def get_available_target_ids(quest, user_id: int) -> List[int]:
+    """
+    Получает список доступных дополнительных целей для квеста
+    с учетом характеристик пользователя
+    """
+    if not quest.target_ids:
+        return []
+
+    # Получаем данные анкеты пользователя
+    form = await db.select([*db.Form]).where(db.Form.user_id == user_id).gino.first()
+    libido_level, subordination_level = await count_daughter_params(user_id)
+
+    allowed_target_ids = []
+
+    # Проверяем каждую цель на доступность
+    for target_id in quest.target_ids:
+        target = await db.AdditionalTarget.get(target_id)
+
+        # Если цель доступна всем пользователям
+        if target.for_all_users:
+            allowed_target_ids.append(target_id)
+            continue
+
+        # Проверка репутации во фракции
+        if target.fraction_reputation and target.reputation:
+            reputation = await db.select([db.UserToFraction.reputation]).where(
+                and_(db.UserToFraction.fraction_id == target.fraction_reputation,
+                     db.UserToFraction.user_id == user_id)
+            ).gino.scalar()
+            if reputation >= target.reputation:
+                allowed_target_ids.append(target_id)
+                continue
+
+        # Проверка принадлежности к фракции
+        if target.fraction and target.fraction == form.fraction_id:
+            allowed_target_ids.append(target_id)
+            continue
+
+        # Проверка профессии
+        if target.profession and target.profession == form.profession:
+            allowed_target_ids.append(target_id)
+            continue
+
+        # Проверка параметров дочери (для специальных квестов)
+        if target.daughter_params and form.status == 2:
+            libido, subordination, word = target.daughter_params
+            # word определяет логику И/ИЛИ для проверки параметров
+            if word and (libido_level >= libido or subordination_level >= subordination):  # ИЛИ
+                allowed_target_ids.append(target_id)
+                continue
+            if not word and (libido_level >= libido and subordination_level >= subordination):  # И
+                allowed_target_ids.append(target_id)
+                continue
+
+        # Проверка конкретных анкет
+        if target.forms and form.id in target.forms:
+            allowed_target_ids.append(target_id)
+            continue
+
+    return allowed_target_ids
+
+
+async def force_assign_quest(quest_id: int, form_id: int, user_id: int) -> bool:
+    """
+    Принудительно выдаёт квест игроку так же, как если бы он взял его сам через send_quest_page/take_quest
+    (module admin_improvements, п.7 и п.9). Возвращает False, если квест этому игроку уже выдан.
+    """
+    already = await db.select([db.QuestToForm.id]).where(
+        and_(db.QuestToForm.quest_id == quest_id, db.QuestToForm.form_id == form_id)
+    ).gino.scalar()
+    if already:
+        return False
+    quest = await db.Quest.get(quest_id)
+    target_ids = await get_available_target_ids(quest, user_id)
+    started_at = datetime.datetime.now()
+    await db.QuestToForm.create(quest_id=quest_id, quest_start=started_at, active_targets=target_ids, form_id=form_id)
+    await db.QuestHistory.create(quest_id=quest_id, form_id=form_id)
+    cooldown = calculate_time(quest, started_at)
+    if cooldown:
+        asyncio.get_event_loop().create_task(quest_over(cooldown, form_id, quest_id))
+    return True
+
+
+>>>>>>> Stashed changes
 async def move_user(user_id: int, chat_id: int):
     """
     Перемещает пользователя из одного чата в другой
@@ -1829,6 +2006,26 @@ async def move_user(user_id: int, chat_id: int):
                                     keyboard=await keyboards.main_menu(user_id), peer_id=user_id)
 
 
+<<<<<<< Updated upstream
+=======
+async def grant_chat_moderator_rights(user_id: int):
+    """
+    Выдаёт пользователю права модератора (admin) во всех зарегистрированных чатах-локациях.
+    Вызывается при назначении роли администратора/судьи бота (module admin_improvements, п.3).
+    Каждый чат обрабатывается независимо — сбой в одном чате (например, бот там ещё не админ)
+    не должен мешать выдаче прав в остальных.
+    """
+    chat_ids = [x[0] for x in await db.select([db.Chat.chat_id]).where(db.Chat.chat_id.isnot(None)).gino.all()]
+    for chat_id in chat_ids:
+        try:
+            await bot.api.request('messages.setMemberRole', {
+                'peer_id': chat_id + 2000000000, 'member_id': user_id, 'role': 'admin',
+            })
+        except Exception:
+            pass
+
+
+>>>>>>> Stashed changes
 async def remove_user_from_all_chats(user_id: int) -> List[int]:
     """
     Максимально "жёстко" выводит пользователя из всех чатов-локаций.
@@ -1877,13 +2074,96 @@ async def create_cabin_chat(user_id: int):
                                                                                  'change_style': 'owner_and_admins',
                                                                                  'use_mass_mentions': 'owner_and_admins'})
     await asyncio.sleep(0.5)
+<<<<<<< Updated upstream
     await db.Chat.create(is_private=True, visible_messages=10, cabin_user_id=user_id, user_chat_id=response.chat_id, chat_id=None)
+=======
+    await db.Chat.create(is_private=True, visible_messages=10, cabin_user_id=user_id, user_chat_id=response.chat_id,
+                         chat_id=None, cabin_number=cabin_number)
+>>>>>>> Stashed changes
     message = await user_bot.api.messages.send(message=f'/каюта {cabin_number}', peer_id=response.chat_id + 2000000000,
                                            random_id=0)
     await asyncio.sleep(0.5)
     await user_bot.api.messages.delete(message_ids=[message], delete_for_all=True)
 
 
+<<<<<<< Updated upstream
+=======
+async def register_or_create_cabin_chat(user_id: int):
+    """
+    Регистрирует пользователя в чате каюты (module admin_improvements, п.8): если чат для
+    указанного номера каюты уже был создан ранее (например, каюта освобождена/архивирована
+    после удаления предыдущего жильца — см. archive_or_delete_cabin_chat), переиспользует его
+    вместо создания дубликата. Иначе создаёт новый чат как обычно (create_cabin_chat).
+    """
+    cabin_number = await db.select([db.Form.cabin]).where(db.Form.user_id == user_id).gino.scalar()
+    existing = await db.select([db.Chat.chat_id, db.Chat.user_chat_id]).where(
+        db.Chat.cabin_number == cabin_number).gino.first()
+    if not existing:
+        await create_cabin_chat(user_id)
+        return
+
+    chat_id, user_chat_id = existing
+    await db.Chat.update.values(cabin_user_id=user_id).where(db.Chat.cabin_number == cabin_number).gino.status()
+    try:
+        if user_chat_id:
+            await user_bot.api.messages.edit_chat(chat_id=user_chat_id,
+                                                  title=f'RP Among Us Каюта/Кельи № {cabin_number}')
+            await user_bot.api.messages.add_chat_user(chat_id=user_chat_id, user_id=user_id)
+            await user_bot.api.messages.send(
+                peer_id=user_chat_id + 2000000000,
+                message=f'Каюта передана новому жильцу: {await create_mention(user_id)}',
+                random_id=0,
+            )
+    except Exception:
+        pass
+
+
+async def archive_or_delete_cabin_chat(user_id: int, archive: bool):
+    """
+    Обрабатывает чат каюты при удалении анкеты персонажа (module admin_improvements, п.4).
+    Вызывать ДО удаления db.User/db.Form (иначе имя персонажа и сам чат каюты будут недоступны).
+
+    archive=True: чат переименовывается в архивный, в чат отправляется сообщение о том, кто здесь жил,
+    сама каюта отвязывается от пользователя, но чат остаётся.
+    archive=False: все участники выводятся из чата, запись о чате полностью удаляется из БД.
+    """
+    chat_id, user_chat_id, cabin_number = await db.select(
+        [db.Chat.chat_id, db.Chat.user_chat_id, db.Chat.cabin_number]
+    ).where(db.Chat.cabin_user_id == user_id).gino.first() or (None, None, None)
+    if not user_chat_id and not chat_id:
+        return
+    name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
+
+    if archive:
+        title = f"Архив: каюта №{cabin_number} (был(а) [id{user_id}|{name or user_id}])"
+        try:
+            if user_chat_id:
+                await user_bot.api.messages.edit_chat(chat_id=user_chat_id, title=title)
+                await user_bot.api.messages.send(
+                    peer_id=user_chat_id + 2000000000,
+                    message=f"📦 Эта каюта архивирована. Ранее здесь проживал(а): [id{user_id}|{name or user_id}]",
+                    random_id=0,
+                )
+        except Exception:
+            pass
+        await db.Chat.update.values(cabin_user_id=None).where(db.Chat.cabin_user_id == user_id).gino.status()
+    else:
+        try:
+            if user_chat_id:
+                members = (await user_bot.api.messages.get_conversation_members(
+                    peer_id=user_chat_id + 2000000000)).items
+                for member in members:
+                    if member.member_id > 0:
+                        try:
+                            await user_bot.api.messages.remove_chat_user(chat_id=user_chat_id, user_id=member.member_id)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        await db.Chat.delete.where(db.Chat.cabin_user_id == user_id).gino.status()
+
+
+>>>>>>> Stashed changes
 async def update_daughter_levels(user_id: int, libido_level: int | None = None, subordination_level: int | None = None):
     """
     Функция обновляет параметры дочерей и отсылает информацию о том, что параметры пришли к нулю

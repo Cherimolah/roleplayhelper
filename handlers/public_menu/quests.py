@@ -20,71 +20,9 @@ from service.custom_rules import StateRule
 from service.states import Menu
 from service.db_engine import db
 from service.utils import get_current_form_id, parse_cooldown, quest_over, calculate_time, serialize_target_reward, \
-    count_daughter_params
+    count_daughter_params, get_available_target_ids
 from service.middleware import states
 from config import ADMINS, OWNER, DATETIME_FORMAT
-
-
-async def get_available_target_ids(quest: db.Quest, user_id: int) -> List[int]:
-    """
-    Получает список доступных дополнительных целей для квеста
-    с учетом характеристик пользователя
-    """
-    if not quest.target_ids:
-        return []
-
-    # Получаем данные анкеты пользователя
-    form = await db.select([*db.Form]).where(db.Form.user_id == user_id).gino.first()
-    libido_level, subordination_level = await count_daughter_params(user_id)
-
-    allowed_target_ids = []
-
-    # Проверяем каждую цель на доступность
-    for target_id in quest.target_ids:
-        target = await db.AdditionalTarget.get(target_id)
-
-        # Если цель доступна всем пользователям
-        if target.for_all_users:
-            allowed_target_ids.append(target_id)
-            continue
-
-        # Проверка репутации во фракции
-        if target.fraction_reputation and target.reputation:
-            reputation = await db.select([db.UserToFraction.reputation]).where(
-                and_(db.UserToFraction.fraction_id == target.fraction_reputation,
-                     db.UserToFraction.user_id == user_id)
-            ).gino.scalar()
-            if reputation >= target.reputation:
-                allowed_target_ids.append(target_id)
-                continue
-
-        # Проверка принадлежности к фракции
-        if target.fraction and target.fraction == form.fraction_id:
-            allowed_target_ids.append(target_id)
-            continue
-
-        # Проверка профессии
-        if target.profession and target.profession == form.profession:
-            allowed_target_ids.append(target_id)
-            continue
-
-        # Проверка параметров дочери (для специальных квестов)
-        if target.daughter_params and form.status == 2:
-            libido, subordination, word = target.daughter_params
-            # word определяет логику И/ИЛИ для проверки параметров
-            if word and (libido_level >= libido or subordination_level >= subordination):  # ИЛИ
-                allowed_target_ids.append(target_id)
-                continue
-            if not word and (libido_level >= libido and subordination_level >= subordination):  # И
-                allowed_target_ids.append(target_id)
-                continue
-
-        # Проверка конкретных анкет
-        if target.forms and form.id in target.forms:
-            allowed_target_ids.append(target_id)
-            continue
-
-    return allowed_target_ids
 
 
 async def view_quest(quest: db.Quest, user_id: int, quest_active: bool = False) -> Tuple[str, Keyboard]:

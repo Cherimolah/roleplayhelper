@@ -14,7 +14,7 @@ from service.custom_rules import AdminRule, StateRule
 from service.middleware import states
 from service.states import Admin
 from service.db_engine import db
-from service.utils import get_mention_from_message
+from service.utils import get_mention_from_message, grant_chat_moderator_rights
 from handlers.admin_panel.users_list import send_administrators
 
 
@@ -53,6 +53,7 @@ async def add_new_admin(m: Message):
     """Добавление нового администратора"""
     user_id = m.payload['new_admin']
     await db.User.update.values(admin=1).where(db.User.user_id == int(user_id)).gino.status()
+    await grant_chat_moderator_rights(int(user_id))
     states.set(m.from_id, Admin.SELECT_MANAGE_ADMINS)
     user = await bot.api.users.get(user_id)
     await m.answer(messages.new_admin.format(f"[id{user[0].id}|{user[0].first_name} {user[0].last_name}]"))
@@ -132,6 +133,7 @@ async def create_new_judge(m: Message):
     """Добавление нового судьи"""
     user_id = m.payload['new_judge']
     await db.User.update.values(judge=True).where(db.User.user_id == user_id).gino.status()
+    await grant_chat_moderator_rights(user_id)
     name = await db.select([db.Form.name]).where(db.User.user_id == user_id).gino.scalar()
     user = (await bot.api.users.get(user_id))[0]
     await m.answer(f'Вы выдали права судьи пользователю [id{user_id}|{name} / {user.first_name} {user.last_name}]')

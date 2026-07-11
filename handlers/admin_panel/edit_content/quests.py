@@ -2,20 +2,22 @@ import datetime
 
 from vkbottle.bot import Message
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
+from vkbottle.dispatch.rules.abc import OrRule
 from vkbottle import Keyboard, Text, KeyboardButtonColor
 
 import service.keyboards as keyboards
 from loader import bot
-from service.custom_rules import AdminRule, StateRule, NumericRule
+from service.custom_rules import AdminRule, JudgeRule, StateRule, NumericRule
 from service.middleware import states
 from service.states import Admin
 from service.db_engine import db
-from service.utils import parse_period, send_content_page, allow_edit_content, FormatDataException, parse_ids
+from service.utils import parse_period, send_content_page, allow_edit_content, FormatDataException, parse_ids, \
+    force_assign_quest
 from service.serializers import info_quest_penalty, parse_reward, info_target_reward
 from config import DATETIME_FORMAT
 
 
-@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Quest"), PayloadRule({"Quest": "add"}), AdminRule())
+@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Quest"), PayloadRule({"Quest": "add"}), OrRule(AdminRule(), JudgeRule()))
 async def create_quest(m: Message):
     """Начало создания квеста"""
     quest = await db.Quest.create()
@@ -23,7 +25,7 @@ async def create_quest(m: Message):
     await m.answer("Напишите название квеста", keyboard=Keyboard())
 
 
-@bot.on.private_message(StateRule(Admin.QUEST_NAME), AdminRule())
+@bot.on.private_message(StateRule(Admin.QUEST_NAME), OrRule(AdminRule(), JudgeRule()))
 @allow_edit_content("Quest", state=Admin.QUEST_DESCRIPTION,
                     text="Название квеста установлено. Теперь пришлите описание квеста")
 async def name_quest(m: Message, item_id: int, editing_content: bool):
@@ -31,7 +33,7 @@ async def name_quest(m: Message, item_id: int, editing_content: bool):
     await db.Quest.update.values(name=m.text).where(db.Quest.id == item_id).gino.status()
 
 
-@bot.on.private_message(StateRule(Admin.QUEST_DESCRIPTION), AdminRule())
+@bot.on.private_message(StateRule(Admin.QUEST_DESCRIPTION), OrRule(AdminRule(), JudgeRule()))
 @allow_edit_content("Quest", state=Admin.QUEST_REWARD)
 async def description_quest(m: Message, item_id: int, editing_content: bool):
     """Установка описания квеста"""
@@ -40,7 +42,7 @@ async def description_quest(m: Message, item_id: int, editing_content: bool):
         await m.answer("Укажите награду для квеста\n\n" + (await info_target_reward())[0])
 
 
-@bot.on.private_message(StateRule(Admin.QUEST_REWARD), AdminRule())
+@bot.on.private_message(StateRule(Admin.QUEST_REWARD), OrRule(AdminRule(), JudgeRule()))
 @allow_edit_content("Quest", state=Admin.QUEST_START_DATE,
                     text="Награда за квест установлена. Укажите дату и время начала квеста в формате "
                          "ДД.ММ.ГГГГ чч:мм:сс")
@@ -50,7 +52,7 @@ async def reward_quest(m: Message, item_id: int, editing_content: bool):
     await db.Quest.update.values(reward=data).where(db.Quest.id == item_id).gino.status()
 
 
-@bot.on.private_message(StateRule(Admin.QUEST_START_DATE), AdminRule())
+@bot.on.private_message(StateRule(Admin.QUEST_START_DATE), OrRule(AdminRule(), JudgeRule()))
 @allow_edit_content("Quest", state=Admin.QUEST_END_DATE, text="Дата начала установлена. Укажите дату и время окончания квеста в формате "
                    "ДД.ММ.ГГГГ чч:мм:сс", keyboard=Keyboard().add(
         Text("Навсегда", {"quest_always": True})
@@ -69,7 +71,7 @@ async def start_date_quest(m: Message, item_id: int, editing_content: bool):
     await db.Quest.update.values(start_at=day).where(db.Quest.id == item_id).gino.status()
 
 
-@bot.on.private_message(StateRule(Admin.QUEST_END_DATE), PayloadRule({"quest_always": True}), AdminRule())
+@bot.on.private_message(StateRule(Admin.QUEST_END_DATE), PayloadRule({"quest_always": True}), OrRule(AdminRule(), JudgeRule()))
 @allow_edit_content("Quest", state=Admin.QUEST_EXECUTION_TIME, text="Время окончание квеста установлено. Теперь напишите время, которое будет даваться "
                    "на выполнение квеста. Например: 2 дня 1 час 32 сек", keyboard=Keyboard().add(
         Text("Бессрочно", {"quest_forever": True})
@@ -79,7 +81,7 @@ async def set_quest_always(m: Message, item_id: int, editing_content: bool):
     await db.Quest.update.values(closed_at=None).where(db.Quest.id == item_id).gino.status()
 
 
-@bot.on.private_message(StateRule(Admin.QUEST_END_DATE), AdminRule())
+@bot.on.private_message(StateRule(Admin.QUEST_END_DATE), OrRule(AdminRule(), JudgeRule()))
 @allow_edit_content("Quest", state=Admin.QUEST_EXECUTION_TIME, text="Время окончание квеста установлено. Теперь напишите время, которое будет даваться "
                    "на выполнение квеста. Например: 2 дня 1 час 32 сек", keyboard=Keyboard().add(
         Text("Бессрочно", {"quest_forever": True})
@@ -98,7 +100,11 @@ async def end_date_quest(m: Message, item_id: int, editing_content: bool):
     await db.Quest.update.values(closed_at=day).where(db.Quest.id == item_id).gino.status()
 
 
+<<<<<<< Updated upstream
 @bot.on.private_message(StateRule(Admin.QUEST_EXECUTION_TIME), PayloadMapRule({"quest_forever": bool}), AdminRule())
+=======
+@bot.on.private_message(StateRule(Admin.QUEST_EXECUTION_TIME), PayloadMapRule({"quest_forever": bool}), OrRule(AdminRule(), JudgeRule()))
+>>>>>>> Stashed changes
 @allow_edit_content("Quest", text="Пришлите ссылки на участников для которых будет распространяться квест",
                     state=Admin.QUEST_USERS_ALLOWED,
                     keyboard=Keyboard().add(Text('Без ограничений по игрокам', {"quest_for_all": True}),
@@ -108,7 +114,11 @@ async def quest_forever(m: Message, item_id: int, editing_content: bool):
     await db.Quest.update.values(execution_time=None).where(db.Quest.id == item_id).gino.status()
 
 
+<<<<<<< Updated upstream
 @bot.on.private_message(StateRule(Admin.QUEST_EXECUTION_TIME), AdminRule())
+=======
+@bot.on.private_message(StateRule(Admin.QUEST_EXECUTION_TIME), OrRule(AdminRule(), JudgeRule()))
+>>>>>>> Stashed changes
 @allow_edit_content("Quest", text="Пришлите ссылки на участников для которых будет распространяться квест",
                     state=Admin.QUEST_USERS_ALLOWED,
                     keyboard=Keyboard().add(Text('Без ограничений по игрокам', {"quest_for_all": True}),
@@ -124,7 +134,7 @@ async def quest_expiration_time(m: Message, item_id: int, editing_content: bool)
     await db.Quest.update.values(execution_time=seconds).where(db.Quest.id == item_id).gino.scalar()
 
 
-@bot.on.private_message(StateRule(Admin.QUEST_USERS_ALLOWED), PayloadRule({"quest_for_all": True}), AdminRule())
+@bot.on.private_message(StateRule(Admin.QUEST_USERS_ALLOWED), PayloadRule({"quest_for_all": True}), OrRule(AdminRule(), JudgeRule()))
 @allow_edit_content('Quest', state=Admin.QUEST_FRACTION_ALLOWED)
 async def quest_users_all_allowed(m: Message, item_id: int, editing_content: bool):
     """Разрешение квеста для всех пользователей"""
@@ -141,7 +151,7 @@ async def quest_users_all_allowed(m: Message, item_id: int, editing_content: boo
         await m.answer(reply, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.QUEST_USERS_ALLOWED), AdminRule())
+@bot.on.private_message(StateRule(Admin.QUEST_USERS_ALLOWED), OrRule(AdminRule(), JudgeRule()))
 @allow_edit_content('Quest', state=Admin.QUEST_FRACTION_ALLOWED)
 async def quest_users_allowed(m: Message, item_id: int, editing_content: bool):
     """Установка ограничений по пользователям для квеста"""
@@ -164,7 +174,7 @@ async def quest_users_allowed(m: Message, item_id: int, editing_content: bool):
         await m.answer(reply, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.QUEST_FRACTION_ALLOWED), PayloadRule({"quest_for_all_fractions": True}), AdminRule())
+@bot.on.private_message(StateRule(Admin.QUEST_FRACTION_ALLOWED), PayloadRule({"quest_for_all_fractions": True}), OrRule(AdminRule(), JudgeRule()))
 @allow_edit_content('Quest', state=Admin.QUEST_PROFESSION_ALLOWED)
 async def quest_fraction_all_allowed(m: Message, item_id: int, editing_content: bool):
     """Разрешение квеста для всех фракций"""
@@ -181,7 +191,7 @@ async def quest_fraction_all_allowed(m: Message, item_id: int, editing_content: 
         await m.answer(reply, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.QUEST_FRACTION_ALLOWED), NumericRule(), AdminRule())
+@bot.on.private_message(StateRule(Admin.QUEST_FRACTION_ALLOWED), NumericRule(), OrRule(AdminRule(), JudgeRule()))
 @allow_edit_content('Quest', state=Admin.QUEST_PROFESSION_ALLOWED)
 async def quest_fractions_allowed(m: Message, value: int, item_id: int, editing_content: bool):
     """Установка ограничения по фракциям для квеста"""
@@ -203,7 +213,7 @@ async def quest_fractions_allowed(m: Message, value: int, item_id: int, editing_
         await m.answer(reply, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.QUEST_PROFESSION_ALLOWED), PayloadRule({"quest_for_all_professions": True}), AdminRule())
+@bot.on.private_message(StateRule(Admin.QUEST_PROFESSION_ALLOWED), PayloadRule({"quest_for_all_professions": True}), OrRule(AdminRule(), JudgeRule()))
 @allow_edit_content('Quest', state=Admin.QUEST_ADDITIONAL_TARGETS)
 async def quest_allow_all_professions(m: Message, item_id: int, editing_content: bool):
     """Разрешение квеста для всех профессий"""
@@ -219,7 +229,7 @@ async def quest_allow_all_professions(m: Message, item_id: int, editing_content:
         await m.answer(reply, keyboard=Keyboard().add(Text('Без дополнительных целей', {"quest_without_targets": True})))
 
 
-@bot.on.private_message(StateRule(Admin.QUEST_PROFESSION_ALLOWED), NumericRule(), AdminRule())
+@bot.on.private_message(StateRule(Admin.QUEST_PROFESSION_ALLOWED), NumericRule(), OrRule(AdminRule(), JudgeRule()))
 @allow_edit_content('Quest', state=Admin.QUEST_ADDITIONAL_TARGETS)
 async def quest_allow_professions(m: Message, value: int, item_id: int, editing_content: bool):
     """Установка ограничения по профессиям для квеста"""
@@ -241,7 +251,7 @@ async def quest_allow_professions(m: Message, value: int, item_id: int, editing_
                        keyboard=Keyboard().add(Text('Без дополнительных целей', {"quest_without_targets": True})))
 
 
-@bot.on.private_message(StateRule(Admin.QUEST_ADDITIONAL_TARGETS), PayloadRule({"quest_without_targets": True}), AdminRule())
+@bot.on.private_message(StateRule(Admin.QUEST_ADDITIONAL_TARGETS), PayloadRule({"quest_without_targets": True}), OrRule(AdminRule(), JudgeRule()))
 @allow_edit_content('Quest', state=Admin.QUEST_PENALTY)
 async def quest_without_targets(m: Message, item_id: int, editing_content: bool):
     """Создание квеста без дополнительных целей"""
@@ -251,7 +261,7 @@ async def quest_without_targets(m: Message, item_id: int, editing_content: bool)
         await m.answer("Укажите штраф для квеста\n\n" + reply, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.QUEST_ADDITIONAL_TARGETS), AdminRule())
+@bot.on.private_message(StateRule(Admin.QUEST_ADDITIONAL_TARGETS), OrRule(AdminRule(), JudgeRule()))
 @allow_edit_content('Quest', state=Admin.QUEST_PENALTY)
 async def quest_additional_targets(m: Message, item_id: int, editing_content: bool):
     """Добавление дополнительных целей к квесту"""
@@ -267,22 +277,50 @@ async def quest_additional_targets(m: Message, item_id: int, editing_content: bo
         await m.answer("Укажите штраф для квеста\n\n" + reply, keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.QUEST_PENALTY), PayloadRule({"without_penalty": True}), AdminRule())
+@bot.on.private_message(StateRule(Admin.QUEST_PENALTY), PayloadRule({"without_penalty": True}), OrRule(AdminRule(), JudgeRule()))
 @allow_edit_content('Quest', end=True, text='Квест успешно создан')
 async def quest_without_penalty(m: Message, item_id: int, editing_content: bool):
     """Создание квеста без штрафа"""
     await db.Quest.update.values(penalty=None).where(db.Quest.id == item_id).gino.status()
+    if not editing_content:
+        await assign_forced_quest_targets(item_id)
 
 
-@bot.on.private_message(StateRule(Admin.QUEST_PENALTY), AdminRule())
+@bot.on.private_message(StateRule(Admin.QUEST_PENALTY), OrRule(AdminRule(), JudgeRule()))
 @allow_edit_content('Quest', end=True, text='Квест успешно создан')
 async def quest_without_penalty(m: Message, item_id: int, editing_content: bool):
     """Установка штрафа для квеста"""
     data = await parse_reward(m.text.lower())
     await db.Quest.update.values(penalty=data).where(db.Quest.id == item_id).gino.status()
+    if not editing_content:
+        await assign_forced_quest_targets(item_id)
 
 
-@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Quest"), PayloadRule({"Quest": "delete"}), AdminRule())
+async def assign_forced_quest_targets(quest_id: int):
+    """
+    Если квест был создан через [выдать задачу @user1, @user2 "..."] (module admin_improvements, п.9),
+    после завершения мастера настройки принудительно выдаёт его указанным при создании игрокам.
+    """
+    quest = await db.Quest.get(quest_id)
+    if not quest.force_assign_forms:
+        return
+    for form_id in quest.force_assign_forms:
+        user_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
+        if not user_id:
+            continue
+        if await force_assign_quest(quest_id, form_id, user_id):
+            try:
+                await bot.api.messages.send(
+                    peer_id=user_id,
+                    message=f'⚔ Вам принудительно выдан квест «{quest.name}»',
+                    random_id=0,
+                    is_notification=True,
+                )
+            except Exception:
+                pass
+
+
+@bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_Quest"), PayloadRule({"Quest": "delete"}), OrRule(AdminRule(), JudgeRule()))
 async def select_delete_quest(m: Message):
     """Выбор квеста для удаления"""
     quests = await db.select([db.Quest.name]).order_by(db.Quest.id.asc()).gino.all()
@@ -295,7 +333,7 @@ async def select_delete_quest(m: Message):
     await m.answer(reply, keyboard=Keyboard())
 
 
-@bot.on.private_message(StateRule(Admin.QUEST_DELETE), NumericRule(), AdminRule())
+@bot.on.private_message(StateRule(Admin.QUEST_DELETE), NumericRule(), OrRule(AdminRule(), JudgeRule()))
 async def delete_quest(m: Message, value: int):
     """Удаление выбранного квеста и связанных данных"""
     quest_id = await db.select([db.Quest.id]).order_by(db.Quest.id.asc()).offset(value - 1).limit(1).gino.scalar()

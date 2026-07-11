@@ -11,6 +11,10 @@ from loader import bot, user_bot
 import handlers  # Important
 from service.db_engine import db
 from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity, timer_daughter_levels, calculate_time, wait_users_post, wait_take_off_item, wait_disable_debuff
+<<<<<<< Updated upstream
+=======
+from service.auctions import schedule_auction
+>>>>>>> Stashed changes
 from config import (
     ADMINS,
     ARCHIVE_FORMS_TOPIC_ID,
@@ -72,6 +76,13 @@ async def on_startup():
     for debuff_id in debuff_ids:
         asyncio.get_event_loop().create_task(wait_disable_debuff(debuff_id))
 
+<<<<<<< Updated upstream
+=======
+    auction_ids = [x[0] for x in await db.select([db.Auction.id]).where(db.Auction.is_finished.is_(False)).gino.all()]
+    for auction_id in auction_ids:
+        asyncio.get_event_loop().create_task(schedule_auction(auction_id))
+
+>>>>>>> Stashed changes
     # Закрываем топики (если включено в конфиге)
     if CLOSE_BOARD_TOPICS_ON_STARTUP:
         await user_bot.api.request('board.closeTopic', {'group_id': abs(GROUP_ID), 'topic_id': BOARD_FORMS_TOPIC_ID})

@@ -107,6 +107,12 @@ admin_menu = Keyboard().add(
 ).row().add(
     Text("Рассылки и опросы", {"admin_menu": "mailing"}), KeyboardButtonColor.PRIMARY
 ).row().add(
+    Text("POV режим", {"admin_menu": "pov_mode"}), KeyboardButtonColor.SECONDARY
+).add(
+    Text("Массовый лимит сообщений в чатах", {"admin_menu": "bulk_chat_settings"}), KeyboardButtonColor.SECONDARY
+).row().add(
+    Text("Аукционы", {"admin_menu": "auctions"}), KeyboardButtonColor.PRIMARY
+).row().add(
     Text("В главное меню", {"admin_menu": "back"}), KeyboardButtonColor.NEGATIVE
 )
 
@@ -413,6 +419,10 @@ judge_menu = Keyboard().add(
     Text('Предметы карты экспедитора', {'edit_content': 'Item'}), KeyboardButtonColor.PRIMARY
 ).row().add(
     Text('Дебафы состояния', {'edit_content': 'StateDebuff'}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Принудительная выдача квестов', {'judge_menu': 'force_quest'}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Аукционы', {'judge_menu': 'auctions'}), KeyboardButtonColor.PRIMARY
 ).row().add(
     Text('Назад', {'judge_menu': 'back'}), KeyboardButtonColor.NEGATIVE
 )

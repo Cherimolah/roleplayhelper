@@ -60,7 +60,15 @@ fields = (Field("Имя", Registration.PERSONAL_NAME), Field("Должность
           Field("Мотивы нахождения на Space-station", Registration.MOTIVES),
           Field("Сексуальная ориентация", Registration.ORIENTATION),
           Field("Фетиши", Registration.FETISHES), Field("Табу", Registration.TABOO),
+<<<<<<< Updated upstream
           Field("Визуальный портрет", Registration.PHOTO), Field("Фракция", Registration.FRACTION))
+=======
+          Field("Визуальный портрет", Registration.PHOTO), Field("Фракция", Registration.FRACTION),
+          Field("Засекреченные физиологические особенности", Registration.SECRET_FEATURES),
+          Field("Засекреченная биография", Registration.SECRET_BIO),
+          Field("Засекреченный характер", Registration.SECRET_CHARACTER),
+          Field("Засекреченные мотивы нахождения на Space-station", Registration.SECRET_MOTIVES))
+>>>>>>> Stashed changes
 
 # Поля анкеты, доступные для редактирования администраторам через админ-панель
 fields_admin = (Field("Имя", Registration.PERSONAL_NAME), Field("Должность", Registration.PROFESSION),
@@ -74,7 +82,18 @@ fields_admin = (Field("Имя", Registration.PERSONAL_NAME), Field("Должно
                 Field("Класс каюты", Admin.EDIT_CLASS_CABIN), Field("Заморозка", Admin.EDIT_FREEZE),
                 Field("Статус", Admin.EDIT_STATUS), Field("Фракция", Admin.EDIT_FRACTION),
                 Field('Уровень подчинения', Admin.EDIT_LEVEL_SUBORDINATION),
+<<<<<<< Updated upstream
                 Field('Уровень либидо', Admin.EDIT_LEVEL_LIBIDO))
+=======
+                Field('Уровень либидо', Admin.EDIT_LEVEL_LIBIDO),
+                Field("Засекреченные физиологические особенности", Registration.SECRET_FEATURES),
+                Field("Засекреченная биография", Registration.SECRET_BIO),
+                Field("Засекреченный характер", Registration.SECRET_CHARACTER),
+                Field("Засекреченные мотивы нахождения на Space-station", Registration.SECRET_MOTIVES),
+                Field("Допуск к секретам: профессия", Admin.CLASSIFIED_PROFESSION),
+                Field("Допуск к секретам: фракция", Admin.CLASSIFIED_FRACTION),
+                Field("Допуск к секретам: репутация во фракции", Admin.CLASSIFIED_REPUTATION))
+>>>>>>> Stashed changes
 
 
 class FormatDataException(Exception):
@@ -777,6 +796,33 @@ async def serialize_debuff_attribute(attribute_id: int):
     return name
 
 
+POV_EFFECT_LABELS = {
+    'limited_visibility': 'Ограниченная видимость',
+    'concussion': 'Контузия',
+    'blindness': 'Слепота',
+    'deafness': 'Глухота',
+}
+
+
+async def info_debuff_pov_effect():
+    from service.effects import EFFECTS
+    reply = ('Выберите эффект POV-режима, который дебаф будет принудительно включать игроку '
+             '(на всё время действия дебафа), либо укажите «Без эффекта»:\n\n')
+    keyboard = Keyboard()
+    for i, key in enumerate(EFFECTS.keys(), 1):
+        label = POV_EFFECT_LABELS.get(key, key)
+        reply += f'{i}. {label}\n'
+        keyboard.add(Text(label, {"debuff_pov_effect": key}), KeyboardButtonColor.PRIMARY).row()
+    keyboard.add(Text('Без эффекта', {"debuff_pov_effect": "none"}), KeyboardButtonColor.SECONDARY)
+    return reply, keyboard
+
+
+async def serialize_debuff_pov_effect(value: str):
+    if not value:
+        return 'Без эффекта'
+    return POV_EFFECT_LABELS.get(value, value)
+
+
 async def info_item_available_for_sale():
     reply = 'Выберите будет ли доступен предмет для продажи в магазине'
     return reply, keyboards.item_type
@@ -1175,7 +1221,8 @@ fields_content: Dict[str, Dict[str, List[Union[Field, RelatedTable]]]] = {
             Field('Характеристика', Admin.DEBUFF_ATTRIBUTE, info_debuff_attribute, serialize_debuff_attribute),
             Field('Штраф', Admin.DEBUFF_PENALTY),
             Field('Количество циклов действия (шт.)', Admin.DEBUFF_ACTION_TIME, info_debuff_action_time, serialize_item_action_time),
-            Field('Время действия', Admin.DEBUFF_TIME, info_debuff_time, serialize_item_time)
+            Field('Время действия', Admin.DEBUFF_TIME, info_debuff_time, serialize_item_time),
+            Field('POV-эффект', Admin.DEBUFF_POV_EFFECT, info_debuff_pov_effect, serialize_debuff_pov_effect)
         ]
     },
     'Item': {

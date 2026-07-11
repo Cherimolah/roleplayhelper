@@ -1,11 +1,23 @@
 import re
 import random
 from datetime import datetime
+<<<<<<< Updated upstream
 from typing import Dict, Optional, Tuple
 
 def _is_dialog_line(line: str) -> bool:
     stripped = line.strip()
     return bool(re.match(r"^\s*[-—]\s*", stripped))
+=======
+from typing import Dict
+
+from service.effects import (
+    is_dialog_line as _is_dialog_line,
+    limited_visibility as limited_visibility_effect,
+    concussion,
+    blindness,
+    deafness,
+)
+>>>>>>> Stashed changes
 
 
 def is_commands_only(text: str) -> bool:
@@ -39,19 +51,29 @@ async def limited_visibility(
     max_level: float | None = None,
 ) -> str:
     """
+<<<<<<< Updated upstream
     Ограниченная видимость с рандомным уровнем из настроек пользователя
+=======
+    Ограниченная видимость с рандомным уровнем из настроек пользователя.
+    Сама механика замазывания вынесена в service/effects.limited_visibility
+>>>>>>> Stashed changes
     """
     # Получаем настройки пользователя
     mode = await db.FirstPersonMode.query.where(
         db.FirstPersonMode.user_id == user_id
     ).gino.first()
+<<<<<<< Updated upstream
     
+=======
+
+>>>>>>> Stashed changes
     if mode:
         min_level = min_level or mode.min_vision_level or 0.2
         max_level = max_level or mode.max_vision_level or 0.9
     else:
         min_level = min_level or 0.2
         max_level = max_level or 0.9
+<<<<<<< Updated upstream
     
     # Генерируем случайный уровень для ЭТОГО конкретного сообщения
     level = random.uniform(min_level, max_level)
@@ -151,6 +173,14 @@ def disorientation(text: str, remove_sender: bool = True) -> str:
         result_lines.insert(insert_pos, disturbance)
     
     return '\n'.join(result_lines)
+=======
+
+    # Генерируем случайный уровень для ЭТОГО конкретного сообщения
+    level = random.uniform(min_level, max_level)
+
+    return limited_visibility_effect(text, level=level)
+
+>>>>>>> Stashed changes
 
 async def apply_text_effects(text: str, user_id: int, db, is_action_mode: bool = False) -> Dict:
     """
@@ -161,21 +191,34 @@ async def apply_text_effects(text: str, user_id: int, db, is_action_mode: bool =
         'text': text,
         'effects': [],
         'remove_sender': False,
+<<<<<<< Updated upstream
         'disoriented': False
     }
     
+=======
+    }
+
+>>>>>>> Stashed changes
     # Получаем информацию о режиме пользователя
     mode = await db.FirstPersonMode.query.where(
         db.FirstPersonMode.user_id == user_id
     ).gino.first()
+<<<<<<< Updated upstream
     
     if not mode or not mode.is_active:
         return result
     
+=======
+
+    if not mode or not mode.is_active:
+        return result
+
+>>>>>>> Stashed changes
     # Применяем эффекты в порядке важности
     if mode.blindness_until and mode.blindness_until > datetime.now():
         result['text'] = blindness(result['text'])
         result['effects'].append('blindness')
+<<<<<<< Updated upstream
     
     if hasattr(mode, 'disorientation_until') and mode.disorientation_until and mode.disorientation_until > datetime.now():
         result['text'] = disorientation(result['text'], remove_sender=True)
@@ -191,12 +234,30 @@ async def apply_text_effects(text: str, user_id: int, db, is_action_mode: bool =
         result['text'] = deafness(result['text'])
         result['effects'].append('deafness')
     
+=======
+
+    if mode.concussion_until and mode.concussion_until > datetime.now():
+        result['text'] = concussion(result['text'])
+        result['effects'].append('concussion')
+
+    if mode.deafness_until and mode.deafness_until > datetime.now():
+        result['text'] = deafness(result['text'])
+        result['effects'].append('deafness')
+
+>>>>>>> Stashed changes
     if mode.limited_vision_until and mode.limited_vision_until > datetime.now():
         # Используем рандомизированный уровень
         result['text'] = await limited_visibility(result['text'], user_id=user_id, db=db)
         result['effects'].append('limited_vision')
+<<<<<<< Updated upstream
     
     return result
+=======
+
+    return result
+
+
+>>>>>>> Stashed changes
 def check_message_length(text: str, min_chars: int = 300) -> bool:
     """
     Проверяет длину сообщения для режима от первого лица
@@ -209,10 +270,14 @@ def check_message_length(text: str, min_chars: int = 300) -> bool:
         if not line.strip().startswith('/'):
             filtered_lines.append(line)
     text = '\n'.join(filtered_lines)
+<<<<<<< Updated upstream
     
     # Убираем пробелы
     text_no_spaces = ''.join(text.split())
     
+=======
+
+>>>>>>> Stashed changes
     # Убираем повторяющиеся слова (простая защита от "спама одинаковыми словами")
     words = text.split()
     unique_words = []
@@ -221,9 +286,16 @@ def check_message_length(text: str, min_chars: int = 300) -> bool:
         if word.lower() not in seen_words:
             seen_words.add(word.lower())
             unique_words.append(word)
+<<<<<<< Updated upstream
     
     unique_text = ' '.join(unique_words)
     unique_text_no_spaces = ''.join(unique_text.split())
     
+=======
+
+    unique_text = ' '.join(unique_words)
+    unique_text_no_spaces = ''.join(unique_text.split())
+
+>>>>>>> Stashed changes
     # Проверяем длину
     return len(unique_text_no_spaces) >= min_chars

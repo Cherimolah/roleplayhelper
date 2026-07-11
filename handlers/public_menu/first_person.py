@@ -10,6 +10,10 @@ from service.chat_manager import (
     clear_user_chat_history,
 )
 from service.db_engine import db
+<<<<<<< Updated upstream
+=======
+from config import USER_ID
+>>>>>>> Stashed changes
 
 @bot.on.private_message(StateRule(Menu.MAIN), payload={"menu": "first_person"})
 async def toggle_first_person_mode(m: Message):
@@ -22,6 +26,16 @@ async def toggle_first_person_mode(m: Message):
     ).gino.first()
     
     if mode and mode.is_active:
+<<<<<<< Updated upstream
+=======
+        if mode.blackout_mode:
+            await m.answer(
+                "⚫ Режим от первого лица включен принудительно администрацией.\n"
+                "Вы не можете отключить его самостоятельно — дождитесь снятия администрацией."
+            )
+            return
+
+>>>>>>> Stashed changes
         # Выключаем режим
         await mode.update(
             is_active=False,
@@ -64,8 +78,13 @@ async def toggle_first_person_mode(m: Message):
         
         await m.answer(
             "👁️ Вы перешли в режим от первого лица.\n\n"
+<<<<<<< Updated upstream
             "Теперь вы можете играть через общение с юзерботом (Сирена).\n"
             "Сообщения будут транслироваться в вашу текущую локацию.\n\n"
+=======
+            f"Теперь вы можете играть через общение с юзерботом (Сирена): https://vk.com/id{USER_ID}\n"
+            "Напишите юзерботу в личные сообщения — ваши посты будут транслироваться в вашу текущую локацию.\n\n"
+>>>>>>> Stashed changes
             "⚠️ Антиспам для пересылаемых постов: 300–350 символов без пробелов, "
             "без повторов и без учёта строк-команд.\n\n"
             "Чтобы выйти из режима — нажмите кнопку ещё раз.",

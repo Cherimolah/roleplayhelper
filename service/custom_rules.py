@@ -14,7 +14,7 @@ import messages
 from service.states import Menu, Admin, Judge
 import service.keyboards as keyboards
 from service.utils import get_mention_from_message, get_current_form_id, fields_content, get_current_turn
-from config import ADMINS
+from config import ADMINS, OWNER
 from service.states import StateValue
 
 
@@ -287,6 +287,15 @@ class JudgeRule(ABCRule):
         else:
             is_judge = await db.select([db.User.judge]).where(db.User.user_id == event.user_id).gino.scalar()
         return is_judge
+
+
+class OwnerRule(ABCRule):
+    """
+    Проверка на то, что сообщение отправил владелец бота (config.OWNER)
+    """
+    async def check(self, event: Message | MessageEvent):
+        user_id = event.from_id if isinstance(event, Message) else event.user_id
+        return user_id == OWNER
 
 
 class UserFree(ABCRule):

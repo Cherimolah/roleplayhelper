@@ -5,12 +5,15 @@
 """
 
 import re
+import random
 
 from vkbottle.bot import Message
-from vkbottle import Keyboard, Callback, KeyboardButtonColor
+from vkbottle import Keyboard, Callback, KeyboardButtonColor, VKAPIError
+from vkbottle.dispatch.rules.abc import OrRule
 from vkbottle_types.objects import UtilsDomainResolvedType
 from fuzzywuzzy import process
 
+<<<<<<< Updated upstream
 from loader import bot
 from service.custom_rules import ChatAction, AdminRule, ChatInviteMember, RegexRule, ForwardablePostRule
 from service.db_engine import db
@@ -20,6 +23,23 @@ from handlers.public_menu.quests import send_ready_quest
 from service.utils import move_user, create_mention, get_current_form_id, soft_divide
 from service.text_processors import apply_text_effects, is_forwardable_post
 from config import HALL_CHAT_ID
+=======
+from loader import bot, states
+from service.custom_rules import ChatAction, AdminRule, JudgeRule, OwnerRule, ChatInviteMember, RegexRule, ForwardablePostRule
+from service.db_engine import db, Attribute, now
+from handlers.public_menu.bank import ask_salary
+from handlers.public_menu.daylics import send_ready_daylic
+from handlers.public_menu.quests import send_ready_quest
+from service.utils import move_user, create_mention, get_current_form_id, soft_divide, count_attribute, can_view_classified
+from service.text_processors import apply_text_effects, is_forwardable_post
+from service.states import Admin
+from service.serializers import info_target_reward
+from service.auctions import place_bid, eligible_closed_auction_ids
+from config import HALL_CHAT_ID, USER_ID, ADMINS, DATETIME_FORMAT
+
+# Пост, переотправленный Юзерботом от лица игрока в его локацию (см. handlers/first_person_userbot.py)
+pov_relay_label_pattern = re.compile(r'^\[id(\d+)\|([^\]]*)\]:\n([\s\S]*)$')
+>>>>>>> Stashed changes
 
 # Регулярные выражения для обработки команд
 moving_pattern = re.compile(r'\[\s*перемещение в "(.+)"\s*\]', re.IGNORECASE)
@@ -366,6 +386,7 @@ async def transmitter(m: Message, match: tuple[str, str]):
                f'«{message}»')
     await bot.api.messages.send(peer_id=user_id, message=message)
     await m.answer('Сообщение успешно отправлено')
+<<<<<<< Updated upstream
     
 @bot.on.chat_message(ForwardablePostRule(), blocking=False)
 async def handle_chat_message(m: Message):
@@ -375,6 +396,64 @@ async def handle_chat_message(m: Message):
     if not m.text or not m.from_id:
         return
 
+=======
+
+
+# Расширение команды "Сообщения": массовая отправка + интеграция с механикой "засекречено" (module admin_improvements, п.6)
+mass_message_pattern = re.compile(r'\[\s*сообщения\s+(.+?)\s+"(.+)"(\s*засекречено)?\s*\]', re.IGNORECASE)
+
+
+@bot.on.message(RegexRule(mass_message_pattern))
+async def mass_transmitter(m: Message, match: tuple):
+    """
+    [сообщения [id1|Имя1], [id2|Имя2] "текст"] — отправка одного сообщения нескольким адресатам сразу.
+    С флагом "засекречено" в конце команды сообщение доставляется только тем получателям, у которых
+    есть допуск к секретным блокам анкеты отправителя (см. module classified_profiles /
+    service.utils.can_view_classified) — остальные получают только уведомление о том, что письмо пришло.
+    """
+    mentions_part, text, secret_flag = match
+    target_ids = [int(x) for x in mention_extract_pattern.findall(mentions_part)]
+    if not target_ids:
+        await m.answer('Не указаны получатели (укажите упоминания через @)')
+        return
+
+    is_secret = bool(secret_flag)
+    sender_form = await db.select([*db.Form]).where(db.Form.user_id == m.from_id).gino.first() if is_secret else None
+    sender_mention = await create_mention(m.from_id)
+
+    sent = 0
+    for user_id in target_ids:
+        exist = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
+        if not exist:
+            continue
+        if is_secret and sender_form:
+            cleared = await can_view_classified(sender_form, user_id)
+            if not cleared:
+                await bot.api.messages.send(
+                    peer_id=user_id,
+                    message=f'🔒 Вам пришло засекреченное сообщение от {sender_mention}, '
+                            f'но у вас нет допуска к его содержимому.',
+                    random_id=0,
+                )
+                sent += 1
+                continue
+            message = f'🔒 Засекреченное сообщение от {sender_mention}:\n«{text}»'
+        else:
+            message = f'Новое сообщение от пользователя {sender_mention}:\n«{text}»'
+        await bot.api.messages.send(peer_id=user_id, message=message, random_id=0)
+        sent += 1
+
+    await m.answer(f'Сообщение отправлено {sent} из {len(target_ids)} получателей')
+    
+@bot.on.chat_message(ForwardablePostRule(), blocking=False)
+async def handle_chat_message(m: Message):
+    """
+    Пересылка сообщений игрокам в режиме от первого лица (POV).
+    """
+    if not m.text or not m.from_id:
+        return
+
+>>>>>>> Stashed changes
     # На всякий случай оставляем быстрый гард (правило уже фильтрует)
     if not is_forwardable_post(m.text):
         return
@@ -391,6 +470,7 @@ async def handle_chat_message(m: Message):
     except Exception:
         chat_title = f"чат {chat_id}"
 
+<<<<<<< Updated upstream
     # Имя отправителя
     try:
         sender = (await bot.api.users.get([m.from_id]))[0]
@@ -399,18 +479,48 @@ async def handle_chat_message(m: Message):
         sender_name = str(m.from_id)
 
     # Ищем всех POV-игроков, которые "находятся" в этой же локации
+=======
+    # Если сообщение переслано Юзерботом от лица POV-игрока (см. handlers/first_person_userbot.py),
+    # настоящий автор поста и текст поста находятся внутри метки "[id..|Имя]:\n...", а не в m.from_id
+    author_id = m.from_id
+    body_text = m.text
+    if m.from_id == USER_ID:
+        relay_match = pov_relay_label_pattern.match(m.text)
+        if not relay_match:
+            return
+        author_id = int(relay_match.group(1))
+        sender_name = relay_match.group(2).strip() or str(author_id)
+        body_text = relay_match.group(3)
+    else:
+        # Имя отправителя
+        try:
+            sender = (await bot.api.users.get([m.from_id]))[0]
+            sender_name = f"{sender.first_name} {sender.last_name}"
+        except Exception:
+            sender_name = str(m.from_id)
+
+    # Ищем всех POV-игроков, которые "находятся" в этой же локации (кроме автора поста)
+>>>>>>> Stashed changes
     pov_users = await (
         db.select([db.FirstPersonMode.user_id])
         .select_from(db.FirstPersonMode.join(db.UserToChat, db.UserToChat.user_id == db.FirstPersonMode.user_id))
         .where((db.FirstPersonMode.is_active == True) & (db.UserToChat.chat_id == chat_id))
         .gino.all()
     )
+<<<<<<< Updated upstream
     pov_user_ids = [x[0] for x in pov_users if x and x[0] != m.from_id]
+=======
+    pov_user_ids = [x[0] for x in pov_users if x and x[0] != author_id]
+>>>>>>> Stashed changes
     if not pov_user_ids:
         return
 
     for receiver_id in pov_user_ids:
+<<<<<<< Updated upstream
         processed = await apply_text_effects(m.text, user_id=receiver_id, db=db)
+=======
+        processed = await apply_text_effects(body_text, user_id=receiver_id, db=db)
+>>>>>>> Stashed changes
 
         header = f"📍 {chat_title}\n"
         if not processed.get("remove_sender"):
@@ -424,3 +534,227 @@ async def handle_chat_message(m: Message):
             random_id=0,
             is_notification=True,
         )
+<<<<<<< Updated upstream
+=======
+
+
+# Команды скрытного действия (sub_module stealth_mode)
+stealth_pattern = re.compile(r'\[скрытно "(.+)"\]', re.IGNORECASE)
+stealth_pattern2 = re.compile(r'\[скрытное действие "(.+)"\]', re.IGNORECASE)
+
+
+async def _has_confirmed_expeditor(user_id: int) -> bool:
+    form_id = await get_current_form_id(user_id)
+    if not form_id:
+        return False
+    confirmed = await db.select([db.Expeditor.is_confirmed]).where(db.Expeditor.form_id == form_id).gino.scalar()
+    return bool(confirmed)
+
+
+@bot.on.chat_message(RegexRule(stealth_pattern))
+@bot.on.chat_message(RegexRule(stealth_pattern2))
+async def stealth_action(m: Message, match: tuple[str]):
+    """
+    Скрытное действие: соревновательная проверка Ловкости автора против лучшего
+    Восприятия остальных участников локации.
+
+    Провал — действие пересылается в чат как обычное сообщение (сокрытие отменяется).
+    Успех — действие не показывается игрокам, а логируется и отправляется только
+    судьям/администраторам (автор, дата/время, локация).
+    """
+    text = match[0]
+    chat_id = m.chat_id
+    if not chat_id:
+        return
+
+    # Прячем исходное сообщение из чата — иначе его уже увидят все участники
+    try:
+        await bot.api.messages.delete(cmids=[m.conversation_message_id], peer_id=m.peer_id, delete_for_all=True)
+    except VKAPIError:
+        pass
+
+    if not await _has_confirmed_expeditor(m.from_id):
+        await bot.api.messages.send(
+            peer_id=m.from_id,
+            message='Для скрытных действий необходима подтверждённая Карта экспедитора',
+            random_id=0,
+        )
+        return
+
+    attacker_roll = await count_attribute(m.from_id, Attribute.DEXTERITY) + random.randint(1, 100)
+
+    other_user_ids = [x[0] for x in await db.select([db.UserToChat.user_id]).where(
+        (db.UserToChat.chat_id == chat_id) & (db.UserToChat.user_id != m.from_id)
+    ).gino.all()]
+
+    best_defender_roll = 0
+    for user_id in other_user_ids:
+        if not await _has_confirmed_expeditor(user_id):
+            continue
+        roll = await count_attribute(user_id, Attribute.PERCEPTION) + random.randint(1, 100)
+        best_defender_roll = max(best_defender_roll, roll)
+
+    success = attacker_roll > best_defender_roll
+    await db.StealthLog.create(user_id=m.from_id, chat_id=chat_id, text=text, success=success)
+
+    if not success:
+        mention = await create_mention(m.from_id)
+        await bot.api.messages.send(peer_id=m.peer_id, message=f'{mention}: {text}', random_id=0)
+        await bot.api.messages.send(
+            peer_id=m.from_id,
+            message='Скрытное действие провалено — оно замечено остальными и переслано в чат как обычное',
+            random_id=0,
+            is_notification=True,
+        )
+        return
+
+    await bot.api.messages.send(
+        peer_id=m.from_id,
+        message='Скрытное действие выполнено незаметно для остальных',
+        random_id=0,
+        is_notification=True,
+    )
+
+    chat_name = (await bot.api.messages.get_conversations_by_id(peer_ids=[2000000000 + chat_id])).items[0].chat_settings.title
+    mention = await create_mention(m.from_id)
+    staff_ids = list(set(
+        [x[0] for x in await db.select([db.User.user_id]).where(
+            (db.User.admin > 0) | (db.User.judge.is_(True))
+        ).gino.all()]
+    ).union(ADMINS))
+    report = (f'🕵️ Скрытное действие\nАвтор: {mention}\nЛокация: «{chat_name}»\n'
+              f'Дата: {now().strftime(DATETIME_FORMAT)}\nДействие: «{text}»')
+    for i in range(0, len(staff_ids), 100):
+        await bot.api.messages.send(peer_ids=staff_ids[i:i + 100], message=report, random_id=0, is_notification=True)
+
+
+# Административный инструмент принудительного перемещения (module admin_improvements, п.1)
+forced_move_pattern = re.compile(r'\[\s*принудительное перемещение(.+)\]', re.IGNORECASE)
+mention_extract_pattern = re.compile(r'\[id(\d+)\|[^\]]+\]')
+
+
+@bot.on.chat_message(RegexRule(forced_move_pattern), OrRule(AdminRule(), JudgeRule()))
+async def forced_movement(m: Message, match: tuple[str]):
+    """
+    [принудительное перемещение @тег1 @тег2] — доступно только админам/судьям: мгновенно
+    перемещает указанных игроков в чат, где написана команда.
+
+    Если тот же текст пишет обычный игрок во время своего поста в активном экшен-режиме,
+    правило AdminRule/JudgeRule не пропустит его сюда — вместо этого пост целиком уже
+    обрабатывается стандартным парсером экшен-режима (service.utils.parse_actions) как
+    обычное действие, требующее проверки судьи (см. handlers/action_mode/checking.py).
+    После проверки судья, уже обладая нужными правами, может выполнить перемещение этой
+    же командой.
+    """
+    target_ids = [int(x) for x in mention_extract_pattern.findall(match[0])]
+    if not target_ids:
+        await m.answer('Не указаны игроки для перемещения (укажите упоминания через @)')
+        return
+    chat_id = m.chat_id
+    moved = []
+    for user_id in target_ids:
+        exist = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
+        if not exist:
+            continue
+        await move_user(user_id, chat_id)
+        moved.append(user_id)
+    if not moved:
+        await m.answer('Не удалось найти анкеты указанных игроков')
+        return
+    mentions = ', '.join([await create_mention(x) for x in moved])
+    await m.answer(f'Принудительно перемещены в этот чат: {mentions}')
+
+
+# Команды задач (module admin_improvements, п.9 и п.10). Обе запускают тот же пошаговый
+# мастер настройки квеста, что и "Изменение контента -> Квесты" в админ-панели
+# (handlers/admin_panel/edit_content/quests.py), продолжающийся уже в личных сообщениях бота.
+force_task_pattern = re.compile(r'\[\s*выдать задачу\s+([^"]+?)\s*"(.+)"\s*\]', re.IGNORECASE)
+voluntary_task_pattern = re.compile(r'\[\s*выдать задачу\s*"(.+)"\s*\]', re.IGNORECASE)
+staff_rule = OrRule(AdminRule(), JudgeRule(), OwnerRule())
+
+
+async def _start_quest_wizard(m: Message, description: str, force_assign_forms: list | None, intro: str):
+    quest = await db.Quest.create(name=description[:100], description=description,
+                                  force_assign_forms=force_assign_forms or None)
+    states.set(m.from_id, f"{Admin.QUEST_REWARD}*{quest.id}")
+    reply, keyboard = await info_target_reward()
+    await bot.api.messages.send(
+        peer_id=m.from_id,
+        message=f'{intro}\n\nУкажите награду для квеста\n\n{reply}',
+        keyboard=keyboard,
+        random_id=0,
+    )
+
+
+@bot.on.message(RegexRule(force_task_pattern), staff_rule)
+async def force_individual_task(m: Message, match: tuple[str, str]):
+    """
+    [выдать задачу @user1, @user2 "описание"] — принудительная индивидуальная задача.
+    Доступно только судьям, админам и владельцу бота.
+    """
+    mentions_part, description = match
+    target_ids = [int(x) for x in mention_extract_pattern.findall(mentions_part)]
+    if not target_ids:
+        await m.answer('Не указаны получатели задачи (укажите упоминания через @)')
+        return
+    form_ids = [x[0] for x in await db.select([db.Form.id]).where(db.Form.user_id.in_(target_ids)).gino.all()]
+    if not form_ids:
+        await m.answer('Анкеты указанных игроков не найдены')
+        return
+    await _start_quest_wizard(m, description, form_ids,
+                              f'Создание индивидуальной задачи для {len(form_ids)} игроков начато в личных сообщениях с ботом.')
+    await m.answer('Настройка задачи продолжится в личных сообщениях с ботом')
+
+
+@bot.on.message(RegexRule(voluntary_task_pattern), staff_rule)
+async def voluntary_task(m: Message, match: tuple[str]):
+    """
+    [выдать задачу "описание"] — то же самое, но без тегов: квест создаётся доступным
+    для добровольного взятия игроками, а не выдаётся принудительно.
+    Доступно только судьям, админам и владельцу бота.
+    """
+    description = match[0]
+    await _start_quest_wizard(m, description, None,
+                              'Создание добровольной задачи начато в личных сообщениях с ботом.')
+    await m.answer('Настройка задачи продолжится в личных сообщениях с ботом')
+
+
+# Ставки на закрытых аукционах в ЛС боту (module auction_system). Ставки на публичных аукционах
+# делаются комментариями к посту на стене — см. handlers/group_events.py: wall_auction_bid
+auction_bid_pattern = re.compile(r'\[\s*ставка\s+(\d+)\s+аукцион\s+(\d+)\s*\]', re.IGNORECASE)
+auction_bid_pattern_single = re.compile(r'\[\s*ставка\s+(\d+)\s*\]', re.IGNORECASE)
+
+
+@bot.on.private_message(RegexRule(auction_bid_pattern))
+async def dm_auction_bid_with_id(m: Message, match: tuple[str, str]):
+    """[ставка СУММА аукцион ID] — ставка на конкретный закрытый аукцион (если их несколько активно)"""
+    amount, auction_id = int(match[0]), int(match[1])
+    eligible_ids = await eligible_closed_auction_ids(m.from_id)
+    if auction_id not in eligible_ids:
+        await m.answer('Этот аукцион недоступен для вас (не активен или нет допуска)')
+        return
+    success, message = await place_bid(auction_id, m.from_id, amount)
+    await m.answer(message)
+
+
+@bot.on.private_message(RegexRule(auction_bid_pattern_single))
+async def dm_auction_bid(m: Message, match: tuple[str]):
+    """[ставка СУММА] — ставка на единственный доступный игроку активный закрытый аукцион"""
+    amount = int(match[0])
+    eligible_ids = await eligible_closed_auction_ids(m.from_id)
+    if not eligible_ids:
+        await m.answer('У вас нет доступных закрытых аукционов для ставки')
+        return
+    if len(eligible_ids) > 1:
+        lines = []
+        for auction_id in eligible_ids:
+            item_name = await db.select([db.Item.name]).select_from(
+                db.Auction.join(db.Item, db.Auction.item_id == db.Item.id)
+            ).where(db.Auction.id == auction_id).gino.scalar()
+            lines.append(f'{auction_id}. {item_name}')
+        await m.answer('У вас несколько активных закрытых аукционов, уточните командой '
+                       '[ставка СУММА аукцион ID]:\n' + '\n'.join(lines))
+        return
+    success, message = await place_bid(eligible_ids[0], m.from_id, amount)
+    await m.answer(message)
+>>>>>>> Stashed changes

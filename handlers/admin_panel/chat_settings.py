@@ -171,6 +171,32 @@ async def set_visible_messages_count(m: Message, value: int):
     await chat_settings(m)
 
 
+@bot.on.private_message(StateRule(Admin.MENU), PayloadRule({"admin_menu": "bulk_chat_settings"}), AdminRule())
+async def ask_bulk_visible_messages(m: Message):
+    """
+    Массовое изменение лимита отображаемых сообщений (module admin_improvements, п.5).
+    Затрагивает только зарегистрированные чаты-локации — игроков в режиме от первого лица
+    это не касается, т.к. они не состоят ни в одном из этих чатов.
+    """
+    states.set(m.from_id, Admin.BULK_VISIBLE_MESSAGES_COUNT)
+    keyboard = Keyboard().add(Text('Назад', {'admin_menu': 'back'}), KeyboardButtonColor.NEGATIVE)
+    await m.answer(
+        'Укажите новое количество отображаемых сообщений (от 0 до 1000) '
+        'для ВСЕХ зарегистрированных чатов сразу:',
+        keyboard=keyboard,
+    )
+
+
+@bot.on.private_message(StateRule(Admin.BULK_VISIBLE_MESSAGES_COUNT), NumericRule(max_number=1000, min_number=0),
+                        AdminRule())
+async def set_bulk_visible_messages(m: Message, value: int):
+    """Установка количества видимых сообщений сразу для всех зарегистрированных чатов"""
+    chat_ids = [x[0] for x in await db.select([db.Chat.chat_id]).where(db.Chat.chat_id.isnot(None)).gino.all()]
+    await db.Chat.update.values(visible_messages=value).where(db.Chat.chat_id.isnot(None)).gino.status()
+    states.set(m.from_id, Admin.MENU)
+    await m.answer(f'Лимит отображаемых сообщений обновлён для {len(chat_ids)} чатов', keyboard=keyboards.admin_menu)
+
+
 @bot.on.private_message(StateRule(Admin.CHAT_SETTINGS), PayloadRule({'chat_settings': 'add_available_professions'}),
                         AdminRule())
 async def show_available_professions(m: Message):

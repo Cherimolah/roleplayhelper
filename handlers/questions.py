@@ -394,6 +394,53 @@ async def set_character(m: Message):
         await show_fields_edit(m.from_id, new=False)
 
 
+@bot.on.private_message(StateRule(Registration.SECRET_FEATURES), LimitSymbols(1000))
+async def set_secret_features(m: Message):
+    """
+    Установка засекреченного блока физиологических особенностей персонажа (module classified_profiles).
+    Доступен только через редактирование анкеты — отправьте «-», чтобы убрать секрет.
+    """
+    if not m.payload or m.payload != {"secret_features": "skip"}:
+        value = None if m.text.strip() == '-' else m.text
+        await db.Form.update.values(secret_features=value).where(
+            and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))).gino.status()
+    await m.answer("Новое значение установлено")
+    await show_fields_edit(m.from_id, new=False)
+
+
+@bot.on.private_message(StateRule(Registration.SECRET_BIO), LimitSymbols(2000))
+async def set_secret_bio(m: Message):
+    """Установка засекреченного блока биографии персонажа. Отправьте «-», чтобы убрать секрет."""
+    if not m.payload or m.payload != {"secret_bio": "skip"}:
+        value = None if m.text.strip() == '-' else m.text
+        await db.Form.update.values(secret_bio=value).where(
+            and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))).gino.status()
+    await m.answer("Новое значение установлено")
+    await show_fields_edit(m.from_id, new=False)
+
+
+@bot.on.private_message(StateRule(Registration.SECRET_CHARACTER), LimitSymbols(2000))
+async def set_secret_character(m: Message):
+    """Установка засекреченного блока характера персонажа. Отправьте «-», чтобы убрать секрет."""
+    if not m.payload or m.payload != {"secret_character": "skip"}:
+        value = None if m.text.strip() == '-' else m.text
+        await db.Form.update.values(secret_character=value).where(
+            and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))).gino.status()
+    await m.answer("Новое значение установлено")
+    await show_fields_edit(m.from_id, new=False)
+
+
+@bot.on.private_message(StateRule(Registration.SECRET_MOTIVES))
+async def set_secret_motives(m: Message):
+    """Установка засекреченного блока мотивов нахождения на станции. Отправьте «-», чтобы убрать секрет."""
+    if not m.payload or m.payload != {"secret_motives": "skip"}:
+        value = None if m.text.strip() == '-' else m.text
+        await db.Form.update.values(secret_motives=value).where(
+            and_(db.Form.user_id == m.from_id, db.Form.is_request.is_(True))).gino.status()
+    await m.answer("Новое значение установлено")
+    await show_fields_edit(m.from_id, new=False)
+
+
 @bot.on.private_message(StateRule(Registration.ORIENTATION), PayloadMapRule({"orientation": int}))
 async def set_orientation(m: Message):
     """

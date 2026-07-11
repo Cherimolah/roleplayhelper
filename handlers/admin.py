@@ -23,7 +23,12 @@ from service.states import Menu, Admin
 from service.middleware import states
 from service.custom_rules import StateRule, NumericRule, AdminRule, UserFree
 from service.utils import take_off_payments, parse_reputation, create_mention, check_quest_completed, apply_reward, \
+<<<<<<< Updated upstream
     serialize_target_reward, create_cabin_chat, move_user, get_current_form_id, post_form_to_board, update_form_on_board, post_form_to_archive, download_image
+=======
+    serialize_target_reward, move_user, get_current_form_id, post_form_to_board, update_form_on_board, post_form_to_archive, download_image, \
+    archive_or_delete_cabin_chat, register_or_create_cabin_chat
+>>>>>>> Stashed changes
 from config import HALL_CHAT_ID, GROUP_ID
 
 
@@ -144,7 +149,7 @@ async def set_user_cabin(m: Message, value: int = None):
         return
     user_id = int(states.get(m.from_id).split("*")[1])
     await db.Form.update.values(cabin=value).where(db.Form.user_id == user_id).gino.status()
-    await create_cabin_chat(user_id)
+    await register_or_create_cabin_chat(user_id)
     states.set(m.from_id, f"{Admin.SELECT_CLASS_CABIN}*{user_id}")
     cabins = await db.select([db.Cabins.name]).gino.all()
     reply = messages.cabin_class
@@ -474,15 +479,43 @@ async def accept_delete(m: MessageEvent):
         await m.edit_message(f"Запрос на удаление анкеты [id{m.payload['user_id']}|{name}] отклонён")
 
 
-@bot.on.private_message(StateRule(Admin.REASON_DELETE_FORM), AdminRule())
-async def set_reason_delete_form(m: Message):
-    user_id = int(states.get(m.from_id).split('*')[-1])
-    await post_form_to_archive(user_id, m.text)
+async def finalize_delete_form(m, user_id: int, reason: str):
+    """Завершает удаление анкеты (после того как решён вопрос с чатом каюты, см. ниже)"""
+    await post_form_to_archive(user_id, reason)
     await db.User.delete.where(db.User.user_id == user_id).gino.status()
     await bot.api.messages.send(peer_id=user_id,
                                 message=f"Ваша анкета в боте была удалена! Приятно было с вами общаться, "
                                 f"если захотите вернуться напишите «Начать»", keyboard=Keyboard())
     await m.answer(f"Анкета пользователя {await create_mention(user_id)} была удалена!")
+    states.set(m.from_id, Admin.MENU)
+
+
+@bot.on.private_message(StateRule(Admin.REASON_DELETE_FORM), AdminRule())
+async def set_reason_delete_form(m: Message):
+    user_id = int(states.get(m.from_id).split('*')[-1])
+    reason = m.text
+    # Если у персонажа есть чат каюты, решение о его судьбе принимает администратор (module admin_improvements, п.4)
+    has_cabin_chat = await db.select([db.Chat.cabin_user_id]).where(db.Chat.cabin_user_id == user_id).gino.scalar()
+    if has_cabin_chat:
+        states.set(m.from_id, f'{Admin.CABIN_CHAT_ON_DELETE}*{user_id}*{reason}')
+        keyboard = Keyboard(inline=True).add(
+            Text('Удалить чат каюты', {'cabin_on_delete': 'delete'}), KeyboardButtonColor.NEGATIVE
+        ).row().add(
+            Text('Архивировать чат каюты', {'cabin_on_delete': 'archive'}), KeyboardButtonColor.PRIMARY
+        )
+        await m.answer('У пользователя есть чат каюты. Что с ним сделать при удалении анкеты?', keyboard=keyboard)
+        return
+    await finalize_delete_form(m, user_id, reason)
+
+
+@bot.on.private_message(StateRule(Admin.CABIN_CHAT_ON_DELETE), PayloadMapRule({'cabin_on_delete': str}), AdminRule())
+async def set_cabin_chat_on_delete(m: Message):
+    """Обрабатывает выбор администратора о судьбе чата каюты и завершает удаление анкеты"""
+    _, user_id, reason = states.get(m.from_id).split('*', 2)
+    user_id = int(user_id)
+    archive = m.payload['cabin_on_delete'] == 'archive'
+    await archive_or_delete_cabin_chat(user_id, archive)
+    await finalize_delete_form(m, user_id, reason)
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_delete": int}), AdminRule())
