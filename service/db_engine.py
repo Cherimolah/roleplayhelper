@@ -85,6 +85,7 @@ class Database(Gino):
             judge_panel = Column(Boolean, default=False)  # Включена ли панель судьи вместо админ панели
             check_action_id = Column(Integer, ForeignKey('actions.id', ondelete='SET NULL'))  # Текущая проверка действия в экшен режиме (если есть)
             special_quest = Column(Boolean, default=False)
+            pov_mode = Column(Boolean, default=False)  # Режим «от первого лица» (POV)
 
         self.User = User
 
@@ -604,6 +605,7 @@ class Database(Gino):
             penalty = Column(Integer, default=0)  # Налагаемый дебаф (минус к характеристике)
             action_time = Column(Integer, default=0)  # Количество циклов, которое действует дебаф в эушен-режиме
             time_use = Column(Integer, default=0)  # Время действия дебафа (в секундах)
+            pov_effect = Column(Text)  # Текстовый эффект в POV-режиме ('limited_visibility','concussion','blindness','deafness')
 
         self.StateDebuff = StateDebuff
 
@@ -900,6 +902,68 @@ class Database(Gino):
 
         self.MandatoryQuestRequest = MandatoryQuestRequest
 
+        # ─── Аукционы ──────────────────────────────────────────────────
+        class Auction(self.Model):
+            """
+            Таблица аукционов.
+            is_public=True  → публичный (пост на стене + комментарии)
+            is_public=False → закрытый (только через ЛС бота, с фильтрами)
+            """
+            __tablename__ = 'auctions'
+
+            id = Column(Integer, primary_key=True)
+            title = Column(Text)                          # Название лота
+            description = Column(Text)                   # Описание лота
+            item_id = Column(Integer, ForeignKey('items.id', ondelete='SET NULL'))    # Предмет из БД (карта экспедитора)
+            shop_id = Column(Integer, ForeignKey('shop.id', ondelete='SET NULL'))     # Товар/услуга из магазина
+            photo = Column(Text)                          # Фото (берётся из карточки предмета)
+            start_price = Column(BigInteger, default=0)  # Стартовая цена
+            min_bet = Column(BigInteger, default=1)       # Минимальная ставка
+            start_at = Column(DateTime(timezone=True))                  # Дата/время начала
+            end_at = Column(DateTime(timezone=True))                    # Дата/время завершения
+            is_public = Column(Boolean, default=True)     # Тип: публичный / закрытый
+            created_by = Column(Integer, ForeignKey('users.user_id', ondelete='SET NULL'))  # Кто создал
+            winner_form_id = Column(Integer, ForeignKey('forms.id', ondelete='SET NULL'))   # Победитель
+            vk_post_id = Column(Integer)                  # ID поста ВК (для публичных)
+            finished = Column(Boolean, default=False)     # Завершён ли аукцион
+            # Фильтры для закрытого аукциона (из карточки предмета)
+            access_fraction_id = Column(Integer, ForeignKey('fractions.id', ondelete='SET NULL'))
+            access_reputation = Column(Integer, default=0)
+
+        self.Auction = Auction
+
+        class AuctionBet(self.Model):
+            """Ставки в аукционе"""
+            __tablename__ = 'auction_bets'
+
+            id = Column(Integer, primary_key=True)
+            auction_id = Column(Integer, ForeignKey('auctions.id', ondelete='CASCADE'))
+            form_id = Column(Integer, ForeignKey('forms.id', ondelete='CASCADE'))
+            amount = Column(BigInteger)
+            created_at = Column(DateTime(timezone=True), default=now)
+
+        self.AuctionBet = AuctionBet
+
+        # ─── Секретные разделы анкеты ────────────────────────────────
+        class FormSecret(self.Model):
+            """
+            Секретные части анкеты. Видны только владельцу, администраторам,
+            и тем, у кого есть нужная профессия / репутация во фракции.
+            """
+            __tablename__ = 'form_secrets'
+
+            id = Column(Integer, primary_key=True)
+            form_id = Column(Integer, ForeignKey('forms.id', ondelete='CASCADE'), unique=True)
+            secret_features = Column(Text)     # Секретные физиологические особенности
+            secret_bio = Column(Text)          # Секретная биография
+            secret_character = Column(Text)    # Секретный характер
+            secret_motives = Column(Text)      # Секретные мотивы
+            # Условия доступа
+            access_fraction_id = Column(Integer, ForeignKey('fractions.id', ondelete='SET NULL'))
+            access_reputation = Column(Integer, default=0)   # мин. репутация во фракции
+            access_profession_id = Column(Integer, ForeignKey('professions.id', ondelete='SET NULL'))
+
+        self.FormSecret = FormSecret
 
     async def connect(self):
         """

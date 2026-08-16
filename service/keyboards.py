@@ -93,6 +93,10 @@ admin_menu = Keyboard().add(
 ).row().add(
     Text("Рассылки и опросы", {"admin_menu": "mailing"}), KeyboardButtonColor.PRIMARY
 ).row().add(
+    Text("🏦 Аукционы", {"admin_menu": "auctions"}), KeyboardButtonColor.PRIMARY
+).add(
+    Text("👁 POV-панель", {"admin_menu": "pov_panel"}), KeyboardButtonColor.PRIMARY
+).row().add(
     Text("В главное меню", {"admin_menu": "back"}), KeyboardButtonColor.NEGATIVE
 )
 
@@ -194,6 +198,9 @@ async def generate_form_activity(user_id):
     if len(form_activity.buttons[-1]) > 0:
         form_activity.row()
     form_activity.add(
+        Text("🔐 Секретные разделы", {"menu": "form_secrets"}), KeyboardButtonColor.SECONDARY
+    )
+    form_activity.row().add(
         Text("Назад", {"menu": "home"}), KeyboardButtonColor.NEGATIVE
     )
     return form_activity
@@ -283,6 +290,11 @@ async def get_settings_menu(user_id: int) -> Keyboard:
         settings_menu.row().add(
             Text("Изменить тайминг активности", {"settings": "timing"}), KeyboardButtonColor.PRIMARY
         )
+    pov_mode = await db.select([db.User.pov_mode]).where(db.User.user_id == user_id).gino.scalar()
+    settings_menu.row().add(
+        Text(f"Режим ОПВ: {chr(0x2705) if pov_mode else chr(0x274c)}", {"settings": "pov_mode"}),
+        KeyboardButtonColor.SECONDARY
+    )
     settings_menu.row().add(
         Text("Назад", {"menu": "home"}), KeyboardButtonColor.NEGATIVE
     )

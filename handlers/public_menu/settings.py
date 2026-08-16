@@ -245,3 +245,18 @@ async def set_delete_timing(m: Message):
 
     await m.answer(f"Анкеты будут удаляться после {parse_cooldown(period)} неактивности игроков")
     return await timing(m)
+
+
+@bot.on.private_message(PayloadRule({"settings": "pov_mode"}), StateRule(Menu.SETTING))
+async def toggle_pov_mode(m: Message):
+    """Самостоятельное включение/выключение POV-режима игроком"""
+    from service.utils import enable_pov_mode, disable_pov_mode
+    pov_mode = await db.select([db.User.pov_mode]).where(db.User.user_id == m.from_id).gino.scalar()
+    if pov_mode:
+        await disable_pov_mode(m.from_id)
+    else:
+        await enable_pov_mode(m.from_id)
+    await m.answer(
+        f'POV-режим {"выключен ❌" if pov_mode else "включён ✅"}',
+        keyboard=await get_settings_menu(m.from_id)
+    )

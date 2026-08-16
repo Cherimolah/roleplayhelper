@@ -1,5 +1,6 @@
 from . import bank
 from . import expeditor
+from . import form_secrets
 from . import form
 from . import other
 from . import shop

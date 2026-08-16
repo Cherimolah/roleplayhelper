@@ -127,6 +127,45 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
         if admin_request:
             reply += (f'Базовое либидо: {form.libido_level}\nБазовое подчинению: {form.subordination_level}\n'
                       f'Бонус к либидо: {form.libido_bonus}\nБонус к подчинению: {form.subordination_bonus}')
+    # Секретные разделы анкеты - видны только судьям/админам или прошедшим фильтры доступа
+    try:
+        _secret_form_id = form.id
+        _secret_row = await db.FormSecret.query.where(db.FormSecret.form_id == _secret_form_id).gino.first()
+        if _secret_row:
+            _is_admin = await db.select([db.User.admin]).where(db.User.user_id == from_user_id).gino.scalar()
+            _is_judge = await db.select([db.User.judge]).where(db.User.user_id == from_user_id).gino.scalar()
+            _has_restr = _secret_row.access_fraction_id or _secret_row.access_reputation or _secret_row.access_profession_id
+            _allow = bool(_is_admin or _is_judge or not _has_restr)
+            if not _allow and _secret_row.access_fraction_id:
+                _viewer_form_id = await db.select([db.Form.id]).where(db.Form.user_id == from_user_id).gino.scalar()
+                if _viewer_form_id:
+                    _has_frac = await db.select([db.UserToFraction.id]).where(
+                        and_(
+                            db.UserToFraction.user_id == _viewer_form_id,
+                            db.UserToFraction.fraction_id == _secret_row.access_fraction_id,
+                            db.UserToFraction.reputation >= (_secret_row.access_reputation or 0)
+                        )
+                    ).gino.first()
+                    if _has_frac:
+                        _allow = True
+            if not _allow and _secret_row.access_profession_id:
+                _viewer_prof = await db.select([db.Form.profession]).where(db.Form.user_id == from_user_id).gino.scalar()
+                if _viewer_prof == _secret_row.access_profession_id:
+                    _allow = True
+            if _allow:
+                _parts = []
+                if _secret_row.secret_features:
+                    _parts.append(f'🔐 Особенности (скрытые):\n{_secret_row.secret_features}')
+                if _secret_row.secret_bio:
+                    _parts.append(f'🔐 Биография (скрытая):\n{_secret_row.secret_bio}')
+                if _secret_row.secret_character:
+                    _parts.append(f'🔐 Характер (скрытый):\n{_secret_row.secret_character}')
+                if _secret_row.secret_motives:
+                    _parts.append(f'🔐 Мотивы (скрытые):\n{_secret_row.secret_motives}')
+                if _parts:
+                    reply += '\n\n' + '\n\n'.join(_parts)
+    except Exception:
+        pass
     if photo_group:
         return reply, form.photo
     if not os.path.exists(f'data/photo{user_id}.jpg'):
@@ -1991,3 +2030,198 @@ async def wait_mandatory_quest(quest_id: int):
                                                          f'Вам выписан штраф:\n'
                                                          f'{penalty_text}')
     await db.MandatoryQuest.delete.where(db.MandatoryQuest.id == quest.id).gino.status()
+
+
+# ─── POV-режим (режим «от первого лица») ──────────────────────────────────────
+
+async def enable_pov_mode(user_id: int):
+    """
+    Включает POV-режим для пользователя:
+    1. Устанавливает флаг pov_mode=True в таблице users.
+    2. Удаляет пользователя из всех чатов (кроме каюты, если нужно оставить).
+    3. Уведомляет пользователя через бота.
+    Данные системы перемещения НЕ удаляются.
+    """
+    pov_already = await db.select([db.User.pov_mode]).where(db.User.user_id == user_id).gino.scalar()
+    if pov_already:
+        return  # Уже в POV-режиме
+
+    await db.User.update.values(pov_mode=True).where(db.User.user_id == user_id).gino.status()
+
+    # Удаляем из всех чатов
+    chat_ids = [x[0] for x in await db.select([db.UserToChat.chat_id]).where(
+        db.UserToChat.user_id == user_id).gino.all()]
+    for chat_id in chat_ids:
+        try:
+            await bot.api.messages.remove_chat_user(chat_id=chat_id, member_id=user_id)
+            await asyncio.sleep(0.1)
+        except Exception:
+            pass
+
+    # Уведомляем пользователя
+    try:
+        from config import USER_ID
+        userbot_link = f'https://vk.com/id{USER_ID}'
+        await bot.api.messages.send(
+            peer_id=user_id,
+            message=(
+                '👁 Вы переведены в режим «От первого лица».\n\n'
+                'Теперь вы можете играть только через общение с Сиреной: '
+                f'{userbot_link}\n\n'
+                'Все остальные механики бота остаются доступными через ЛС бота.'
+            ),
+            random_id=0
+        )
+    except Exception:
+        pass
+
+
+async def disable_pov_mode(user_id: int):
+    """
+    Выключает POV-режим для пользователя:
+    1. Сбрасывает флаг pov_mode=False.
+    2. Возвращает пользователя в его текущую локацию (чат) согласно системе перемещения.
+    3. Уведомляет пользователя.
+    """
+    pov_active = await db.select([db.User.pov_mode]).where(db.User.user_id == user_id).gino.scalar()
+    if not pov_active:
+        return
+
+    await db.User.update.values(pov_mode=False).where(db.User.user_id == user_id).gino.status()
+
+    # Возвращаем в текущий чат (по данным системы перемещения)
+    chat_id = await db.select([db.UserToChat.chat_id]).where(
+        db.UserToChat.user_id == user_id).gino.scalar()
+    if chat_id:
+        try:
+            user_chat_id = await convert_bot_chat_id_to_user(chat_id)
+            count = await db.select([db.Chat.visible_messages]).where(
+                db.Chat.chat_id == chat_id).gino.scalar()
+            await user_bot.api.messages.add_chat_user(
+                chat_id=user_chat_id, user_id=user_id, visible_messages_count=count or 1000
+            )
+        except Exception:
+            pass
+
+    try:
+        await bot.api.messages.send(
+            peer_id=user_id,
+            message='✅ Режим «От первого лица» выключен. Вы возвращены к обычному режиму игры.',
+            random_id=0
+        )
+    except Exception:
+        pass
+
+
+async def forward_pov_message(sender_id: int, text: str, attachments: str = ''):
+    """
+    Пересылает сообщение игрока в POV-режиме другим игрокам в той же локации.
+    Также применяет текстовые эффекты у получателей, у которых есть POV-дебаффы.
+
+    Логика:
+    - Получаем текущую локацию отправителя (chat_id из UserToChat).
+    - Находим всех игроков в той же локации, у которых pov_mode=True.
+    - Для каждого получателя проверяем, есть ли у него активные POV-дебаффы.
+    - Применяем соответствующие эффекты и пересылаем через юзербота.
+    """
+    from service.pov_effects import apply_effect, is_valid_pov_message
+
+    if not is_valid_pov_message(text):
+        return  # Сообщение не прошло фильтр
+
+    sender_chat_id = await db.select([db.UserToChat.chat_id]).where(
+        db.UserToChat.user_id == sender_id).gino.scalar()
+
+    if not sender_chat_id:
+        return  # Отправитель нигде не зарегистрирован
+
+    # Все POV-игроки в той же локации (кроме самого отправителя)
+    pov_users_in_location = [x[0] for x in
+        await db.select([db.UserToChat.user_id])
+        .select_from(db.UserToChat.join(db.User, db.UserToChat.user_id == db.User.user_id))
+        .where(
+            and_(
+                db.UserToChat.chat_id == sender_chat_id,
+                db.UserToChat.user_id != sender_id,
+                db.User.pov_mode.is_(True)
+            )
+        ).gino.all()
+    ]
+
+    sender_name = await db.select([db.Form.name]).where(db.Form.user_id == sender_id).gino.scalar()
+    header = f'[{sender_name}]:\n'
+
+    for recv_id in pov_users_in_location:
+        recv_form_id = await get_current_form_id(recv_id)
+        if not recv_form_id:
+            continue
+
+        # Получаем expeditor для дебаффов
+        expeditor_id = await db.select([db.Expeditor.id]).where(
+            db.Expeditor.form_id == recv_form_id).gino.scalar()
+
+        modified_text = text
+        hide_sender = False
+
+        if expeditor_id:
+            # Проверяем активные дебаффы
+            debuff_rows = await db.select([db.ExpeditorToDebuffs.debuff_id]).where(
+                db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()
+            for (debuff_id,) in debuff_rows:
+                debuff = await db.StateDebuff.get(debuff_id)
+                if not debuff or not debuff.pov_effect:
+                    continue
+                effect_name = debuff.pov_effect
+                if effect_name == 'limited_visibility_hidden':
+                    hide_sender = True
+                    effect_name = 'limited_visibility'
+                modified_text = apply_effect(modified_text, effect_name)
+
+        prefix = '' if hide_sender else header
+        try:
+            await user_bot.api.messages.send(
+                peer_id=recv_id,
+                message=prefix + modified_text,
+                attachments=attachments or '',
+                random_id=0
+            )
+            await asyncio.sleep(0.05)
+        except Exception:
+            pass
+
+
+async def forward_pov_message_to_judges(sender_id: int, text: str):
+    """
+    Режим скрытности: пересылает сообщение только судьям и администраторам с указанием данных.
+    """
+    sender_name = await db.select([db.Form.name]).where(db.Form.user_id == sender_id).gino.scalar()
+    sender_chat_id = await db.select([db.UserToChat.chat_id]).where(
+        db.UserToChat.user_id == sender_id).gino.scalar()
+
+    try:
+        chat_info = (await bot.api.messages.get_conversations_by_id(
+            peer_ids=[2000000000 + sender_chat_id])).items[0].chat_settings.title if sender_chat_id else 'неизвестно'
+    except Exception:
+        chat_info = 'неизвестно'
+
+    import datetime as _dt
+    now_str = _dt.datetime.now().strftime('%d.%m.%Y %H:%M:%S')
+
+    report = (
+        f'🔐 СКРЫТНОЕ ДЕЙСТВИЕ\n\n'
+        f'Игрок: [id{sender_id}|{sender_name}]\n'
+        f'Локация: {chat_info}\n'
+        f'Дата/время: {now_str}\n\n'
+        f'Действие:\n{text}'
+    )
+
+    judges = [x[0] for x in await db.select([db.User.user_id]).where(db.User.judge.is_(True)).gino.all()]
+    admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
+    recipients = list(set(judges + admins + ADMINS))
+
+    for r_id in recipients:
+        try:
+            await bot.api.messages.send(peer_id=r_id, message=report, random_id=0)
+            await asyncio.sleep(0.05)
+        except Exception:
+            pass

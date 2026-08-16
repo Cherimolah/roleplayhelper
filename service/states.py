@@ -334,3 +334,43 @@ class Judge(metaclass=StateMeta):
     CONSEQUENCES_DATA = 'consequences_data'
     OTHER_CONSEQUENCE = 'other_consequence'
     DELETE_CONSEQUENCES = 'delete_consequences'
+
+
+class Auction(metaclass=StateMeta):
+    """Состояния для создания и управления аукционами"""
+    MENU = 'auction_menu'
+    SELECT_LOT_TYPE = 'auction_lot_type'
+    SELECT_ITEM = 'auction_select_item'
+    ENTER_TITLE = 'auction_title'
+    ENTER_DESCRIPTION = 'auction_description'
+    ENTER_START_PRICE = 'auction_start_price'
+    ENTER_MIN_BET = 'auction_min_bet'
+    ENTER_START_AT = 'auction_start_at'
+    ENTER_END_AT = 'auction_end_at'
+    SELECT_TYPE = 'auction_select_type'
+    CONFIRM_CREATE = 'auction_confirm'
+    ENTER_BET = 'auction_enter_bet'
+    SELECT_AUCTION = 'auction_select'
+
+
+class PovPanel(metaclass=StateMeta):
+    """Состояния для панели POV-режима (для судей/администраторов)"""
+    MENU = 'pov_panel_menu'
+    SELECT_TARGET = 'pov_select_target'
+    SELECT_PLAYER = 'pov_select_player'
+    SELECT_PROFESSION = 'pov_select_profession'
+    CONFIRM = 'pov_confirm'
+    SELECT_DEBUFF = 'pov_select_debuff'
+    ENTER_DEBUFF_DURATION = 'pov_debuff_duration'
+
+
+class FormSecrets(metaclass=StateMeta):
+    """Состояния для редактирования секретных разделов анкеты"""
+    MENU = 'form_secrets_menu'
+    ENTER_SECRET_FEATURES = 'secret_features'
+    ENTER_SECRET_BIO = 'secret_bio'
+    ENTER_SECRET_CHARACTER = 'secret_character'
+    ENTER_SECRET_MOTIVES = 'secret_motives'
+    ENTER_ACCESS_FRACTION = 'secret_access_fraction'
+    ENTER_ACCESS_REPUTATION = 'secret_access_reputation'
+    ENTER_ACCESS_PROFESSION = 'secret_access_profession'

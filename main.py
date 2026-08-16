@@ -13,6 +13,7 @@ from service.db_engine import db, now
 from service.utils import send_mailing, take_off_payments, quest_over, send_daylics, check_last_activity, timer_daughter_levels, calculate_time, wait_users_post, wait_take_off_item, wait_disable_debuff, update_photo_token, wait_mandatory_quest
 from config import ADMINS, BOARD_FORMS_TOPIC_ID, ARCHIVE_FORMS_TOPIC_ID, GROUP_ID
 from service.middleware import MaintainenceMiddleware, StateMiddleware, FormMiddleware, ActivityUsersMiddleware, StateMiddlewareME, ActionModeMiddleware
+from handlers.admin_panel.auctions import schedule_auction, public_auctions
 
 bot.labeler.message_view.register_middleware(MaintainenceMiddleware)
 bot.labeler.message_view.register_middleware(FormMiddleware)
@@ -68,6 +69,14 @@ async def on_startup():
     mandatory_quests = [x[0] for x in await db.select([db.MandatoryQuest.id]).where(db.MandatoryQuest.expired_at < now()).gino.all()]
     for quest_id in mandatory_quests:
         asyncio.get_event_loop().create_task(wait_mandatory_quest(quest_id))
+
+    auctions = [x[0] for x in await db.select([db.Auction.id]).where(db.Auction.end_at < now()).gino.all()]
+    for auc_id in auctions:
+        asyncio.get_event_loop().create_task(schedule_auction(auc_id))
+
+    auctions = [x[0] for x in await db.select([db.Auction.id]).where(db.Auction.start_at > now()).gino.all()]
+    for auc_id in auctions:
+        asyncio.get_event_loop().create_task(public_auctions(auc_id))
 
     # Закрываем топики
     await user_bot.api.request('board.closeTopic', {'group_id': abs(GROUP_ID), 'topic_id': BOARD_FORMS_TOPIC_ID})

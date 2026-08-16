@@ -7,3 +7,4 @@ from . import chat_commands
 from . import requests
 from . import judge_panel
 from . import action_mode
+from . import userbot_pov
