@@ -2155,7 +2155,7 @@ async def forward_pov_message(sender_id: int, text: str, attachments: str = ''):
     sender_name = await db.select([db.Form.name]).where(db.Form.user_id == sender_id).gino.scalar()
     header = f'[{sender_name}]:\n'
 
-    pov_users_in_location += sender_chat_id + 2000000000
+    pov_users_in_location.append(sender_chat_id + 2000000000)
     for recv_id in pov_users_in_location:
         recv_form_id = await get_current_form_id(recv_id)
         if not recv_form_id:
