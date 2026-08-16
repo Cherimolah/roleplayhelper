@@ -2139,7 +2139,7 @@ async def forward_pov_message(sender_id: int, text: str, attachments: str = ''):
     if not sender_chat_id:
         return  # Отправитель нигде не зарегистрирован
 
-    # Все игроки в той же локации (кроме самого отправителя)
+    # Все POV-игроки в той же локации (кроме самого отправителя)
     pov_users_in_location = [x[0] for x in
         await db.select([db.UserToChat.user_id])
         .select_from(db.UserToChat.join(db.User, db.UserToChat.user_id == db.User.user_id))
@@ -2147,6 +2147,7 @@ async def forward_pov_message(sender_id: int, text: str, attachments: str = ''):
             and_(
                 db.UserToChat.chat_id == sender_chat_id,
                 db.UserToChat.user_id != sender_id,
+                db.User.pov_mode.is_(True),
             )
         ).gino.all()
     ]
@@ -2154,6 +2155,7 @@ async def forward_pov_message(sender_id: int, text: str, attachments: str = ''):
     sender_name = await db.select([db.Form.name]).where(db.Form.user_id == sender_id).gino.scalar()
     header = f'[{sender_name}]:\n'
 
+    pov_users_in_location += sender_chat_id
     for recv_id in pov_users_in_location:
         recv_form_id = await get_current_form_id(recv_id)
         if not recv_form_id:
@@ -2182,7 +2184,7 @@ async def forward_pov_message(sender_id: int, text: str, attachments: str = ''):
 
         prefix = '' if hide_sender else header
         try:
-            await user_bot.api.messages.send(
+            await bot.api.messages.send(
                 peer_id=recv_id,
                 message=prefix + modified_text,
                 attachments=attachments or '',
