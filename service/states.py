@@ -361,6 +361,7 @@ class PovPanel(metaclass=StateMeta):
     SELECT_PLAYER = 'pov_select_player'
     SELECT_PROFESSION = 'pov_select_profession'
     CONFIRM = 'pov_confirm'
+    DISABLE = 'pov_disable'
     SELECT_DEBUFF = 'pov_select_debuff'
     ENTER_DEBUFF_DURATION = 'pov_debuff_duration'
 

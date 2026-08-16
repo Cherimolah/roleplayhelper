@@ -116,7 +116,7 @@ async def pov_player_received(m: Message):
     )
 
 
-@bot.on.private_message(StateRule(f"{PovPanel.CONFIRM}*disable_list"))
+@bot.on.private_message(StateRule(PovPanel.DISABLE))
 async def pov_disable_selected(m: Message):
     """Выключить POV для выбранного из списка игрока."""
     if not m.payload:
@@ -279,7 +279,7 @@ async def pov_disable_menu(m: Message):
         kb.add(Text(str(i + 1), {'disable_pov_user': uid}), KeyboardButtonColor.SECONDARY)
     kb.row().add(Text('Назад', {'pov': 'back_to_menu'}), KeyboardButtonColor.NEGATIVE)
 
-    states.set(m.from_id, f'{PovPanel.CONFIRM}*disable_list')
+    states.set(m.from_id, PovPanel.DISABLE)
     await m.answer(reply, keyboard=kb)
 
 
