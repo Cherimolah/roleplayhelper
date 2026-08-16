@@ -1886,6 +1886,10 @@ async def create_cabin_chat(user_id: int):
     Функция создает чат с локацией каюты пользователя. Добавляет туда бота и дает ему админку
     """
     cabin_number = await db.select([db.Form.cabin]).where(db.Form.user_id == user_id).gino.scalar()
+    chat_id = await db.select([db.Chat.id]).where(db.Chat.cabin_number == cabin_number).gino.scalar()
+    if chat_id:
+        await db.Chat.update.values(cabin_user_id=user_id).where(db.Chat.id == chat_id).gino.status()
+        return
     response = await user_bot.api.messages.create_chat(title=f'RP "Среди Нас" Каюта/Кельи № {cabin_number}')
     await asyncio.sleep(0.5)
     group_id = (await bot.api.groups.get_by_id()).groups[0].id
@@ -1900,7 +1904,7 @@ async def create_cabin_chat(user_id: int):
                                                                                  'change_style': 'owner_and_admins',
                                                                                  'use_mass_mentions': 'owner_and_admins'})
     await asyncio.sleep(0.5)
-    await db.Chat.create(is_private=True, visible_messages=10, cabin_user_id=user_id, user_chat_id=response.chat_id, chat_id=None)
+    await db.Chat.create(is_private=True, visible_messages=10, cabin_user_id=user_id, user_chat_id=response.chat_id, chat_id=None, cabin_number=cabin_number)
     message = await user_bot.api.messages.send(message=f'/каюта {cabin_number}', peer_id=response.chat_id + 2000000000,
                                            random_id=0)
     await asyncio.sleep(0.5)
@@ -2135,7 +2139,7 @@ async def forward_pov_message(sender_id: int, text: str, attachments: str = ''):
     if not sender_chat_id:
         return  # Отправитель нигде не зарегистрирован
 
-    # Все POV-игроки в той же локации (кроме самого отправителя)
+    # Все игроки в той же локации (кроме самого отправителя)
     pov_users_in_location = [x[0] for x in
         await db.select([db.UserToChat.user_id])
         .select_from(db.UserToChat.join(db.User, db.UserToChat.user_id == db.User.user_id))
@@ -2143,7 +2147,6 @@ async def forward_pov_message(sender_id: int, text: str, attachments: str = ''):
             and_(
                 db.UserToChat.chat_id == sender_chat_id,
                 db.UserToChat.user_id != sender_id,
-                db.User.pov_mode.is_(True)
             )
         ).gino.all()
     ]
@@ -2225,3 +2228,56 @@ async def forward_pov_message_to_judges(sender_id: int, text: str):
             await asyncio.sleep(0.05)
         except Exception:
             pass
+
+async def load_forms_page(page) -> Tuple[str, Keyboard]:
+    """
+    Загрузка страницы со списком анкет пользователей.
+
+    Args:
+        page: Номер страницы
+
+    Returns:
+        Tuple[str, Keyboard]: Текст сообщения и клавиатура пагинации
+    """
+    data = await db.select([db.Form.user_id, db.Form.name]).where(
+        and_(db.Form.is_request.is_(False), db.Form.user_id != 32650977)).limit(15).offset(
+        (page - 1) * 15).order_by(db.Form.id.asc()).gino.all()
+    count = await db.select([func.count(db.Form.id)]).where(
+        and_(db.Form.is_request.is_(False), db.Form.user_id != 32650977)).gino.scalar()
+
+    # Расчет количества страниц
+    if count % 15 == 0:
+        pages = count // 15
+    else:
+        pages = count // 15 + 1
+
+    reply = f"Список анкет пользователей:\n\n"
+    user_ids = [x[0] for x in data]
+    names = [x[1] for x in data]
+    user_names = [f"{x.first_name} {x.last_name}" for x in await bot.api.users.get(user_ids=user_ids)]
+    data = list(zip(range(len(user_names)), user_ids, names, user_names))
+
+    # Формирование списка анкет
+    for i, user_id, name, user_name in data:
+        reply += f"{(page - 1) * 15 + i + 1}. [id{user_id}|{user_name} / {name}]\n"
+
+    reply += "\nДля просмотра анкеты отправьте номер из списка"
+    reply += ("\n⚠ Вы можете отправить ссылку/айди/имя в игре/пересланное сообщение/упоминание участника, "
+              "анкету которого вы хотите найти")
+
+    # Создание клавиатуры пагинации
+    if page == 1 and page == pages:
+        keyboard = None
+    else:
+        keyboard = Keyboard(inline=True)
+        reply += f"\n\nСтраница {page}/{pages}"
+
+    if page > 1:
+        keyboard.add(
+            Callback("<-", {"forms_page": page - 1}), KeyboardButtonColor.PRIMARY
+        )
+    if pages > page:
+        keyboard.add(
+            Callback("->", {"forms_page": page + 1}), KeyboardButtonColor.PRIMARY
+        )
+    return reply, keyboard

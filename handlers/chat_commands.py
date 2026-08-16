@@ -127,7 +127,7 @@ async def ask_salary_command(m: Message):
 @bot.on.chat_message(ChatAction('выполнить отчет'), blocking=False)
 @bot.on.chat_message(ChatAction('закончить отчет'), blocking=False)
 @bot.on.chat_message(ChatAction('сдать еженедельник'), blocking=False)
-async def ask_salary_command(m: Message):
+async def submit_report_command(m: Message):
     """
     Сдача отчета о выполнении дейлика или квеста
 
@@ -372,32 +372,120 @@ async def transmitter(m: Message, match: tuple[str, str]):
 
 
 @bot.on.chat_message(MentionQuestRule(), OrRule(AdminRule(), JudgeRule()), blocking=False)
-async def required_quest(m: Message, match: tuple[str, str]):
+async def required_quest(m: Message, match: tuple):
     """
-    Команда для создания обязательных квестов. Эти квесты появляются в отдельной вкладке с квестами
+    Команда [выдать задачу @user1 @user2 «название»] — создаёт обязательный квест.
+    Если указан @all/@все — создаёт добровольный квест для всех участников чата.
     """
     user_ids, name = match
-    if user_ids not in ('@all', '@все'):
+    # user_ids — список int-айди игроков или ['@all'/'@все']
+    is_all = any(isinstance(uid, str) and uid in ('@all', '@все') for uid in user_ids)
+
+    if not is_all:
+        # Принудительный квест конкретным игрокам
         form_ids = [x[0] for x in await db.select([db.Form.id]).where(db.Form.user_id.in_(user_ids)).gino.all()]
         if not form_ids:
-            await m.answer('Не найдено анкет, подходящих кому выдавать задачу')
+            await m.answer('Не найдено анкет у указанных пользователей')
             return
         from_form_id = await get_current_form_id(m.from_id)
         quest = await db.MandatoryQuest.create(form_ids=form_ids, name=name, from_form_id=from_form_id)
-        await db.User.update.values(state=f'{Admin.MANDATORY_QUEST_DESCRIPTION}*{quest.id}').where(db.User.user_id == m.from_id).gino.status()
+        # Уведомляем каждого игрока в ЛС о новом квесте
+        for uid in user_ids:
+            try:
+                await bot.api.messages.send(
+                    peer_id=uid,
+                    message=f'Панель обязательных квестов в меню бота.',
+                    random_id=0
+                )
+            except Exception:
+                pass  # пользователь заблокировал бота — не критично
+        await db.User.update.values(state=f'{Admin.MANDATORY_QUEST_DESCRIPTION}*{quest.id}').where(
+            db.User.user_id == m.from_id).gino.status()
+        # Одно итоговое сообщение с перечнем игроков
+        mentions = []
+        for uid in user_ids:
+            mentions.append(await create_mention(uid))
         await m.answer('Перейдите в личные сообщения для продолжения создания обязательного квеста')
-        for user_id in user_ids:
-            await bot.api.messages.send(peer_id=m.from_id, message='Вы создаете обязательный квест для пользователя '
-                                                                   f'{await create_mention(user_id)} с названием «{name}»\n\n'
-                                                                   f'Напишите описание квеста 👇', keyboard=Keyboard())
+        await bot.api.messages.send(
+            peer_id=m.from_id,
+            message=f'Вы создаёте обязательный квест «{name}» для: {", ".join(mentions)}\n\n'
+                    f'Напишите описание квеста 👇',
+            keyboard=Keyboard()
+        )
         return
-    _, name = match
+
+    # Добровольный квест для всех участников чата
     users = await bot.api.messages.get_conversation_members(m.peer_id)
-    user_ids = [x.member_id for x in users.items if x.member_id > 0]
-    form_ids = [x[0] for x in await db.select([db.Form.id]).where(db.Form.user_id.in_(user_ids)).gino.all()]
-    quest = await db.Quest.create(allowed_forms=[form_ids], name=name)
-    await db.User.update.values(state=f'{Admin.QUEST_DESCRIPTION}*{quest.id}', editing_content=False, special_quest=True).where(
-        db.User.user_id == m.from_id).gino.status()
-    await m.answer('Перейдите в личные сообщения для продолжения создания обязательного квеста')
-    await bot.api.messages.send(peer_id=m.from_id, message=f'Вы создаете квест с названием «{name}»\n\n'
-                                                               f'Напишите описание квеста 👇', keyboard=Keyboard())
+    all_user_ids = [x.member_id for x in users.items if x.member_id > 0]
+    form_ids = [x[0] for x in await db.select([db.Form.id]).where(db.Form.user_id.in_(all_user_ids)).gino.all()]
+    if not form_ids:
+        await m.answer('В чате нет игроков с анкетами — некому выдавать квест')
+        return
+    quest = await db.Quest.create(allowed_forms=form_ids, name=name)
+    await db.User.update.values(
+        state=f'{Admin.QUEST_DESCRIPTION}*{quest.id}',
+        editing_content=False,
+        special_quest=True
+    ).where(db.User.user_id == m.from_id).gino.status()
+    await m.answer('Перейдите в личные сообщения для продолжения создания добровольного квеста')
+    await bot.api.messages.send(
+        peer_id=m.from_id,
+        message=f'Вы создаёте добровольный квест «{name}» для всех участников чата.\n\n'
+                f'Напишите описание квеста 👇',
+        keyboard=Keyboard()
+    )
+
+
+
+# ─── Групповая отправка сообщений нескольким игрокам + «засекречено» (Доработка 5) ────────────
+
+@bot.on.message(RegexRule(re.compile(
+    r'\[\s*(?:засекречено\s+)?(?:групповое|множественное)\s+сообщение\s+(?:\[id\d+\|[^\]]+\]\s*)+[«"„]',
+    re.IGNORECASE
+)), blocking=False)
+async def multi_transmitter(m: Message):
+    """
+    Отправка сообщения нескольким игрокам с возможной анонимизацией.
+
+    Форматы:
+      [групповое сообщение [id123|name] [id456|name] «текст»]
+      [засекречено групповое сообщение [id123|name] «текст»]
+        — отправитель не раскрывается получателю
+    """
+    text = m.text or ''
+    is_classified = bool(re.search(r'\[\s*засекречено', text, re.IGNORECASE))
+
+    mention_ids = [int(uid) for uid in re.findall(r'\[id(\d+)\|[^\]]+\]', text)]
+    msg_match = re.search(r'[«"„](.*?)[»"]', text, re.DOTALL)
+    if not msg_match or not mention_ids:
+        return
+    message_text = msg_match.group(1).strip()
+
+    valid_ids = []
+    for uid in mention_ids:
+        exists = await db.select([db.Form.id]).where(db.Form.user_id == uid).gino.scalar()
+        if exists:
+            valid_ids.append(uid)
+
+    if not valid_ids:
+        await m.answer('Ни у одного из указанных пользователей нет анкеты')
+        return
+
+    if is_classified:
+        out_message = f'Секретное сообщение от неизвестного источника:\n«{message_text}»'
+    else:
+        out_message = f'Новое сообщение от {await create_mention(m.from_id)}:\n«{message_text}»'
+
+    sent = 0
+    for uid in valid_ids:
+        try:
+            await bot.api.messages.send(peer_id=uid, message=out_message, random_id=0)
+            sent += 1
+        except Exception:
+            pass
+
+    skipped = len(mention_ids) - sent
+    result = f'Сообщение отправлено {sent} игроку(/кам)'
+    if skipped:
+        result += f', {skipped} — нет анкеты'
+    await m.answer(result)

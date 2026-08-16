@@ -2,8 +2,6 @@
 Модуль управления анкетами пользователей.
 Включает просмотр, редактирование анкет и управление элементами кают.
 """
-
-from typing import Tuple
 import os
 
 from vkbottle.bot import Message, MessageEvent
@@ -15,67 +13,13 @@ import messages
 from loader import bot
 from service.serializers import fields
 from service.custom_rules import StateRule, NumericRule
-from service.states import Menu
+from service.states import Menu, Admin
 from service.utils import (loads_form, get_mention_from_message, show_fields_edit, soft_divide, page_fractions,
-                           parse_reputation, get_admin_ids)
+                           parse_reputation, get_admin_ids, load_forms_page)
 import service.keyboards as keyboards
 from service.middleware import states
 from service.db_engine import db
 from handlers.questions import q1
-
-
-async def load_forms_page(page) -> Tuple[str, Keyboard]:
-    """
-    Загрузка страницы со списком анкет пользователей.
-
-    Args:
-        page: Номер страницы
-
-    Returns:
-        Tuple[str, Keyboard]: Текст сообщения и клавиатура пагинации
-    """
-    data = await db.select([db.Form.user_id, db.Form.name]).where(
-        and_(db.Form.is_request.is_(False), db.Form.user_id != 32650977)).limit(15).offset(
-        (page - 1) * 15).order_by(db.Form.id.asc()).gino.all()
-    count = await db.select([func.count(db.Form.id)]).where(
-        and_(db.Form.is_request.is_(False), db.Form.user_id != 32650977)).gino.scalar()
-
-    # Расчет количества страниц
-    if count % 15 == 0:
-        pages = count // 15
-    else:
-        pages = count // 15 + 1
-
-    reply = f"Список анкет пользователей:\n\n"
-    user_ids = [x[0] for x in data]
-    names = [x[1] for x in data]
-    user_names = [f"{x.first_name} {x.last_name}" for x in await bot.api.users.get(user_ids=user_ids)]
-    data = list(zip(range(len(user_names)), user_ids, names, user_names))
-
-    # Формирование списка анкет
-    for i, user_id, name, user_name in data:
-        reply += f"{(page - 1) * 15 + i + 1}. [id{user_id}|{user_name} / {name}]\n"
-
-    reply += "\nДля просмотра анкеты отправьте номер из списка"
-    reply += ("\n⚠ Вы можете отправить ссылку/айди/имя в игре/пересланное сообщение/упоминание участника, "
-              "анкету которого вы хотите найти")
-
-    # Создание клавиатуры пагинации
-    if page == 1 and page == pages:
-        keyboard = None
-    else:
-        keyboard = Keyboard(inline=True)
-        reply += f"\n\nСтраница {page}/{pages}"
-
-    if page > 1:
-        keyboard.add(
-            Callback("<-", {"forms_page": page - 1}), KeyboardButtonColor.PRIMARY
-        )
-    if pages > page:
-        keyboard.add(
-            Callback("->", {"forms_page": page + 1}), KeyboardButtonColor.PRIMARY
-        )
-    return reply, keyboard
 
 
 @bot.on.private_message(PayloadRule({"menu": "form"}), StateRule(Menu.MAIN))
@@ -353,6 +297,7 @@ async def reputation_form(m: Message):
 
 
 @bot.on.private_message(StateRule(Menu.SHOW_FORM))
+@bot.on.private_message(StateRule(Admin.EDIT_FORMS))
 async def search_user_form(m: Message):
     """Поиск анкеты пользователя по различным критериям."""
     user_id = await get_mention_from_message(m)
@@ -390,6 +335,8 @@ async def search_user_form(m: Message):
         form_id = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
         keyboard = Keyboard(inline=True).add(
             Text("Репутация", {"form_reputation": user_id}), KeyboardButtonColor.PRIMARY
+        ).row().add(
+            Text('Редактировать анкету', {"form_edit_button": user_id}), KeyboardButtonColor.SECONDARY
         ).row().add(
             Callback("Удалить анкету", {"form_delete": form_id}), KeyboardButtonColor.NEGATIVE
         )

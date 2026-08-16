@@ -24,7 +24,7 @@ from service.pov_effects import is_valid_pov_message
 
 # ─── Хэндлер входящих сообщений пользователей в ЛС юзербота ─────────────────
 
-@user_bot.on.private_message()
+@user_bot.on.private_message(blocking=False)
 async def pov_userbot_message(m: Message):
     """
     Обрабатывает все входящие личные сообщения юзерботу.

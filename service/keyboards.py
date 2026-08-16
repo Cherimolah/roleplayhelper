@@ -97,6 +97,8 @@ admin_menu = Keyboard().add(
 ).add(
     Text("👁 POV-панель", {"admin_menu": "pov_panel"}), KeyboardButtonColor.PRIMARY
 ).row().add(
+    Text("📡 Масс. изменение сообщений", {"admin_menu": "mass_visible"}), KeyboardButtonColor.PRIMARY
+).row().add(
     Text("В главное меню", {"admin_menu": "back"}), KeyboardButtonColor.NEGATIVE
 )
 

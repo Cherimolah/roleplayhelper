@@ -473,6 +473,19 @@ async def accept_delete(m: MessageEvent):
 async def set_reason_delete_form(m: Message):
     user_id = int(states.get(m.from_id).split('*')[-1])
     await post_form_to_archive(user_id, m.text)
+
+    # Освобождаем чат каюты: выгоняем игрока, сам чат переименовывать не надо
+    user_chat_id = await db.select([db.Chat.user_chat_id]).where(
+        db.Chat.cabin_user_id == user_id).gino.scalar()
+    if user_chat_id:
+        # Выгоняем игрока из чата
+        try:
+            await user_bot.api.messages.remove_chat_user(chat_id=user_chat_id, user_id=user_id)
+        except Exception:
+            pass  # Уже не в чате или нет прав — не критично
+        # Очищаем привязку: чат остаётся, каюта готова к новому жильцу
+        await db.Chat.update.values(cabin_user_id=None).where(db.Chat.cabin_user_id == user_id).gino.status()
+
     await db.User.delete.where(db.User.user_id == user_id).gino.status()
     await bot.api.messages.send(peer_id=user_id,
                                 message=f"Ваша анкета в боте была удалена! Приятно было с вами общаться, "

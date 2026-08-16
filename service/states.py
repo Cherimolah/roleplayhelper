@@ -309,6 +309,7 @@ class Admin(metaclass=StateMeta):
     MANDATORY_QUEST_REWARD = 'mandatory_quest_reward'
     MANDATORY_QUEST_PENALTY = 'mandatory_quest_penalty'
     MANDATORY_QUEST_DELETE = 'mandatory_quest_delete'
+    MASS_VISIBLE_MESSAGES = 'mass_visible_messages'
 
 
 class Judge(metaclass=StateMeta):

@@ -285,3 +285,49 @@ async def set_cabin_number(m: Message, cabin_number: int):
         await m.answer(f'Каюта успешно зарегистрирована пользователю {await create_mention(user_id)}')
     else:
         await m.answer('Возникла какая-то ошибка')
+
+
+@bot.on.private_message(StateRule(Admin.MENU), PayloadRule({"admin_menu": "mass_visible"}), AdminRule())
+async def start_mass_visible(m: Message):
+    """Начало массового изменения показателя видимых сообщений для всех некаютных чатов (без кают)"""
+    # Показываем текущее значение для справки
+    chats = await db.select([db.Chat.chat_id, db.Chat.visible_messages]).where(
+        db.Chat.cabin_user_id.is_(None)
+    ).gino.all()
+    count = len(chats)
+    if not count:
+        await m.answer('Некаютных чатов покане существует')
+        return
+    states.set(m.from_id, Admin.MASS_VISIBLE_MESSAGES)
+    keyboard = Keyboard().add(
+        Text('Назад', {'mass_visible': 'back'}), KeyboardButtonColor.NEGATIVE
+    )
+    await m.answer(
+        f'Сейчас некаютных чатов: {count}\n'
+        f'Напишите новое количество видимых сообщений (от 0 до 1000).\n'
+        f'Обновится сразу во всех чатах кроме кают.',
+        keyboard=keyboard
+    )
+
+
+@bot.on.private_message(StateRule(Admin.MASS_VISIBLE_MESSAGES), PayloadRule({'mass_visible': 'back'}), AdminRule())
+async def back_mass_visible(m: Message):
+    """Возврат из массового изменения"""
+    states.set(m.from_id, Admin.MENU)
+    await m.answer('Админ-панель', keyboard=keyboards.admin_menu)
+
+
+@bot.on.private_message(StateRule(Admin.MASS_VISIBLE_MESSAGES), NumericRule(max_number=1000, min_number=0), AdminRule())
+async def apply_mass_visible(m: Message, value: int):
+    """Применение нового значения видимых сообщений ко 
+    всем некаютным чатам (без кают)"""
+    # Обновляем все некаютные чаты (где cabin_user_id IS NULL)
+    await db.Chat.update.values(visible_messages=value).where(
+        db.Chat.cabin_user_id.is_(None)
+    ).gino.status()
+    states.set(m.from_id, Admin.MENU)
+    await m.answer(
+        f'✅ Готово. Видимость сообщений во всех некаютных чатах изменена на {value}\n'
+        f'Новые игроки будут видеть указанное количество сообщений при входе в чат по ссылке или при перемещении.',
+        keyboard=keyboards.admin_menu
+    )

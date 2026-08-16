@@ -817,8 +817,9 @@ class Database(Gino):
             chat_id = Column(Integer, unique=True)  # Айди чата для бота группы
             is_private = Column(Boolean, default=False)  # Является ли он приватным
             visible_messages = Column(Integer, default=1000)  # Сколько сообщений видно при приглашении / ссылке
-            cabin_user_id = Column(Integer, ForeignKey('users.user_id', ondelete='SET NULL'))  # Номер каюты (если это чат каюты)
+            cabin_user_id = Column(Integer, ForeignKey('users.user_id', ondelete='SET NULL'))  # Айди пользователя, чья каюта (если это чат каюты)
             user_chat_id = Column(Integer)  # Айди чата для юзер-бота
+            cabin_number = Column(Integer)  # Номер каюты (если это чат каюты)
 
         self.Chat = Chat
 

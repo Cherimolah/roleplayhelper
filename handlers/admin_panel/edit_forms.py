@@ -7,7 +7,7 @@ import asyncio
 import datetime
 
 from vkbottle.bot import Message
-from vkbottle.dispatch.rules.base import PayloadRule
+from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
 from vkbottle import Keyboard, Text, KeyboardButtonColor
 
 import messages
@@ -18,7 +18,7 @@ from service.custom_rules import AdminRule, StateRule, NumericRule, UserSpecifie
 from service.middleware import states
 from service.states import Admin
 from service.db_engine import db
-from service.utils import loads_form, take_off_payments, reload_image, update_daughter_levels
+from service.utils import loads_form, take_off_payments, reload_image, update_daughter_levels, create_cabin_chat, load_forms_page
 from service.serializers import info_cabin
 
 
@@ -26,16 +26,22 @@ from service.serializers import info_cabin
 async def edit_users_forms(m: Message):
     """Начало процесса редактирования анкет пользователей"""
     states.set(m.from_id, Admin.EDIT_FORMS)
+    reply, keyboard = await load_forms_page(1)
+    await m.answer(reply, keyboard=keyboard)
     keyboard = Keyboard().add(
         Text("Назад", {"admin_forms_edit": "back"}), KeyboardButtonColor.NEGATIVE
     )
-    await m.answer(messages.edit_users_forms, keyboard=keyboard)
+    await m.answer("Для возвращения нажмите кнопку Назад", keyboard=keyboard)
 
 
-@bot.on.private_message(StateRule(Admin.EDIT_FORMS), AdminRule(), UserSpecified(Admin.EDIT_FORMS))
-async def search_form_for_edit(m: Message, form: tuple):
+@bot.on.private_message(StateRule(Admin.EDIT_FORMS), AdminRule(), PayloadMapRule({"form_edit_button": int}))
+async def search_form_for_edit(m: Message, form: tuple=None):
     """Поиск и отображение анкеты для редактирования"""
-    form_id, user_id = form
+    if m.payload:
+        user_id = m.payload['form_edit_button']
+        form_id = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
+    else:
+        form_id, user_id = form
     states.set(m.from_id, f"{Admin.SELECT_FIELDS}*{form_id}")
     # Загружаем анкету пользователя
     form, photo = await loads_form(user_id, m.from_id, form_id=form_id, absolute_params=True)
@@ -171,6 +177,14 @@ async def enter_field_value(m: Message):
             await m.answer("Число не входит в промежуток от 0 до 100")
             return
         await update_daughter_levels(user_id, libido_level=value)
+    elif field == 'cabin':
+        try:
+            value = int(m.text)
+        except ValueError:
+            await m.answer("Необходимо указать число")
+            return
+        await db.Form.update.values(cabin=value).where(db.Form.id == form_id).gino.status()
+        await create_cabin_chat(user_id)
     else:
         # Обработка простых числовых полей
         if m.text.isdigit():
