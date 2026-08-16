@@ -116,12 +116,6 @@ async def pov_player_received(m: Message):
     )
 
 
-@bot.on.private_message(StateRule(PovPanel.CONFIRM), PayloadRule({'pov': 'back_to_menu'}))
-async def pov_confirm_back(m: Message):
-    states.set(m.from_id, PovPanel.MENU)
-    await m.answer('Панель POV-режима', keyboard=pov_panel_kb)
-
-
 @bot.on.private_message(StateRule(f"{PovPanel.CONFIRM}*disable_list"))
 async def pov_disable_selected(m: Message):
     """Выключить POV для выбранного из списка игрока."""
@@ -139,6 +133,13 @@ async def pov_disable_selected(m: Message):
     name = await db.select([db.Form.name]).where(db.Form.user_id == uid).gino.scalar()
     states.set(m.from_id, PovPanel.MENU)
     await m.answer(f'✅ POV-режим выключен для [id{uid}|{name}].', keyboard=pov_panel_kb)
+
+
+
+@bot.on.private_message(StateRule(PovPanel.CONFIRM), PayloadRule({'pov': 'back_to_menu'}))
+async def pov_confirm_back(m: Message):
+    states.set(m.from_id, PovPanel.MENU)
+    await m.answer('Панель POV-режима', keyboard=pov_panel_kb)
 
 
 @bot.on.private_message(StateRule(PovPanel.CONFIRM))
