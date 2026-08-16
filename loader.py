@@ -22,7 +22,7 @@ photo_message_uploader = PhotoMessageUploader(bot.api)
 doc_messages_uploader = DocMessagesUploader(bot.api)
 video_uploader = VideoUploader(bot.api)
 logger.remove()
-logger.add(sys.stderr, level="INFO")
+logger.add(sys.stderr, level="DEBUG")
 bot.api.API_URL = 'https://api.vk.ru/method/'
 
 user_bot = User(USER_BOT_TOKEN)

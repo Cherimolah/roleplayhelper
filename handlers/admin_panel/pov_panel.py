@@ -122,6 +122,25 @@ async def pov_confirm_back(m: Message):
     await m.answer('Панель POV-режима', keyboard=pov_panel_kb)
 
 
+@bot.on.private_message(StateRule(f"{PovPanel.CONFIRM}*disable_list"))
+async def pov_disable_selected(m: Message):
+    """Выключить POV для выбранного из списка игрока."""
+    if not m.payload:
+        return
+    if m.payload.get('pov') == 'back_to_menu':
+        states.set(m.from_id, PovPanel.MENU)
+        await m.answer('Панель POV-режима', keyboard=pov_panel_kb)
+        return
+    if 'disable_pov_user' not in m.payload:
+        return
+
+    uid = int(m.payload['disable_pov_user'])
+    await disable_pov_mode(uid)
+    name = await db.select([db.Form.name]).where(db.Form.user_id == uid).gino.scalar()
+    states.set(m.from_id, PovPanel.MENU)
+    await m.answer(f'✅ POV-режим выключен для [id{uid}|{name}].', keyboard=pov_panel_kb)
+
+
 @bot.on.private_message(StateRule(PovPanel.CONFIRM))
 async def pov_toggle_player(m: Message):
     """Включение/выключение POV для конкретного игрока."""
@@ -165,14 +184,16 @@ async def pov_select_profession(m: Message):
     ))
 
 
+@bot.on.private_message(StateRule(PovPanel.SELECT_PROFESSION), PayloadRule({'pov': 'back_to_menu'}))
+async def pov_profession_back(m: Message):
+    states.set(m.from_id, PovPanel.MENU)
+    await m.answer('Панель POV-режима', keyboard=pov_panel_kb)
+    return
+
+
 @bot.on.private_message(StateRule(PovPanel.SELECT_PROFESSION), NumericRule())
 async def pov_profession_enable(m: Message, value: int):
     """Включить POV всем представителям выбранной профессии."""
-    if m.payload and m.payload.get('pov') == 'back_to_menu':
-        states.set(m.from_id, PovPanel.MENU)
-        await m.answer('Панель POV-режима', keyboard=pov_panel_kb)
-        return
-
     professions = await db.select([db.Profession.id, db.Profession.name]).order_by(
         db.Profession.id.asc()).gino.all()
     if value > len(professions):
@@ -259,25 +280,6 @@ async def pov_disable_menu(m: Message):
 
     states.set(m.from_id, f'{PovPanel.CONFIRM}*disable_list')
     await m.answer(reply, keyboard=kb)
-
-
-@bot.on.private_message(StateRule(PovPanel.CONFIRM))
-async def pov_disable_selected(m: Message):
-    """Выключить POV для выбранного из списка игрока."""
-    if not m.payload:
-        return
-    if m.payload.get('pov') == 'back_to_menu':
-        states.set(m.from_id, PovPanel.MENU)
-        await m.answer('Панель POV-режима', keyboard=pov_panel_kb)
-        return
-    if 'disable_pov_user' not in m.payload:
-        return
-
-    uid = int(m.payload['disable_pov_user'])
-    await disable_pov_mode(uid)
-    name = await db.select([db.Form.name]).where(db.Form.user_id == uid).gino.scalar()
-    states.set(m.from_id, PovPanel.MENU)
-    await m.answer(f'✅ POV-режим выключен для [id{uid}|{name}].', keyboard=pov_panel_kb)
 
 
 # ─── Список игроков в POV ─────────────────────────────────────────────────────
