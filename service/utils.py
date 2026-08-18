@@ -2192,7 +2192,8 @@ async def forward_pov_message(sender_id: int, text: str, attachments: str = ''):
             await asyncio.sleep(0.05)
         except Exception:
             pass
-    await bot.api.messages.send(peer_id=sender_chat_id + 2000000000, message=text, attachment=attachments)
+    reply = f'Игрок {await create_mention(sender_id)} отправил сообщение в POV-режиме:\n{text}'
+    await bot.api.messages.send(peer_id=sender_chat_id + 2000000000, message=reply, attachment=attachments)
 
 
 async def forward_pov_message_to_judges(sender_id: int, text: str):
