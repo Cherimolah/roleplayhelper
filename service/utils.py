@@ -2155,7 +2155,6 @@ async def forward_pov_message(sender_id: int, text: str, attachments: str = ''):
     sender_name = await db.select([db.Form.name]).where(db.Form.user_id == sender_id).gino.scalar()
     header = f'[{sender_name}]:\n'
 
-    pov_users_in_location.append(sender_chat_id + 2000000000)
     for recv_id in pov_users_in_location:
         recv_form_id = await get_current_form_id(recv_id)
         if not recv_form_id:
@@ -2192,8 +2191,8 @@ async def forward_pov_message(sender_id: int, text: str, attachments: str = ''):
             )
             await asyncio.sleep(0.05)
         except Exception:
-            from traceback import print_exc
-            print_exc()
+            pass
+    await bot.api.messages.send(peer_id=sender_chat_id + 2000000000, message=text, attachment=attachments)
 
 
 async def forward_pov_message_to_judges(sender_id: int, text: str):
