@@ -2183,7 +2183,7 @@ async def forward_pov_message(sender_id: int, text: str, attachments: str = ''):
 
         prefix = '' if hide_sender else header
         try:
-            print(recv_id)
+            print(prefix + modified_text)
             await bot.api.messages.send(
                 peer_id=recv_id,
                 message=prefix + modified_text,
