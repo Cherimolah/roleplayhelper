@@ -275,6 +275,7 @@ class Admin(metaclass=StateMeta):
     DEBUFF_PENALTY = 'debuff_penalty'
     DEBUFF_ACTION_TIME = 'debuff_action_time'
     DEBUFF_TIME = 'debuff_time'
+    DEBUFF_POV = 'debuff_pov'
     DEBUFF_DELETE = 'debuff_delete'
     RACE_NAME = 'race_name'
     RACE_BONUS = 'race_bonus'

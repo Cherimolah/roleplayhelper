@@ -999,6 +999,38 @@ async def info_debuff_time():
     keyboard = Keyboard().add(Text('Бессрочно', {'debuff_time': 'infinity'}), KeyboardButtonColor.NEGATIVE)
     return reply, keyboard
 
+async def info_debuff_pov():
+    """Выбор POV-эффекта для дебафа (применяется в режиме от первого лица)."""
+    reply = (
+        'Выберите POV-эффект для дебафа:\n'
+        'Эффект применяется к тексту, который юзербот пересылает игроку в режиме от первого лица.\n\n'
+        '1. Нет — дебаф не влияет на текст в POV\n'
+        '2. Ограниченная видимость — часть слов замазывается символами *\n'
+        '3. Контузия — буквы в словах перемешиваются случайным образом\n'
+        '4. Слепота — виден только диалог, нарратив скрыт\n'
+        '5. Глухота — нарратив виден, диалог замазывается *\n'
+    )
+    keyboard = Keyboard()
+    keyboard.add(Text('Нет', {'debuff_pov': 'none'}), KeyboardButtonColor.NEGATIVE).row()
+    keyboard.add(Text('Ограниченная видимость', {'debuff_pov': 'limited_visibility'}), KeyboardButtonColor.PRIMARY).row()
+    keyboard.add(Text('Контузия', {'debuff_pov': 'concussion'}), KeyboardButtonColor.PRIMARY).row()
+    keyboard.add(Text('Слепота', {'debuff_pov': 'blindness'}), KeyboardButtonColor.PRIMARY).row()
+    keyboard.add(Text('Глухота', {'debuff_pov': 'deafness'}), KeyboardButtonColor.PRIMARY)
+    return reply, keyboard
+
+
+async def serialize_debuff_pov(pov_effect) -> str:
+    """Человекочитаемое название POV-эффекта для отображения в карточке дебафа."""
+    names = {
+        'limited_visibility': 'Ограниченная видимость',
+        'concussion': 'Контузия',
+        'blindness': 'Слепота',
+        'deafness': 'Глухота',
+    }
+    return names.get(pov_effect, 'Нет')
+
+
+
 
 async def info_daylic_chill() -> tuple[str, Keyboard | None]:
     reply = 'Укажите в какое время будет выдаваться еженедельное задание'
@@ -1180,7 +1212,8 @@ fields_content: Dict[str, Dict[str, List[Union[Field, RelatedTable]]]] = {
             Field('Характеристика', Admin.DEBUFF_ATTRIBUTE, info_debuff_attribute, serialize_debuff_attribute),
             Field('Штраф', Admin.DEBUFF_PENALTY),
             Field('Количество циклов действия (шт.)', Admin.DEBUFF_ACTION_TIME, info_debuff_action_time, serialize_item_action_time),
-            Field('Время действия', Admin.DEBUFF_TIME, info_debuff_time, serialize_item_time)
+            Field('Время действия', Admin.DEBUFF_TIME, info_debuff_time, serialize_item_time),
+            Field('POV-эффект', Admin.DEBUFF_POV, info_debuff_pov, serialize_debuff_pov)
         ]
     },
     'Item': {

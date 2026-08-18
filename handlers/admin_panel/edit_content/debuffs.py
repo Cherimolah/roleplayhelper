@@ -12,7 +12,7 @@ from service.states import Admin
 from service.db_engine import db
 from service import keyboards
 from service.utils import send_content_page, allow_edit_content, parse_period, FormatDataException
-from service.serializers import info_debuff_type, info_debuff_attribute, info_debuff_time, info_debuff_action_time
+from service.serializers import info_debuff_type, info_debuff_attribute, info_debuff_time, info_debuff_action_time, info_debuff_pov
 
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_StateDebuff"), PayloadRule({"StateDebuff": "add"}),
@@ -156,7 +156,7 @@ async def set_debuf_action_time_null(m: Message, item_id, editing_content, value
 
 @bot.on.private_message(StateRule(Admin.DEBUFF_TIME), PayloadRule({'debuff_time': 'infinity'}),
                         OrRule(JudgeRule(), AdminRule()))
-@allow_edit_content('StateDebuff', text='Дебаф успешно создан', end=True)
+@allow_edit_content('StateDebuff', state=Admin.DEBUFF_POV)
 async def set_infinity_debuff_time(m: Message, item_id, editing_content):
     """
     Установка бесконечного времени для дебафа.
@@ -168,12 +168,14 @@ async def set_infinity_debuff_time(m: Message, item_id, editing_content):
         item_id (int): ID дебафа в базе данных
         editing_content (bool): Флаг редактирования существующего контента
     """
-    pass
+    if not editing_content:
+        reply, keyboard = await info_debuff_pov()
+        await m.answer(reply, keyboard=keyboard)
 
 
 @bot.on.private_message(StateRule(Admin.DEBUFF_TIME), OrRule(JudgeRule(), AdminRule()))
-@allow_edit_content('StateDebuff', text='Дебаф успешно создан', end=True)
-async def set_infinity_debuff_time(m: Message, item_id, editing_content):
+@allow_edit_content('StateDebuff', state=Admin.DEBUFF_POV)
+async def set_debuff_time(m: Message, item_id, editing_content):
     """
     Установка времени использования дебафа.
 
@@ -194,7 +196,33 @@ async def set_infinity_debuff_time(m: Message, item_id, editing_content):
     if not seconds:
         raise FormatDataException('Не указано время')
     await db.StateDebuff.update.values(time_use=seconds).where(db.StateDebuff.id == item_id).gino.status()
+    if not editing_content:
+        reply, keyboard = await info_debuff_pov()
+        await m.answer(reply, keyboard=keyboard)
 
+
+
+
+@bot.on.private_message(StateRule(Admin.DEBUFF_POV), PayloadMapRule({"debuff_pov": str}),
+                        OrRule(JudgeRule(), AdminRule()))
+@allow_edit_content('StateDebuff', text='Дебаф успешно создан', end=True)
+async def debuff_pov(m: Message, item_id: int, editing_content: bool):
+    """
+    Установка POV-эффекта для дебафа.
+
+    Сохраняет выбранный эффект, который будет применяться к тексту
+    при пересылке сообщений через юзербота в режиме «От первого лица».
+    Значение 'none' означает, что дебаф не влияет на POV-текст.
+
+    Args:
+        m (Message): Входящее сообщение с выбранным POV-эффектом
+        item_id (int): ID дебафа в базе данных
+        editing_content (bool): Флаг редактирования существующего контента
+    """
+    pov_value = m.payload.get('debuff_pov')
+    if pov_value == 'none':
+        pov_value = None
+    await db.StateDebuff.update.values(pov_effect=pov_value).where(db.StateDebuff.id == item_id).gino.status()
 
 @bot.on.private_message(StateRule(f"{Admin.SELECT_ACTION}_StateDebuff"), PayloadRule({"StateDebuff": "delete"}),
                         OrRule(JudgeRule(), AdminRule()))
