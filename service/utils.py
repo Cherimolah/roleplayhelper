@@ -2156,6 +2156,7 @@ async def forward_pov_message(sender_id: int, text: str, attachments: str = ''):
     header = f'[{sender_name}]:\n'
 
     pov_users_in_location.append(sender_chat_id + 2000000000)
+    print(pov_users_in_location)
     for recv_id in pov_users_in_location:
         recv_form_id = await get_current_form_id(recv_id)
         if not recv_form_id:
@@ -2187,8 +2188,7 @@ async def forward_pov_message(sender_id: int, text: str, attachments: str = ''):
             await bot.api.messages.send(
                 peer_id=recv_id,
                 message=prefix + modified_text,
-                attachments=attachments or '',
-                random_id=0
+                attachments=attachments or ''
             )
             await asyncio.sleep(0.05)
         except Exception:
