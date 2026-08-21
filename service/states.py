@@ -360,7 +360,6 @@ class Auction(metaclass=StateMeta):
     TEMPLATE_MENU = 'auction_template_menu'
     ENTER_TEMPLATE_NAME = 'auction_template_name'
     ENTER_TEMPLATE_BODY = 'auction_template_body'
-    TEMPLATE_LIST = 'auction_template_list'
 
 
 class PovPanel(metaclass=StateMeta):

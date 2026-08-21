@@ -1905,11 +1905,11 @@ async def create_cabin_chat(user_id: int):
     """
     cabin_number = await db.select([db.Form.cabin]).where(db.Form.user_id == user_id).gino.scalar()
     existing_chat = await db.select(
-        [db.Chat.id, db.Chat.user_chat_id, db.Chat.visible_messages, db.Chat.cabin_user_id]
+        [db.Chat.user_chat_id, db.Chat.visible_messages, db.Chat.cabin_user_id]
     ).where(db.Chat.cabin_number == cabin_number).gino.first()
 
     if existing_chat:
-        chat_row_id, user_chat_id, visible_messages, previous_user_id = existing_chat
+        user_chat_id, visible_messages, previous_user_id = existing_chat
 
         # Если в чате ещё числится другой (старый) жилец — выгоняем его.
         if previous_user_id and previous_user_id != user_id and user_chat_id:
@@ -1927,7 +1927,8 @@ async def create_cabin_chat(user_id: int):
             except Exception:
                 pass  # Например, пользователь уже состоит в чате — не критично
 
-        await db.Chat.update.values(cabin_user_id=user_id).where(db.Chat.id == chat_row_id).gino.status()
+        await db.Chat.update.values(cabin_user_id=user_id).where(
+            db.Chat.cabin_number == cabin_number).gino.status()
         return
     response = await user_bot.api.messages.create_chat(title=f'RP "Среди Нас" Каюта/Кельи № {cabin_number}')
     await asyncio.sleep(0.5)
