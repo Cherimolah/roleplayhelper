@@ -2290,6 +2290,7 @@ async def forward_pov_message_to_judges(sender_id: int, text: str):
             await asyncio.sleep(0.05)
         except Exception:
             pass
+    await bot.api.messages.send(peer_id=sender_chat_id + 2000000000, message=report)
 
 
 async def forward_stealth_action(
