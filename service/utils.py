@@ -2302,8 +2302,9 @@ async def forward_stealth_action(
     """
     Обрабатывает скрытное действие игрока в POV-режиме.
 
-    Описание действия без команды публикуется в чат локации и отправляется
-    неотмеченным POV-игрокам. Для каждого отмеченного игрока выполняется
+    В чат локации и неотмеченным POV-игрокам отправляется текст без команды
+    [скрытно ...] (вместе со скрытым описанием в кавычках), от имени автора
+    (через create_mention). Для каждого отмеченного игрока выполняется
     отдельная проверка «Ловкость автора + 1..100» против
     «Восприятие цели + 1..100»:
 
@@ -2329,6 +2330,8 @@ async def forward_stealth_action(
     if not sender_expedition:
         raise ValueError('Для скрытного действия нужна созданная карта экспедитора.')
 
+    sender_mention = await create_mention(sender_id)
+
     users_in_location = {
         row[0] for row in await db.select([db.UserToChat.user_id]).where(
             db.UserToChat.chat_id == sender_chat_id
@@ -2343,11 +2346,11 @@ async def forward_stealth_action(
     # Судьи и администраторы получают полный лог раньше остальных.
     await forward_pov_message_to_judges(sender_id, original_text)
 
-    # Обычные участники локации видят только само описание, без служебной команды.
+    # Обычные участники локации видят текст без служебной команды, от имени автора.
     try:
         await bot.api.messages.send(
             peer_id=2000000000 + sender_chat_id,
-            message=visible_text,
+            message=f'{sender_mention}: {visible_text}',
             random_id=0
         )
     except Exception:
@@ -2373,7 +2376,11 @@ async def forward_stealth_action(
     for user_id in pov_users - set(targets_in_location):
         try:
             modified_text, _ = await apply_pov_debuffs_for_recipient(user_id, visible_text)
-            await bot.api.messages.send(peer_id=user_id, message=modified_text, random_id=0)
+            await bot.api.messages.send(
+                peer_id=user_id,
+                message=f'{sender_mention}: {modified_text}',
+                random_id=0
+            )
             sent_clean += 1
         except Exception:
             pass
@@ -2400,12 +2407,20 @@ async def forward_stealth_action(
                 # но без сведений о скрытности и отмеченных игроках.
                 if target_id in pov_users:
                     modified_text, _ = await apply_pov_debuffs_for_recipient(target_id, visible_text)
-                    await bot.api.messages.send(peer_id=target_id, message=modified_text, random_id=0)
+                    await bot.api.messages.send(
+                        peer_id=target_id,
+                        message=f'{sender_mention}: {modified_text}',
+                        random_id=0
+                    )
                     sent_clean += 1
             else:
                 # Успешная проверка восприятия раскрывает исходный пост (дебаффы не применяются -
                 # цель преодолела скрытность, поэтому видит правду как она есть).
-                await bot.api.messages.send(peer_id=target_id, message=original_text, random_id=0)
+                await bot.api.messages.send(
+                    peer_id=target_id,
+                    message=f'{sender_mention}: {original_text}',
+                    random_id=0
+                )
                 sent_original += 1
         except Exception:
             pass

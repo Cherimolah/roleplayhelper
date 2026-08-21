@@ -85,13 +85,9 @@ async def _handle_pov_message(m: Message, text: str, stealth_match):
             )
             return
 
-        # Текст без команды: заменяем [скрытно ...] на само описание действия,
-        # сохраняя остальной текст сообщения вокруг команды.
-        clean_text = (
-            text[:stealth_match.start()]
-            + description
-            + text[stealth_match.end():]
-        ).strip()
+        # Текст без команды: убираем команду [скрытно ...] целиком (вместе с
+        # описанием в кавычках), сохраняя остальной текст сообщения вокруг неё.
+        clean_text = (text[:stealth_match.start()] + text[stealth_match.end():]).strip()
 
         try:
             result = await forward_stealth_action(
