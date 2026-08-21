@@ -913,7 +913,10 @@ async def serialize_expeditor_debuffs(expeditor_id: int) -> str:
                 if debuff.type_id == 1:
                     attribute = await db.select([db.Attribute.name]).where(
                         db.Attribute.id == debuff.attribute_id).gino.scalar()
-                    reply += f'{i + 1}. {debuff.name} ({"+" if debuff.penalty >= 0 else ""}{debuff.penalty} к {attribute})\n'
+                    if not debuff.pov_effect:
+                        reply += f'{i + 1}. {debuff.name} ({"+" if debuff.penalty >= 0 else ""}{debuff.penalty} к {attribute})\n'
+                    else:
+                        reply += f'{i + 1}. {debuff.name} ({"+" if debuff.penalty >= 0 else ""}{debuff.penalty} к {attribute}, {serialize_debuff_pov(debuff.pov_effect)})\n'
         else:
             reply += 'Травмы отсутствуют\n'
         madness = await db.select([*db.StateDebuff]).where(

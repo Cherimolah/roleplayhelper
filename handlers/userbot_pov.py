@@ -4,31 +4,33 @@ POV-пересылка через юзербота.
 Когда игрок находится в pov_mode=True — все его сообщения в личку юзерботу
 (Сирене) автоматически пересылаются другим игрокам в той же локации.
 
-Если в тексте есть [скрытность] — сообщение идёт только судьям/администраторам
-через forward_pov_message_to_judges.
+Если в тексте сообщения встречается команда скрытного действия
+[скрытно [id1|Игрок] [id2|Игрок] "описание действия"]:
+  - описание действия (текст без команды) публикуется в чат локации;
+  - POV-игроки, которых не отметили в команде, получают очищенный текст в ЛС;
+  - для каждого отмеченного игрока выполняется проверка
+    «Ловкость автора + 1..100» против «Восприятие цели + 1..100».
 
-Сообщения проверяются на минимальный объём (300 символов без пробелов) и антиспам.
-Если сообщение слишком короткое — игрок получает предупреждение.
+Обычные сообщения проверяются на минимальный объём (300 символов без пробелов)
+и антиспам. Если сообщение слишком короткое — игрок получает предупреждение.
 """
 
-import asyncio
 import re
 
 from vkbottle.bot import Message
-from vkbottle.dispatch.rules.base import FromPeerRule
 
 from loader import user_bot
 from service.db_engine import db
-from service.utils import forward_pov_message, forward_pov_message_to_judges, forward_stealth_action
+from service.utils import forward_pov_message, forward_stealth_action
 from service.pov_effects import is_valid_pov_message
 
 
 # ─── Хэндлер входящих сообщений пользователей в ЛС юзербота ─────────────────
 
 STEALTH_ACTION_PATTERN = re.compile(
-    r'^\s*\[\s*скрытно\s+'
+    r'\[\s*скрытно\s+'
     r'(?P<mentions>(?:\[id\d+\|[^\]]+\]\s*)+)'
-    r'[«"](?P<description>.*?)[»"]\s*\]\s*$',
+    r'[«"](?P<description>.*?)[»"]\s*\]',
     re.IGNORECASE | re.DOTALL
 )
 
@@ -38,15 +40,9 @@ async def pov_userbot_message(m: Message):
     """
     Обрабатывает все входящие личные сообщения юзерботу.
 
-    Команды скрытного действия ([скрытно ...] и [скрытность]) доступны ЛЮБОМУ
-    зарегистрированному игроку, даже если он не находится в POV-режиме:
-    на время обработки команды пользователь временно помечается как
-    находящийся в POV (это нужно механике пересылки/проверок), а сразу после
-    обработки помечается обратно — БЕЗ удаления его из чатов и без прочих
-    побочных эффектов полноценного входа в POV (в отличие от enable_pov_mode).
-
-    Обычные (не скрытные) сообщения пересылаются только для игроков, у
-    которых POV-режим включён по-настоящему (через меню/админку).
+    Команда скрытного действия ([скрытно ...]) доступна только игрокам,
+    находящимся в POV-режиме. Обычные (не скрытные) сообщения пересылаются
+    только для игроков, у которых POV-режим включён по-настоящему.
     """
     # Пропускаем системные сообщения с пустым peer_id
     if not m.from_id or m.from_id < 0:
@@ -58,31 +54,22 @@ async def pov_userbot_message(m: Message):
 
     text = m.text or ''
 
-    stealth_match = STEALTH_ACTION_PATTERN.match(text)
-    is_secrecy_tag = '[скрытность]' in text.lower()
+    stealth_match = STEALTH_ACTION_PATTERN.search(text)
 
-    if not pov_mode and not stealth_match and not is_secrecy_tag:
+    if not pov_mode and not stealth_match:
         return  # Обычные сообщения не в POV-режиме хэндлер не обрабатывает
 
-    # Для игрока, который не в POV, но использует команду скрытного действия —
-    # временно включаем флаг pov_mode на время обработки (без чатов/уведомлений
-    # полноценного enable_pov_mode), а затем возвращаем как было.
-    temporary_pov = False
-    if not pov_mode and (stealth_match or is_secrecy_tag):
-        await db.User.update.values(pov_mode=True).where(db.User.user_id == m.from_id).gino.status()
-        temporary_pov = True
+    # Скрытное действие доступно только игроку в POV-режиме
+    if not pov_mode:
+        await m.answer('⚠ Вы не находитесь в POV-режиме, ваше сообщение не будет обработано')
+        return
 
-    try:
-        await _handle_pov_message(m, text, stealth_match, is_secrecy_tag, pov_mode)
-    finally:
-        if temporary_pov:
-            await db.User.update.values(pov_mode=False).where(db.User.user_id == m.from_id).gino.status()
+    await _handle_pov_message(m, text, stealth_match)
 
 
-async def _handle_pov_message(m: Message, text: str, stealth_match, is_secrecy_tag: bool, was_pov: bool):
-    """Основная логика обработки одного входящего сообщения юзерботу (вынесена из хэндлера,
-    чтобы гарантированно снять временную метку POV через `finally` в вызывающем коде)."""
-    # Полная механика скрытных действий:
+async def _handle_pov_message(m: Message, text: str, stealth_match):
+    """Основная логика обработки одного входящего сообщения юзерботу"""
+    # Команда скрытного действия:
     # [скрытно [id1|Игрок] [id2|Игрок] "описание действия"]
     if stealth_match:
         target_ids = [
@@ -90,30 +77,34 @@ async def _handle_pov_message(m: Message, text: str, stealth_match, is_secrecy_t
                 r'\[id(\d+)\|[^\]]+\]', stealth_match.group('mentions'), re.IGNORECASE
             )
         ]
-        visible_text = stealth_match.group('description').strip()
-        if not target_ids or not visible_text:
+        description = stealth_match.group('description').strip()
+        if not target_ids or not description:
             await m.answer(
                 'Формат скрытного действия:\n'
                 '[скрытно [id123|Игрок] [id456|Игрок] "Описание действия"]'
             )
             return
 
+        # Текст без команды: заменяем [скрытно ...] на само описание действия,
+        # сохраняя остальной текст сообщения вокруг команды.
+        clean_text = (
+            text[:stealth_match.start()]
+            + description
+            + text[stealth_match.end():]
+        ).strip()
+
         try:
             result = await forward_stealth_action(
                 sender_id=m.from_id,
                 target_ids=target_ids,
-                visible_text=visible_text,
+                visible_text=clean_text,
                 original_text=text,
             )
         except ValueError as error:
             await m.answer(f'⚠ {error}')
             return
 
-        reply = (
-            '🔐 Скрытное действие отправлено судьям и в локацию.\n'
-            f'Очищенную версию получили в POV: {result["clean_sent"]}.\n'
-            f'Оригинал по успешной проверке восприятия: {result["original_sent"]}.'
-        )
+        reply = '🔐 Скрытное действие отправлено судьям и в локацию.\n'
         if result['absent_targets']:
             reply += '\nНе в этой локации: ' + ', '.join(map(str, result['absent_targets'])) + '.'
         if result['without_map']:
@@ -121,26 +112,6 @@ async def _handle_pov_message(m: Message, text: str, stealth_match, is_secrecy_t
                 map(str, result['without_map'])
             ) + '.'
         await m.answer(reply)
-        return
-
-    # Режим скрытности: текст видят только судьи
-    if is_secrecy_tag:
-        # Убираем тег из текста
-        clean_text = text.replace('[скрытность]', '').replace('[Скрытность]', '').strip()
-        await forward_pov_message_to_judges(m.from_id, clean_text)
-        try:
-            await user_bot.api.messages.send(
-                peer_id=m.from_id,
-                message='🔐 Скрытное действие отправлено судьям.',
-                random_id=0
-            )
-        except Exception:
-            pass
-        return
-
-    # Обычные (не скрытные) POV-сообщения пересылаются только тем, кто
-    # по-настоящему находится в POV-режиме (не через временную метку).
-    if not was_pov:
         return
 
     # Обычное POV-сообщение — проверяем минимальный объём
@@ -175,6 +146,3 @@ async def _handle_pov_message(m: Message, text: str, stealth_match, is_secrecy_t
     # Пересылаем сообщение игрокам в той же локации
     await forward_pov_message(m.from_id, text, attachments_str)
     await m.answer('✅ Ваше сообщение отправлено игрокам в этой локации')
-
-    # Подтверждение отправителю (тихое — одно сообщение раз в сессию)
-    # Не отправляем подтверждение каждый раз, чтобы не засорять диалог
