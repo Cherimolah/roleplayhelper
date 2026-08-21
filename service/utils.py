@@ -14,7 +14,7 @@ from vkbottle.bot import Message, MessageEvent
 import aiofiles
 from vkbottle import Keyboard, Callback, KeyboardButtonColor, VKAPIError
 
-from service.db_engine import db, now
+from service.db_engine import db, now, Attribute
 from loader import bot, photo_message_uploader, states, user_bot, user_photo_wall_uploader
 from service.serializers import fields, Field, RelatedTable, sex_types
 import messages
@@ -134,8 +134,20 @@ async def loads_form(user_id: int, from_user_id: int, is_request: bool = None, f
         if _secret_row:
             _is_admin = await db.select([db.User.admin]).where(db.User.user_id == from_user_id).gino.scalar()
             _is_judge = await db.select([db.User.judge]).where(db.User.user_id == from_user_id).gino.scalar()
-            _has_restr = _secret_row.access_fraction_id or _secret_row.access_reputation or _secret_row.access_profession_id
-            _allow = bool(_is_admin or _is_judge or not _has_restr)
+            _allowed_users = set(_secret_row.access_user_ids or [])
+            _has_restr = (
+                _secret_row.access_fraction_id
+                or _secret_row.access_reputation
+                or _secret_row.access_profession_id
+                or _allowed_users
+            )
+            _allow = bool(
+                _is_admin
+                or _is_judge
+                or from_user_id == user_id
+                or from_user_id in _allowed_users
+                or not _has_restr
+            )
             if not _allow and _secret_row.access_fraction_id:
                 _viewer_form_id = await db.select([db.Form.id]).where(db.Form.user_id == from_user_id).gino.scalar()
                 if _viewer_form_id:
@@ -1883,12 +1895,39 @@ async def move_user(user_id: int, chat_id: int):
 
 async def create_cabin_chat(user_id: int):
     """
-    Функция создает чат с локацией каюты пользователя. Добавляет туда бота и дает ему админку
+    Функция регистрирует пользователя в чате его каюты.
+
+    Чат каюты персистентный — один на номер каюты, живёт вечно:
+    - Если чат с этим номером каюты уже существует в БД — старый жилец (если
+      он ещё числится в этом чате) выгоняется через removeChatUser, а новый
+      добавляется в этот же чат через add_chat_user. Сам чат НЕ пересоздаётся.
+    - Если чата с таким номером ещё нет — создаётся новый (как раньше).
     """
     cabin_number = await db.select([db.Form.cabin]).where(db.Form.user_id == user_id).gino.scalar()
-    chat_id = await db.select([db.Chat.id]).where(db.Chat.cabin_number == cabin_number).gino.scalar()
-    if chat_id:
-        await db.Chat.update.values(cabin_user_id=user_id).where(db.Chat.id == chat_id).gino.status()
+    existing_chat = await db.select(
+        [db.Chat.id, db.Chat.user_chat_id, db.Chat.visible_messages, db.Chat.cabin_user_id]
+    ).where(db.Chat.cabin_number == cabin_number).gino.first()
+
+    if existing_chat:
+        chat_row_id, user_chat_id, visible_messages, previous_user_id = existing_chat
+
+        # Если в чате ещё числится другой (старый) жилец — выгоняем его.
+        if previous_user_id and previous_user_id != user_id and user_chat_id:
+            try:
+                await user_bot.api.messages.remove_chat_user(chat_id=user_chat_id, user_id=previous_user_id)
+            except Exception:
+                pass  # Уже не в чате или нет прав — не критично
+
+        # Добавляем нового жильца в существующий (персистентный) чат каюты.
+        if user_chat_id:
+            try:
+                await user_bot.api.messages.add_chat_user(
+                    chat_id=user_chat_id, user_id=user_id, visible_messages_count=visible_messages
+                )
+            except Exception:
+                pass  # Например, пользователь уже состоит в чате — не критично
+
+        await db.Chat.update.values(cabin_user_id=user_id).where(db.Chat.id == chat_row_id).gino.status()
         return
     response = await user_bot.api.messages.create_chat(title=f'RP "Среди Нас" Каюта/Кельи № {cabin_number}')
     await asyncio.sleep(0.5)
@@ -2117,6 +2156,46 @@ async def disable_pov_mode(user_id: int):
         pass
 
 
+async def apply_pov_debuffs_for_recipient(recv_id: int, text: str) -> Tuple[str, bool]:
+    """
+    Применяет активные POV-дебаффы конкретного получателя к тексту сообщения.
+
+    Используется всеми путями пересылки POV-сообщений (обычная пересылка,
+    скрытные действия и т.п.), чтобы дебаффы (ограниченная видимость,
+    контузия, слепота, глухота) единообразно применялись независимо от того,
+    каким способом текст был доставлен получателю.
+
+    Возвращает (изменённый_текст, hide_sender) — hide_sender=True означает,
+    что имя отправителя нужно скрыть (эффект "ограниченная видимость: скрыто").
+    """
+    from service.pov_effects import apply_effect
+
+    recv_form_id = await get_current_form_id(recv_id)
+    if not recv_form_id:
+        return text, False
+
+    expeditor_id = await db.select([db.Expeditor.id]).where(
+        db.Expeditor.form_id == recv_form_id).gino.scalar()
+    if not expeditor_id:
+        return text, False
+
+    modified_text = text
+    hide_sender = False
+    debuff_rows = await db.select([db.ExpeditorToDebuffs.debuff_id]).where(
+        db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()
+    for (debuff_id,) in debuff_rows:
+        debuff = await db.StateDebuff.get(debuff_id)
+        if not debuff or not debuff.pov_effect:
+            continue
+        effect_name = debuff.pov_effect
+        if effect_name == 'limited_visibility_hidden':
+            hide_sender = True
+            effect_name = 'limited_visibility'
+        modified_text = apply_effect(modified_text, effect_name)
+
+    return modified_text, hide_sender
+
+
 async def forward_pov_message(sender_id: int, text: str, attachments: str = ''):
     """
     Пересылает сообщение игрока в POV-режиме другим игрокам в той же локации.
@@ -2155,45 +2234,24 @@ async def forward_pov_message(sender_id: int, text: str, attachments: str = ''):
     sender_name = await db.select([db.Form.name]).where(db.Form.user_id == sender_id).gino.scalar()
     header = f'[{sender_name}]:\n'
 
+    pov_users_in_location.append(sender_chat_id + 2000000000)
     for recv_id in pov_users_in_location:
         recv_form_id = await get_current_form_id(recv_id)
         if not recv_form_id:
             continue
 
-        # Получаем expeditor для дебаффов
-        expeditor_id = await db.select([db.Expeditor.id]).where(
-            db.Expeditor.form_id == recv_form_id).gino.scalar()
-
-        modified_text = text
-        hide_sender = False
-
-        if expeditor_id:
-            # Проверяем активные дебаффы
-            debuff_rows = await db.select([db.ExpeditorToDebuffs.debuff_id]).where(
-                db.ExpeditorToDebuffs.expeditor_id == expeditor_id).gino.all()
-            for (debuff_id,) in debuff_rows:
-                debuff = await db.StateDebuff.get(debuff_id)
-                if not debuff or not debuff.pov_effect:
-                    continue
-                effect_name = debuff.pov_effect
-                if effect_name == 'limited_visibility_hidden':
-                    hide_sender = True
-                    effect_name = 'limited_visibility'
-                modified_text = apply_effect(modified_text, effect_name)
-
+        modified_text, hide_sender = await apply_pov_debuffs_for_recipient(recv_id, text)
         prefix = '' if hide_sender else header
         try:
-            print(prefix + modified_text)
             await bot.api.messages.send(
                 peer_id=recv_id,
                 message=prefix + modified_text,
-                attachments=attachments or ''
+                attachments=attachments or '',
+                random_id=0
             )
             await asyncio.sleep(0.05)
         except Exception:
             pass
-    reply = f'Игрок {await create_mention(sender_id)} отправил сообщение в POV-режиме:\n{text}'
-    await bot.api.messages.send(peer_id=sender_chat_id + 2000000000, message=reply, attachment=attachments)
 
 
 async def forward_pov_message_to_judges(sender_id: int, text: str):
@@ -2231,6 +2289,131 @@ async def forward_pov_message_to_judges(sender_id: int, text: str):
             await asyncio.sleep(0.05)
         except Exception:
             pass
+
+
+async def forward_stealth_action(
+        sender_id: int,
+        target_ids: List[int],
+        visible_text: str,
+        original_text: str
+) -> dict:
+    """
+    Обрабатывает скрытное действие игрока в POV-режиме.
+
+    Описание действия без команды публикуется в чат локации и отправляется
+    неотмеченным POV-игрокам. Для каждого отмеченного игрока выполняется
+    отдельная проверка «Ловкость автора + 1..100» против
+    «Восприятие цели + 1..100»:
+
+    - цель в POV при успехе автора получает очищенный текст;
+    - при успехе цели она получает оригинальный текст в ЛС;
+    - цель не в POV при успехе автора не получает отдельного сообщения.
+
+    Возвращает счётчики доставки, чтобы вызывающий обработчик показал
+    отправителю понятный результат.
+    """
+    sender_chat_id = await db.select([db.UserToChat.chat_id]).where(
+        db.UserToChat.user_id == sender_id
+    ).gino.scalar()
+    if not sender_chat_id:
+        raise ValueError('У вас не определена текущая локация.')
+
+    sender_form_id = await db.select([db.Form.id]).where(
+        db.Form.user_id == sender_id
+    ).gino.scalar()
+    sender_expedition = await db.select([db.Expeditor.id]).where(
+        db.Expeditor.form_id == sender_form_id
+    ).gino.scalar()
+    if not sender_expedition:
+        raise ValueError('Для скрытного действия нужна созданная карта экспедитора.')
+
+    users_in_location = {
+        row[0] for row in await db.select([db.UserToChat.user_id]).where(
+            db.UserToChat.chat_id == sender_chat_id
+        ).gino.all()
+    }
+    targets_in_location = list(dict.fromkeys(
+        user_id for user_id in target_ids
+        if user_id != sender_id and user_id in users_in_location
+    ))
+    absent_targets = set(target_ids) - set(targets_in_location) - {sender_id}
+
+    # Судьи и администраторы получают полный лог раньше остальных.
+    await forward_pov_message_to_judges(sender_id, original_text)
+
+    # Обычные участники локации видят только само описание, без служебной команды.
+    try:
+        await bot.api.messages.send(
+            peer_id=2000000000 + sender_chat_id,
+            message=visible_text,
+            random_id=0
+        )
+    except Exception:
+        pass
+
+    pov_users = {
+        row[0] for row in await db.select([db.UserToChat.user_id]).select_from(
+            db.UserToChat.join(db.User, db.UserToChat.user_id == db.User.user_id)
+        ).where(
+            and_(
+                db.UserToChat.chat_id == sender_chat_id,
+                db.User.pov_mode.is_(True),
+                db.UserToChat.user_id != sender_id,
+            )
+        ).gino.all()
+    }
+
+    sent_clean = 0
+    sent_original = 0
+    skipped_without_map = []
+
+    # POV-игроки, которых не указали в команде, получают обычный очищенный пост.
+    for user_id in pov_users - set(targets_in_location):
+        try:
+            modified_text, _ = await apply_pov_debuffs_for_recipient(user_id, visible_text)
+            await bot.api.messages.send(peer_id=user_id, message=modified_text, random_id=0)
+            sent_clean += 1
+        except Exception:
+            pass
+
+    sender_dexterity = await count_attribute(sender_id, Attribute.DEXTERITY)
+    for target_id in targets_in_location:
+        target_form_id = await db.select([db.Form.id]).where(
+            db.Form.user_id == target_id
+        ).gino.scalar()
+        target_expedition = await db.select([db.Expeditor.id]).where(
+            db.Expeditor.form_id == target_form_id
+        ).gino.scalar()
+        if not target_expedition:
+            skipped_without_map.append(target_id)
+            continue
+
+        target_perception = await count_attribute(target_id, Attribute.PERCEPTION)
+        author_roll = sender_dexterity + random.randint(1, 100)
+        target_roll = target_perception + random.randint(1, 100)
+
+        try:
+            if author_roll > target_roll:
+                # В POV цель всё равно должна получить сообщение в ЛС,
+                # но без сведений о скрытности и отмеченных игроках.
+                if target_id in pov_users:
+                    modified_text, _ = await apply_pov_debuffs_for_recipient(target_id, visible_text)
+                    await bot.api.messages.send(peer_id=target_id, message=modified_text, random_id=0)
+                    sent_clean += 1
+            else:
+                # Успешная проверка восприятия раскрывает исходный пост (дебаффы не применяются -
+                # цель преодолела скрытность, поэтому видит правду как она есть).
+                await bot.api.messages.send(peer_id=target_id, message=original_text, random_id=0)
+                sent_original += 1
+        except Exception:
+            pass
+
+    return {
+        'clean_sent': sent_clean,
+        'original_sent': sent_original,
+        'absent_targets': list(absent_targets),
+        'without_map': skipped_without_map,
+    }
 
 async def load_forms_page(page) -> Tuple[str, Keyboard]:
     """

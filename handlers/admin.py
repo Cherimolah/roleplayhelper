@@ -26,7 +26,7 @@ from service.custom_rules import StateRule, NumericRule, AdminRule, UserFree
 from service.utils import take_off_payments, parse_reputation, create_mention, check_quest_completed, apply_reward, \
     serialize_target_reward, create_cabin_chat, move_user, get_current_form_id, post_form_to_board, update_form_on_board, post_form_to_archive, download_image
 from service.serializers import info_cabin
-from config import HALL_CHAT_ID, GROUP_ID
+from config import HALL_CHAT_ID, GROUP_ID, USER_ID
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_accept": int}), AdminRule(),
@@ -469,28 +469,84 @@ async def accept_delete(m: MessageEvent):
         await m.edit_message(f"Запрос на удаление анкеты [id{m.payload['user_id']}|{name}] отклонён")
 
 
+cabin_chat_decision_kb = Keyboard().add(
+    Text('📦 Архивировать чат', {'cabin_after_delete': 'archive'}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('🗑 Удалить чат', {'cabin_after_delete': 'delete'}), KeyboardButtonColor.NEGATIVE
+).row().add(
+    Text('Оставить как есть', {'cabin_after_delete': 'skip'}), KeyboardButtonColor.SECONDARY
+)
+
+
 @bot.on.private_message(StateRule(Admin.REASON_DELETE_FORM), AdminRule())
 async def set_reason_delete_form(m: Message):
     user_id = int(states.get(m.from_id).split('*')[-1])
+    name = await db.select([db.Form.name]).where(db.Form.user_id == user_id).gino.scalar()
     await post_form_to_archive(user_id, m.text)
 
-    # Освобождаем чат каюты: выгоняем игрока, сам чат переименовывать не надо
-    user_chat_id = await db.select([db.Chat.user_chat_id]).where(
-        db.Chat.cabin_user_id == user_id).gino.scalar()
-    if user_chat_id:
-        # Выгоняем игрока из чата
-        try:
-            await user_bot.api.messages.remove_chat_user(chat_id=user_chat_id, user_id=user_id)
-        except Exception:
-            pass  # Уже не в чате или нет прав — не критично
-        # Очищаем привязку: чат остаётся, каюта готова к новому жильцу
+    # Выгоняем игрока из чата каюты (если он там числился) сразу же.
+    chat_row = await db.select([db.Chat.chat_id, db.Chat.user_chat_id, db.Chat.cabin_number]).where(
+        db.Chat.cabin_user_id == user_id).gino.first()
+    if chat_row:
+        chat_id, user_chat_id, cabin_number = chat_row
+        if user_chat_id:
+            try:
+                await user_bot.api.messages.remove_chat_user(chat_id=user_chat_id, user_id=user_id)
+            except Exception:
+                pass  # Уже не в чате или нет прав — не критично
         await db.Chat.update.values(cabin_user_id=None).where(db.Chat.cabin_user_id == user_id).gino.status()
 
     await db.User.delete.where(db.User.user_id == user_id).gino.status()
     await bot.api.messages.send(peer_id=user_id,
                                 message=f"Ваша анкета в боте была удалена! Приятно было с вами общаться, "
                                 f"если захотите вернуться напишите «Начать»", keyboard=Keyboard())
-    await m.answer(f"Анкета пользователя {await create_mention(user_id)} была удалена!")
+
+    if chat_row and chat_row[1]:
+        # Есть привязанный чат каюты — спрашиваем администратора, что с ним сделать.
+        chat_id, user_chat_id, cabin_number = chat_row
+        states.set(m.from_id, f'{Admin.CABIN_CHAT_DECISION}*{user_chat_id}*{cabin_number or 0}*{name or "Экс-резидент"}')
+        await m.answer(
+            f"Анкета пользователя {await create_mention(user_id)} была удалена!\n\n"
+            f'У удалённого игрока была каюта (чат №{cabin_number or "?"}). '
+            f'Что сделать с её чатом?',
+            keyboard=cabin_chat_decision_kb
+        )
+    else:
+        states.set(m.from_id, Admin.MENU)
+        await m.answer(f"Анкета пользователя {await create_mention(user_id)} была удалена!")
+
+
+@bot.on.private_message(StateRule(Admin.CABIN_CHAT_DECISION), PayloadMapRule({'cabin_after_delete': str}), AdminRule())
+async def resolve_cabin_chat_after_delete(m: Message):
+    """Архивирует или удаляет регистрацию чата каюты после удаления анкеты жильца."""
+    parts = states.get(m.from_id).split('*')
+    user_chat_id = int(parts[1])
+    cabin_number = int(parts[2])
+    former_name = parts[3] if len(parts) > 3 else 'Экс-резидент'
+    decision = m.payload['cabin_after_delete']
+
+    states.set(m.from_id, Admin.MENU)
+
+    if decision == 'archive':
+        new_title = f'[Архив] Каюта №{cabin_number} (бывший житель: {former_name})'
+        try:
+            await user_bot.api.messages.edit_chat(chat_id=user_chat_id, title=new_title)
+        except Exception:
+            pass
+        # Обнуляем номер каюты, чтобы она не подхватывалась при регистрации нового жильца
+        # под тем же номером — чат сохраняется в архивном виде.
+        await db.Chat.update.values(cabin_number=None).where(db.Chat.user_chat_id == user_chat_id).gino.status()
+        await m.answer('✅ Чат каюты переименован в архивный.', keyboard=keyboards.admin_menu)
+    elif decision == 'delete':
+        try:
+            await user_bot.api.messages.remove_chat_user(chat_id=user_chat_id, user_id=USER_ID)
+        except Exception:
+            pass  # Юзербот мог уже выйти или не иметь прав — не критично
+        await db.Chat.delete.where(db.Chat.user_chat_id == user_chat_id).gino.status()
+        await m.answer('✅ Чат каюты удалён из базы (юзербот покинул беседу, если это было возможно).',
+                       keyboard=keyboards.admin_menu)
+    else:
+        await m.answer('Хорошо, чат каюты оставлен без изменений.', keyboard=keyboards.admin_menu)
 
 
 @bot.on.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, PayloadMapRule({"form_delete": int}), AdminRule())

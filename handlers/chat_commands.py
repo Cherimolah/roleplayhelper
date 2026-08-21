@@ -5,6 +5,7 @@
 """
 
 import re
+import random
 
 from vkbottle.bot import Message
 from vkbottle import Keyboard, Callback, KeyboardButtonColor
@@ -14,18 +15,24 @@ from fuzzywuzzy import process
 from sqlalchemy import and_
 
 from loader import bot, user_bot
-from service.custom_rules import ChatAction, AdminRule, ChatInviteMember, RegexRule, UserFree, JudgeRule, MentionQuestRule
-from service.db_engine import db
+from service.custom_rules import ChatAction, AdminRule, ChatInviteMember, RegexRule, UserFree, JudgeRule, \
+    MentionQuestRule, NotAdminOrJudgeRule
+from service.db_engine import db, Attribute
 from handlers.public_menu.bank import ask_salary
 from handlers.public_menu.daylics import send_ready_daylic
 from handlers.public_menu.quests import send_ready_quest
-from service.utils import move_user, create_mention, get_current_form_id, soft_divide, convert_bot_chat_id_to_user, mention_regex
+from service.utils import move_user, create_mention, get_current_form_id, soft_divide, convert_bot_chat_id_to_user, \
+    mention_regex, count_attribute
 from service.states import Admin
 from config import HALL_CHAT_ID
 
 # Регулярные выражения для обработки команд
 moving_pattern = re.compile(r'\[\s*\s*перемещение\s+в\s+[«"](.+?)[»"]\s*\]', re.IGNORECASE)
 moving_pattern2 = re.compile(r'\[\s*\s*перемещение\s+в\s+(.+)\s*\]', re.IGNORECASE)
+forced_move_pattern = re.compile(
+    r'\[\s*переместить\s+((?:\[id\d+\|[^\]]+\]\s*)+)[«"](.+?)[»"]\s*\]',
+    re.IGNORECASE
+)
 donate_pattern = re.compile(r'\[\s*пожертвовать\s+в\s+храм\s+(\d+)\s*\]', re.IGNORECASE)
 deal_pattern = re.compile(r"\[\s*совершить\s+сделку\s+\[id(\d+)\|[^\]]+\]\s+(\d+)\s*\]", re.IGNORECASE)
 deal_pattern_link = re.compile(r"\[\s*совершить\s+сделку\s+https://vk.com/(\w*)\s+(\d+)\s*\]", re.IGNORECASE)
@@ -328,6 +335,192 @@ async def move_to_location(m: Message, match: tuple[str]):
             await m.answer(f'Запрос на перемещение в чат «{chat_name}» успешно отправлен')
             return
     await move_user(m.from_id, chat_id)
+
+
+@bot.on.chat_message(RegexRule(forced_move_pattern), OrRule(AdminRule(), JudgeRule()), blocking=False)
+async def force_move_users(m: Message, match: tuple[str, str]):
+    """
+    Принудительно перемещает одного или нескольких игроков в существующий чат.
+
+    Формат:
+        [переместить [id123|Игрок] [id456|Игрок] "Название чата"]
+
+    Команда доступна только администраторам и судьям. В отличие от обычного
+    перемещения она не запрашивает доступ к приватному чату у владельца.
+    """
+    mentions, requested_chat_name = match
+    user_ids = list(dict.fromkeys(
+        int(user_id) for user_id in re.findall(r'\[id(\d+)\|[^\]]+\]', mentions, re.IGNORECASE)
+    ))
+    if not user_ids:
+        await m.answer('Укажите хотя бы одного игрока через VK-упоминание.')
+        return
+
+    registered_ids = {
+        row[0] for row in await db.select([db.Form.user_id]).where(
+            db.Form.user_id.in_(user_ids)
+        ).gino.all()
+    }
+    if not registered_ids:
+        await m.answer('У указанных пользователей нет активных анкет.')
+        return
+
+    chat_rows = await db.select([db.Chat.chat_id]).where(
+        db.Chat.chat_id.isnot(None)
+    ).gino.all()
+    peer_ids = [2000000000 + row[0] for row in chat_rows]
+    if not peer_ids:
+        await m.answer('В базе нет зарегистрированных чатов для перемещения.')
+        return
+
+    try:
+        conversations = await bot.api.messages.get_conversations_by_id(peer_ids=peer_ids)
+    except Exception:
+        await m.answer('Не удалось получить список чатов. Проверьте права бота.')
+        return
+
+    chats_by_name = {
+        item.chat_settings.title.lower(): item.peer.id - 2000000000
+        for item in conversations.items
+        if item.chat_settings and item.chat_settings.title
+    }
+    normalized_name = requested_chat_name.strip().lower()
+    chat_id = chats_by_name.get(normalized_name)
+    if chat_id is None:
+        match_result = process.extractOne(normalized_name, list(chats_by_name))
+        if not match_result or match_result[1] < 70:
+            await m.answer(f'Чат «{requested_chat_name}» не найден.')
+            return
+        chat_id = chats_by_name[match_result[0]]
+
+    moved_ids = []
+    failed_ids = []
+    for user_id in registered_ids:
+        try:
+            await move_user(user_id, chat_id)
+            moved_ids.append(user_id)
+        except Exception:
+            failed_ids.append(user_id)
+
+    if moved_ids:
+        moved_mentions = ', '.join([await create_mention(user_id) for user_id in moved_ids])
+        await m.answer(
+            f'Принудительное перемещение в «{requested_chat_name}» выполнено для: {moved_mentions}.'
+        )
+    if failed_ids:
+        failed_mentions = ', '.join([await create_mention(user_id) for user_id in failed_ids])
+        await m.answer(
+            f'Не удалось переместить: {failed_mentions}. Проверьте регистрацию чата и права юзербота.'
+        )
+
+
+@bot.on.chat_message(RegexRule(forced_move_pattern), NotAdminOrJudgeRule(), blocking=False)
+async def force_move_users_player(m: Message, match: tuple[str, str]):
+    """
+    Та же команда [переместить ...], но доступная обычным игрокам —
+    только во время активного экшен-режима в текущем чате (в свою очередь,
+    это уже гарантируется ActionModeMiddleware) и при успешной проверке
+    Ловкость инициатора против Восприятия цели (аналогично скрытным действиям).
+    """
+    action_mode_row = await db.select([db.ActionMode.started, db.ActionMode.finished]).where(
+        db.ActionMode.chat_id == m.chat_id
+    ).gino.first()
+    if not action_mode_row or not action_mode_row[0] or action_mode_row[1]:
+        await m.answer('Принудительное перемещение доступно игрокам только во время активного экшен-режима в этом чате.')
+        return
+
+    mentions, requested_chat_name = match
+    user_ids = list(dict.fromkeys(
+        int(user_id) for user_id in re.findall(r'\[id(\d+)\|[^\]]+\]', mentions, re.IGNORECASE)
+    ))
+    if not user_ids:
+        await m.answer('Укажите хотя бы одного игрока через VK-упоминание.')
+        return
+
+    initiator_form_id = await get_current_form_id(m.from_id)
+    initiator_expedition = await db.select([db.Expeditor.id]).where(
+        db.Expeditor.form_id == initiator_form_id
+    ).gino.scalar()
+    if not initiator_expedition:
+        await m.answer('Для принудительного перемещения нужна созданная карта экспедитора.')
+        return
+
+    registered_ids = {
+        row[0] for row in await db.select([db.Form.user_id]).where(
+            db.Form.user_id.in_(user_ids)
+        ).gino.all()
+    }
+    if not registered_ids:
+        await m.answer('У указанных пользователей нет активных анкет.')
+        return
+
+    chat_rows = await db.select([db.Chat.chat_id]).where(
+        db.Chat.chat_id.isnot(None)
+    ).gino.all()
+    peer_ids = [2000000000 + row[0] for row in chat_rows]
+    if not peer_ids:
+        await m.answer('В базе нет зарегистрированных чатов для перемещения.')
+        return
+
+    try:
+        conversations = await bot.api.messages.get_conversations_by_id(peer_ids=peer_ids)
+    except Exception:
+        await m.answer('Не удалось получить список чатов. Проверьте права бота.')
+        return
+
+    chats_by_name = {
+        item.chat_settings.title.lower(): item.peer.id - 2000000000
+        for item in conversations.items
+        if item.chat_settings and item.chat_settings.title
+    }
+    normalized_name = requested_chat_name.strip().lower()
+    chat_id = chats_by_name.get(normalized_name)
+    if chat_id is None:
+        match_result = process.extractOne(normalized_name, list(chats_by_name))
+        if not match_result or match_result[1] < 70:
+            await m.answer(f'Чат «{requested_chat_name}» не найден.')
+            return
+        chat_id = chats_by_name[match_result[0]]
+
+    initiator_dexterity = await count_attribute(m.from_id, Attribute.DEXTERITY)
+    moved_ids = []
+    resisted_ids = []
+    failed_ids = []
+    for user_id in registered_ids:
+        target_form_id = await get_current_form_id(user_id)
+        target_expedition = await db.select([db.Expeditor.id]).where(
+            db.Expeditor.form_id == target_form_id
+        ).gino.scalar()
+        if not target_expedition:
+            failed_ids.append(user_id)
+            continue
+
+        target_perception = await count_attribute(user_id, Attribute.PERCEPTION)
+        initiator_roll = initiator_dexterity + random.randint(1, 100)
+        target_roll = target_perception + random.randint(1, 100)
+        if initiator_roll <= target_roll:
+            resisted_ids.append(user_id)
+            continue
+
+        try:
+            await move_user(user_id, chat_id)
+            moved_ids.append(user_id)
+        except Exception:
+            failed_ids.append(user_id)
+
+    if moved_ids:
+        moved_mentions = ', '.join([await create_mention(user_id) for user_id in moved_ids])
+        await m.answer(
+            f'Принудительное перемещение в «{requested_chat_name}» выполнено для: {moved_mentions}.'
+        )
+    if resisted_ids:
+        resisted_mentions = ', '.join([await create_mention(user_id) for user_id in resisted_ids])
+        await m.answer(f'Цель(и) успешно сопротивлялись перемещению: {resisted_mentions}.')
+    if failed_ids:
+        failed_mentions = ', '.join([await create_mention(user_id) for user_id in failed_ids])
+        await m.answer(
+            f'Не удалось переместить (нет карты экспедитора или ошибка): {failed_mentions}.'
+        )
 
 
 @bot.on.message(RegexRule(message_pattern), blocking=False)

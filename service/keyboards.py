@@ -410,6 +410,10 @@ judge_menu = Keyboard().add(
 ).row().add(
     Text('Дебафы состояния', {'edit_content': 'StateDebuff'}), KeyboardButtonColor.PRIMARY
 ).row().add(
+    Text('👁 POV-панель', {'judge_menu': 'pov_panel'}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('📌 Принудительный квест', {'judge_menu': 'force_quest'}), KeyboardButtonColor.PRIMARY
+).row().add(
     Text('Назад', {'judge_menu': 'back'}), KeyboardButtonColor.NEGATIVE
 )
 

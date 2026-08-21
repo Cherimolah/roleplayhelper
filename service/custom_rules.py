@@ -289,6 +289,24 @@ class JudgeRule(ABCRule):
         return is_judge
 
 
+class NotAdminOrJudgeRule(ABCRule):
+    """
+    Инверсия AdminRule/JudgeRule: True только для обычных игроков (не админ и не судья).
+    Используется там, где команда для игроков не должна дублироваться с админской/судейской версией.
+    """
+    async def check(self, event: Message | MessageEvent):
+        if isinstance(event, Message):
+            user_id = event.from_id
+        else:
+            user_id = event.user_id
+        admins = [x[0] for x in await db.select([db.User.user_id]).where(db.User.admin > 0).gino.all()]
+        admins = list(set(admins).union(ADMINS))
+        if user_id in admins:
+            return False
+        is_judge = await db.select([db.User.judge]).where(db.User.user_id == user_id).gino.scalar()
+        return not is_judge
+
+
 class UserFree(ABCRule):
     """
     Проверка на то, что пользователь не создает анкеты / контента / карты экспедитора / не включена панель судьи

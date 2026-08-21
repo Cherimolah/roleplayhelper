@@ -296,6 +296,46 @@ async def reputation_form(m: Message):
     await m.answer(reply)
 
 
+async def _fuzzy_search_forms(query: str, limit: int = 10):
+    """
+    Ищет анкеты по частичному/нечёткому совпадению имени персонажа.
+
+    Сначала пробует подстроку (ILIKE '%query%'), затем добавляет похожие по
+    триграммам названия (аналогично поиску предметов), чтобы найти и опечатки.
+    Возвращает список (user_id, name), отсортированный по релевантности.
+    """
+    query = query.strip()
+    if not query:
+        return []
+
+    substring_matches = await db.select([db.Form.user_id, db.Form.name]).where(
+        and_(
+            db.Form.is_request.is_(False),
+            db.Form.user_id != 32650977,
+            func.lower(db.Form.name).contains(query.lower()),
+        )
+    ).order_by(func.length(db.Form.name).asc()).limit(limit).gino.all()
+
+    seen_ids = {row[0] for row in substring_matches}
+    results = list(substring_matches)
+
+    if len(results) < limit:
+        similarity = func.similarity(func.lower(db.Form.name), query.lower()).label('similarity')
+        fuzzy_matches = await db.select([db.Form.user_id, db.Form.name]).where(
+            and_(
+                db.Form.is_request.is_(False),
+                db.Form.user_id != 32650977,
+                db.Form.name.op('%')(query),
+            )
+        ).order_by(similarity.desc()).limit(limit - len(results)).gino.all()
+        for row in fuzzy_matches:
+            if row[0] not in seen_ids:
+                seen_ids.add(row[0])
+                results.append(row)
+
+    return results
+
+
 @bot.on.private_message(StateRule(Menu.SHOW_FORM))
 @bot.on.private_message(StateRule(Admin.EDIT_FORMS))
 async def search_user_form(m: Message):
@@ -303,10 +343,23 @@ async def search_user_form(m: Message):
     user_id = await get_mention_from_message(m)
     count = await db.select([func.count(db.Form.id)]).where(
         and_(db.Form.is_request.is_(False), db.Form.user_id != 32650977)).gino.scalar()
+    is_admin_search = states.get(m.from_id) == str(Admin.EDIT_FORMS)
 
     if not user_id and (not m.text.isdigit() or int(m.text) < 1 or int(m.text) > count):
-        await m.answer(messages.user_not_found)
-        return
+        if is_admin_search:
+            # Администратору дополнительно доступен поиск по частичному имени/тегу со списком результатов.
+            matches = await _fuzzy_search_forms(m.text)
+            if len(matches) == 1:
+                user_id = matches[0][0]
+            elif len(matches) > 1:
+                await _show_form_search_results(m, matches)
+                return
+            else:
+                await m.answer(messages.user_not_found)
+                return
+        else:
+            await m.answer(messages.user_not_found)
+            return
 
     if not user_id:
         # Попытка получить по индексу анкеты (не ID)
@@ -338,6 +391,53 @@ async def search_user_form(m: Message):
         ).row().add(
             Text('Редактировать анкету', {"form_edit_button": user_id}), KeyboardButtonColor.SECONDARY
         ).row().add(
+            Text('Доступ к секретам', {"form_secrets_access": form_id}), KeyboardButtonColor.SECONDARY
+        ).row().add(
             Callback("Удалить анкету", {"form_delete": form_id}), KeyboardButtonColor.NEGATIVE
         )
     await m.answer(form, attachment=photo, keyboard=keyboard)
+
+
+async def _show_form_search_results(m: Message, matches):
+    """Показывает администратору список найденных анкет для выбора."""
+    reply = f'Найдено анкет: {len(matches)}. Выберите нужную:\n\n'
+    for i, (user_id, name) in enumerate(matches):
+        reply += f'{i + 1}. {name}\n'
+
+    keyboard = Keyboard(inline=True)
+    for i, (user_id, name) in enumerate(matches):
+        if i % 2 == 0:
+            keyboard.row()
+        keyboard.add(Callback(str(i + 1), {'select_search_form': user_id}), KeyboardButtonColor.SECONDARY)
+
+    await m.answer(reply, keyboard=keyboard)
+
+
+@bot.on.raw_event('message_event', MessageEvent, PayloadMapRule({'select_search_form': int}))
+async def select_form_search_result(m: MessageEvent):
+    """Обработка выбора анкеты из списка результатов нечёткого поиска (только для админов)."""
+    admin = await db.select([db.User.admin]).where(db.User.user_id == m.user_id).gino.scalar()
+    if not admin:
+        await m.show_snackbar('Нет прав')
+        return
+
+    user_id = m.payload['select_search_form']
+    registered = await db.select([db.Form.id]).where(
+        and_(db.Form.user_id == user_id, db.Form.is_request.is_(False))
+    ).gino.scalar()
+    if not registered:
+        await m.show_snackbar('Анкета не найдена')
+        return
+
+    form, photo = await loads_form(user_id, m.user_id)
+    form_id = await db.select([db.Form.id]).where(db.Form.user_id == user_id).gino.scalar()
+    keyboard = Keyboard(inline=True).add(
+        Text("Репутация", {"form_reputation": user_id}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text('Редактировать анкету', {"form_edit_button": user_id}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Text('Доступ к секретам', {"form_secrets_access": form_id}), KeyboardButtonColor.SECONDARY
+    ).row().add(
+        Callback("Удалить анкету", {"form_delete": form_id}), KeyboardButtonColor.NEGATIVE
+    )
+    await bot.api.messages.send(peer_id=m.user_id, message=form, attachment=photo, keyboard=keyboard, random_id=0)

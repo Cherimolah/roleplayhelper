@@ -7,12 +7,14 @@
 Судьи и администраторы видят ВСЕ секретные разделы.
 """
 
+import re
+
 from vkbottle.bot import Message
-from vkbottle.dispatch.rules.base import PayloadRule
+from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
 from vkbottle import Keyboard, Text, KeyboardButtonColor
 
 from loader import bot
-from service.custom_rules import StateRule
+from service.custom_rules import StateRule, AdminRule
 from service.middleware import states
 from service.states import FormSecrets, Menu
 from service.db_engine import db
@@ -42,6 +44,8 @@ def _access_kb(auction_id=None):
         Text('По репутации', {'secret_access': 'reputation'}), KeyboardButtonColor.PRIMARY
     ).row().add(
         Text('По профессии', {'secret_access': 'profession'}), KeyboardButtonColor.PRIMARY
+    ).row().add(
+        Text('По конкретным игрокам', {'secret_access': 'users'}), KeyboardButtonColor.PRIMARY
     ).row().add(
         Text('Сбросить (видят все)', {'secret_access': 'reset'}), KeyboardButtonColor.NEGATIVE
     ).row().add(
@@ -188,7 +192,8 @@ async def secret_access_menu(m: Message):
         f'Текущие настройки доступа:\n'
         f'• Фракция: {frac_name or "любая"}\n'
         f'• Мин. репутация: {row.access_reputation or 0}\n'
-        f'• Профессия: {prof_name or "любая"}'
+        f'• Профессия: {prof_name or "любая"}\n'
+        f'• Конкретные игроки: {len(row.access_user_ids or [])}'
     )
     states.set(m.from_id, FormSecrets.ENTER_ACCESS_FRACTION)
     await m.answer(info, keyboard=_access_kb())
@@ -211,6 +216,90 @@ async def secret_access_fraction(m: Message):
     await m.answer(reply, keyboard=Keyboard().add(
         Text('Назад', {'secret': 'back_to_menu'}), KeyboardButtonColor.NEGATIVE
     ))
+
+
+async def _start_users_access(m: Message, form_id: int, is_admin_setting: bool = False):
+    """Запрашивает VK-упоминания игроков, которым открыт доступ к секретам."""
+    row = await db.FormSecret.query.where(db.FormSecret.form_id == form_id).gino.first()
+    if not row:
+        await m.answer('У этой анкеты ещё нет заполненных секретных разделов.')
+        return
+
+    existing_ids = row.access_user_ids or []
+    existing_text = ', '.join(map(str, existing_ids)) if existing_ids else 'никому'
+    states.set(m.from_id, f'{FormSecrets.ENTER_ACCESS_USERS}*{form_id}*{int(is_admin_setting)}')
+    await m.answer(
+        'Отправьте VK-упоминания игроков, которым будет доступна секретная информация.\n'
+        'Например: [id123|Игрок] [id456|Игрок]\n\n'
+        f'Сейчас доступ открыт: {existing_text}.\n'
+        'Напишите «очистить», чтобы убрать только список конкретных игроков.',
+        keyboard=Keyboard().add(
+            Text('Назад', {'secret': 'back_to_menu'}), KeyboardButtonColor.NEGATIVE
+        )
+    )
+
+
+@bot.on.private_message(StateRule(FormSecrets.ENTER_ACCESS_FRACTION),
+                        PayloadRule({'secret_access': 'users'}))
+async def secret_access_users_enter(m: Message):
+    """Выбор конкретных пользователей владельцем анкеты."""
+    form_id = await db.select([db.Form.id]).where(db.Form.user_id == m.from_id).gino.scalar()
+    await _start_users_access(m, form_id)
+
+
+@bot.on.private_message(PayloadMapRule({'form_secrets_access': int}), AdminRule())
+async def admin_secret_access_users_enter(m: Message):
+    """Администратор открывает список конкретных пользователей для чужой анкеты."""
+    await _start_users_access(m, int(m.payload['form_secrets_access']), is_admin_setting=True)
+
+
+@bot.on.private_message(StateRule(FormSecrets.ENTER_ACCESS_USERS))
+async def secret_access_users_save(m: Message):
+    """Сохраняет список конкретных пользователей с доступом."""
+    if m.payload and m.payload.get('secret') == 'back_to_menu':
+        states.set(m.from_id, FormSecrets.MENU)
+        await m.answer('🔐 Секретные разделы анкеты', keyboard=secrets_menu_kb)
+        return
+
+    state = states.get(m.from_id) or await db.select([db.User.state]).where(
+        db.User.user_id == m.from_id
+    ).gino.scalar()
+    parts = state.split('*') if state else []
+    if len(parts) < 2 or not parts[1].isdigit():
+        await m.answer('Не удалось определить анкету. Откройте настройку доступа заново.')
+        return
+    form_id = int(parts[1])
+    is_admin_setting = len(parts) > 2 and parts[2] == '1'
+
+    if (m.text or '').strip().lower() == 'очистить':
+        user_ids = []
+    else:
+        user_ids = list(dict.fromkeys(
+            int(user_id) for user_id in re.findall(r'\[id(\d+)\|[^\]]+\]', m.text or '', re.IGNORECASE)
+        ))
+        if not user_ids:
+            await m.answer('Пришлите хотя бы одно VK-упоминание или напишите «очистить».')
+            return
+        registered_ids = {
+            row[0] for row in await db.select([db.Form.user_id]).where(
+                db.Form.user_id.in_(user_ids)
+            ).gino.all()
+        }
+        if not registered_ids:
+            await m.answer('У указанных пользователей нет активных анкет.')
+            return
+        user_ids = sorted(registered_ids)
+
+    await db.FormSecret.update.values(access_user_ids=user_ids).where(
+        db.FormSecret.form_id == form_id
+    ).gino.status()
+
+    if is_admin_setting:
+        states.set(m.from_id, Menu.SHOW_FORM)
+        await m.answer('✅ Список конкретных пользователей с доступом сохранён.')
+    else:
+        states.set(m.from_id, FormSecrets.MENU)
+        await m.answer('✅ Список конкретных пользователей с доступом сохранён.', keyboard=secrets_menu_kb)
 
 
 @bot.on.private_message(StateRule(FormSecrets.ENTER_ACCESS_FRACTION))
@@ -322,7 +411,10 @@ async def secret_access_reset(m: Message):
     """Сброс ограничений доступа — видят все."""
     form_id = await db.select([db.Form.id]).where(db.Form.user_id == m.from_id).gino.scalar()
     await db.FormSecret.update.values(
-        access_fraction_id=None, access_reputation=0, access_profession_id=None
+        access_fraction_id=None,
+        access_reputation=0,
+        access_profession_id=None,
+        access_user_ids=[]
     ).where(db.FormSecret.form_id == form_id).gino.status()
 
     states.set(m.from_id, FormSecrets.MENU)
@@ -348,9 +440,13 @@ async def get_secrets_for_viewer(form_id: int, viewer_id: int) -> str | None:
         return None
 
     # Если у разделов нет ограничений доступа — видят все
-    has_restrictions = row.access_fraction_id or row.access_reputation or row.access_profession_id
+    allowed_users = set(row.access_user_ids or [])
+    owner_id = await db.select([db.Form.user_id]).where(db.Form.id == form_id).gino.scalar()
+    has_restrictions = (
+        row.access_fraction_id or row.access_reputation or row.access_profession_id or allowed_users
+    )
 
-    if not has_restrictions or is_admin or is_judge:
+    if not has_restrictions or is_admin or is_judge or viewer_id == owner_id or viewer_id in allowed_users:
         pass  # Разрешаем
     else:
         # Проверяем совпадение фракции

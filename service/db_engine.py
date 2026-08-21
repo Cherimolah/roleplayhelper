@@ -930,8 +930,32 @@ class Database(Gino):
             # Фильтры для закрытого аукциона (из карточки предмета)
             access_fraction_id = Column(Integer, ForeignKey('fractions.id', ondelete='SET NULL'))
             access_reputation = Column(Integer, default=0)
+            # Выбранные шаблоны оформления поста (если не указаны - берётся активный по умолчанию)
+            public_template_id = Column(Integer, ForeignKey('auction_templates.id', ondelete='SET NULL'))
+            private_template_id = Column(Integer, ForeignKey('auction_templates.id', ondelete='SET NULL'))
 
         self.Auction = Auction
+
+        class AuctionTemplate(self.Model):
+            """
+            Настраиваемые шаблоны оформления постов аукциона.
+
+            kind='public'  — шаблон для поста на стене группы
+            kind='private' — шаблон для рассылки в ЛС при закрытом аукционе
+
+            Доступные плейсхолдеры для вставки в текст шаблона:
+            {title} {description} {item} {start_price} {min_bet} {end_at} {kind_text}
+            """
+            __tablename__ = 'auction_templates'
+
+            id = Column(Integer, primary_key=True)
+            kind = Column(Text, nullable=False)  # 'public' | 'private'
+            name = Column(Text, nullable=False)
+            body = Column(Text, nullable=False)
+            is_default = Column(Boolean, default=False)
+            created_at = Column(DateTime(timezone=True), default=now)
+
+        self.AuctionTemplate = AuctionTemplate
 
         class AuctionBet(self.Model):
             """Ставки в аукционе"""
@@ -963,6 +987,7 @@ class Database(Gino):
             access_fraction_id = Column(Integer, ForeignKey('fractions.id', ondelete='SET NULL'))
             access_reputation = Column(Integer, default=0)   # мин. репутация во фракции
             access_profession_id = Column(Integer, ForeignKey('professions.id', ondelete='SET NULL'))
+            access_user_ids = Column(ARRAY(Integer), default=list)  # конкретные VK ID с доступом
 
         self.FormSecret = FormSecret
 
@@ -975,6 +1000,20 @@ class Database(Gino):
         await self.status(self.text('CREATE EXTENSION IF NOT EXISTS pg_trgm;'))
         await self.status(self.text(f'ALTER DATABASE {DATABASE} SET pg_trgm.similarity_threshold = 0.1;'))
         await self.gino.create_all()
+        # create_all не добавляет новые колонки в уже существующие таблицы.
+        await self.status(self.text(
+            'ALTER TABLE form_secrets '
+            'ADD COLUMN IF NOT EXISTS access_user_ids INTEGER[] DEFAULT ARRAY[]::INTEGER[];'
+        ))
+        # Настраиваемые шаблоны постов аукциона добавлены к уже существующей таблице auctions.
+        await self.status(self.text(
+            'ALTER TABLE auctions '
+            'ADD COLUMN IF NOT EXISTS public_template_id INTEGER REFERENCES auction_templates(id) ON DELETE SET NULL;'
+        ))
+        await self.status(self.text(
+            'ALTER TABLE auctions '
+            'ADD COLUMN IF NOT EXISTS private_template_id INTEGER REFERENCES auction_templates(id) ON DELETE SET NULL;'
+        ))
         await self.first_load()
 
     async def first_load(self):
@@ -1028,6 +1067,37 @@ class Database(Gino):
         chats = await db.select([func.count(db.Chat.chat_id)]).gino.scalar()
         if chats == 0 and HALL_CHAT_ID:
             await db.Chat.create(chat_id=HALL_CHAT_ID)
+
+        auction_templates = await self.select([func.count(self.AuctionTemplate.id)]).gino.scalar()
+        if auction_templates == 0:
+            await self.AuctionTemplate.create(
+                kind='public',
+                name='Стандартный (публичный)',
+                is_default=True,
+                body=('🏦 Открыт аукцион!\n\n'
+                      '🏷 Аукцион: {title}\n\n'
+                      '{item}'
+                      '{description}\n\n'
+                      '💰 Стартовая цена: {start_price}\n'
+                      '📈 Минимальная ставка: {min_bet}\n'
+                      '⏰ Завершение: {end_at}\n'
+                      'Тип: {kind_text}\n\n'
+                      'Сделайте ставку в комментариях в формате: СТАВКА [сумма]\n'
+                      'Например: СТАВКА 500')
+            )
+            await self.AuctionTemplate.create(
+                kind='private',
+                name='Стандартный (закрытый)',
+                is_default=True,
+                body=('🔒 Закрытый аукцион!\n\n'
+                      '🏷 Аукцион: {title}\n\n'
+                      '{item}'
+                      '{description}\n\n'
+                      '💰 Стартовая цена: {start_price}\n'
+                      '📈 Минимальная ставка: {min_bet}\n'
+                      '⏰ Завершение: {end_at}\n'
+                      'Тип: {kind_text}')
+            )
 
         if not os.path.exists('data'):
             os.mkdir('data')

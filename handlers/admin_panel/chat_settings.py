@@ -9,6 +9,7 @@ import asyncio
 from vkbottle.bot import Message
 from vkbottle.dispatch.rules.base import VBMLRule, PayloadRule
 from vkbottle import VKAPIError, Keyboard, Text, KeyboardButtonColor
+from sqlalchemy import and_, exists, select
 
 from loader import bot, states, user_bot
 from service.custom_rules import AdminRule, StateRule, UserFree, NumericRule, FromUserRule
@@ -287,12 +288,37 @@ async def set_cabin_number(m: Message, cabin_number: int):
         await m.answer('Возникла какая-то ошибка')
 
 
+def _non_cabin_non_pov_chats_filter():
+    """
+    Условие для выборки чатов, попадающих под массовое изменение
+    visible_messages: не каюта (cabin_user_id IS NULL) и не чат, в котором
+    сейчас находится хотя бы один игрок в режиме «От первого лица» (POV).
+
+    На практике POV-игроки физически удаляются юзерботом из всех групповых
+    чатов на время POV (см. enable_pov_mode), поэтому такие чаты и так почти
+    всегда пусты от POV-игроков — но это условие делает исключение явным и
+    защищает от гонки состояний / будущих изменений механики POV.
+    """
+    pov_user_in_chat = exists(
+        select([1]).select_from(
+            db.UserToChat.join(db.User, db.UserToChat.user_id == db.User.user_id)
+        ).where(
+            and_(
+                db.UserToChat.chat_id == db.Chat.chat_id,
+                db.User.pov_mode.is_(True),
+            )
+        )
+    )
+    return and_(db.Chat.cabin_user_id.is_(None), ~pov_user_in_chat)
+
+
 @bot.on.private_message(StateRule(Admin.MENU), PayloadRule({"admin_menu": "mass_visible"}), AdminRule())
 async def start_mass_visible(m: Message):
-    """Начало массового изменения показателя видимых сообщений для всех некаютных чатов (без кают)"""
+    """Начало массового изменения показателя видимых сообщений для всех
+    некаютных чатов и чатов, не занятых игроками в режиме «От первого лица»"""
     # Показываем текущее значение для справки
     chats = await db.select([db.Chat.chat_id, db.Chat.visible_messages]).where(
-        db.Chat.cabin_user_id.is_(None)
+        _non_cabin_non_pov_chats_filter()
     ).gino.all()
     count = len(chats)
     if not count:
@@ -303,9 +329,9 @@ async def start_mass_visible(m: Message):
         Text('Назад', {'mass_visible': 'back'}), KeyboardButtonColor.NEGATIVE
     )
     await m.answer(
-        f'Сейчас некаютных чатов: {count}\n'
+        f'Сейчас подходящих чатов: {count}\n'
         f'Напишите новое количество видимых сообщений (от 0 до 1000).\n'
-        f'Обновится сразу во всех чатах кроме кают.',
+        f'Обновится сразу во всех чатах кроме кают и чатов, где сейчас есть игроки в режиме «От первого лица».',
         keyboard=keyboard
     )
 
@@ -319,15 +345,15 @@ async def back_mass_visible(m: Message):
 
 @bot.on.private_message(StateRule(Admin.MASS_VISIBLE_MESSAGES), NumericRule(max_number=1000, min_number=0), AdminRule())
 async def apply_mass_visible(m: Message, value: int):
-    """Применение нового значения видимых сообщений ко 
-    всем некаютным чатам (без кают)"""
-    # Обновляем все некаютные чаты (где cabin_user_id IS NULL)
+    """Применение нового значения видимых сообщений ко всем чатам,
+    кроме кают и чатов, занятых игроками в режиме «От первого лица»"""
     await db.Chat.update.values(visible_messages=value).where(
-        db.Chat.cabin_user_id.is_(None)
+        _non_cabin_non_pov_chats_filter()
     ).gino.status()
     states.set(m.from_id, Admin.MENU)
     await m.answer(
-        f'✅ Готово. Видимость сообщений во всех некаютных чатах изменена на {value}\n'
+        f'✅ Готово. Видимость сообщений изменена на {value} во всех чатах, '
+        f'кроме кают и чатов с игроками в режиме «От первого лица».\n'
         f'Новые игроки будут видеть указанное количество сообщений при входе в чат по ссылке или при перемещении.',
         keyboard=keyboards.admin_menu
     )

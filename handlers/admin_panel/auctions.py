@@ -19,7 +19,7 @@ import re
 from vkbottle.bot import Message, MessageEvent
 from vkbottle.dispatch.rules.base import PayloadRule, PayloadMapRule
 from vkbottle import Keyboard, Text, KeyboardButtonColor, Callback
-from sqlalchemy import func
+from sqlalchemy import func, and_
 
 from loader import bot, user_bot
 from service.custom_rules import AdminRule, JudgeRule, StateRule, NumericRule
@@ -36,15 +36,16 @@ def _can_manage_auction(admin: int, is_judge: bool) -> bool:
     return admin > 0 or is_judge
 
 
-async def _get_lot_description(auction) -> str:
-    """Формирует текст лота для поста / рассылки."""
-    photo = auction.photo or ''
-    title = auction.title or 'Без названия'
-    desc = auction.description or ''
-    start = auction.start_price
-    min_bet = auction.min_bet
-    end_at = auction.end_at.strftime(DATETIME_FORMAT) if auction.end_at else 'не указано'
-    kind = '🔓 Публичный' if auction.is_public else '🔒 Закрытый'
+class _SafeDict(dict):
+    """Словарь для .format_map(), который не падает на неизвестных плейсхолдерах."""
+
+    def __missing__(self, key):
+        return '{' + key + '}'
+
+
+async def _get_lot_placeholders(auction) -> dict:
+    """Собирает значения плейсхолдеров для подстановки в шаблон поста."""
+    item_desc = ''
     if auction.item_id:
         item = await db.Item.get(auction.item_id)
         if item:
@@ -53,15 +54,76 @@ async def _get_lot_description(auction) -> str:
         shop = await db.Shop.get(auction.shop_id)
         if shop:
             item_desc = f'Товар/услуга: {shop.name}\n'
-    return (
-        f'🏷 Аукцион: {title}\n\n'
-        f'{item_desc if "item_desc" in locals() else ""}'
-        f'{desc}\n\n'
-        f'💰 Стартовая цена: {start}\n'
-        f'📈 Минимальная ставка: {min_bet}\n'
-        f'⏰ Завершение: {end_at}\n'
-        f'Тип: {kind}'
-    )
+
+    return {
+        'title': auction.title or 'Без названия',
+        'description': auction.description or '',
+        'item': item_desc,
+        'start_price': auction.start_price,
+        'min_bet': auction.min_bet,
+        'end_at': auction.end_at.strftime(DATETIME_FORMAT) if auction.end_at else 'не указано',
+        'kind_text': '🔓 Публичный' if auction.is_public else '🔒 Закрытый',
+    }
+
+
+# Запасной вариант на случай, если ни один шаблон ещё не создан администратором
+# (первый запуск до заполнения БД первичными данными).
+_FALLBACK_TEMPLATE_BODY = (
+    '🏷 Аукцион: {title}\n\n'
+    '{item}'
+    '{description}\n\n'
+    '💰 Стартовая цена: {start_price}\n'
+    '📈 Минимальная ставка: {min_bet}\n'
+    '⏰ Завершение: {end_at}\n'
+    'Тип: {kind_text}'
+)
+
+
+async def _resolve_auction_template(auction, kind: str):
+    """
+    Определяет, какой шаблон использовать для поста данного типа ('public'/'private').
+
+    Приоритет: явно выбранный при создании аукциона -> шаблон по умолчанию для
+    этого типа -> любой шаблон этого типа -> встроенный запасной текст.
+    """
+    template_id = auction.public_template_id if kind == 'public' else auction.private_template_id
+    if template_id:
+        template = await db.AuctionTemplate.get(template_id)
+        if template:
+            return template.body
+
+    default_template = await db.select([db.AuctionTemplate.body]).where(
+        and_(db.AuctionTemplate.kind == kind, db.AuctionTemplate.is_default.is_(True))
+    ).gino.scalar()
+    if default_template:
+        return default_template
+
+    any_template = await db.select([db.AuctionTemplate.body]).where(
+        db.AuctionTemplate.kind == kind
+    ).order_by(db.AuctionTemplate.id.asc()).gino.scalar()
+    if any_template:
+        return any_template
+
+    return _FALLBACK_TEMPLATE_BODY
+
+
+async def _get_lot_description(auction, kind: str = None) -> str:
+    """
+    Формирует текст лота для поста / рассылки по настраиваемому шаблону.
+
+    kind: 'public' — пост на стене, 'private' — рассылка в ЛС закрытого аукциона.
+    Если не указан явно, берётся исходя из auction.is_public (для обратной совместимости).
+    """
+    if kind is None:
+        kind = 'public' if auction.is_public else 'private'
+
+    body = await _resolve_auction_template(auction, kind)
+    placeholders = await _get_lot_placeholders(auction)
+    try:
+        return body.format_map(_SafeDict(placeholders))
+    except (ValueError, IndexError):
+        # Шаблон повреждён (например, одиночная фигурная скобка) — используем запасной текст.
+        return _FALLBACK_TEMPLATE_BODY.format_map(_SafeDict(placeholders))
 
 
 async def _get_top_bet(auction_id: int):
@@ -142,12 +204,10 @@ async def public_auctions(auction_id: int):
     start_at = await db.select([db.Auction.start_at]).where(db.Auction.id == auction_id).gino.scalar()
     await asyncio.sleep((now() - start_at).total_seconds())
     auction = await db.Auction.get(auction_id)
-    lot_text = await _get_lot_description(auction)
+    lot_text = await _get_lot_description(auction, kind='public')
     post_resp = await user_bot.api.wall.post(
         owner_id=GROUP_ID,
-        message=f'🏦 Открыт аукцион!\n\n{lot_text}\n\n'
-                f'Сделайте ставку в комментариях в формате: СТАВКА [сумма]\n'
-                f'Например: СТАВКА 500',
+        message=lot_text,
         attachments=auction.photo or '',
         from_group=True
     )
@@ -163,7 +223,28 @@ auction_menu_kb = Keyboard().add(
 ).row().add(
     Text('Активные аукционы', {'auction': 'active'}), KeyboardButtonColor.PRIMARY
 ).row().add(
+    Text('Шаблоны постов', {'auction': 'templates'}), KeyboardButtonColor.SECONDARY
+).row().add(
     Text('Назад', {'auction': 'back'}), KeyboardButtonColor.NEGATIVE
+)
+
+template_menu_kb = Keyboard().add(
+    Text('📄 Шаблоны публичного поста', {'tpl_kind': 'public'}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('📄 Шаблоны закрытого поста', {'tpl_kind': 'private'}), KeyboardButtonColor.PRIMARY
+).row().add(
+    Text('Назад', {'auction': 'back_to_menu'}), KeyboardButtonColor.NEGATIVE
+)
+
+_TEMPLATE_PLACEHOLDERS_HELP = (
+    'Доступные плейсхолдеры (вставляются в текст шаблона фигурными скобками):\n'
+    '{title} — название лота\n'
+    '{description} — описание лота\n'
+    '{item} — строка с предметом/товаром (или пусто)\n'
+    '{start_price} — стартовая цена\n'
+    '{min_bet} — минимальная ставка\n'
+    '{end_at} — дата/время завершения\n'
+    '{kind_text} — тип аукциона (публичный/закрытый)'
 )
 
 public_private_kb = Keyboard().add(
@@ -195,6 +276,153 @@ async def auction_main_menu(m: Message):
     """Главное меню аукционов."""
     states.set(m.from_id, AuctionState.MENU)
     await m.answer('🏦 Меню аукционов', keyboard=auction_menu_kb)
+
+
+# ─── Управление шаблонами постов ─────────────────────────────────────────────
+
+@bot.on.private_message(StateRule(AuctionState.MENU), PayloadRule({'auction': 'templates'}))
+async def auction_templates_menu(m: Message):
+    """Меню выбора типа шаблонов (публичный/закрытый)."""
+    states.set(m.from_id, AuctionState.TEMPLATE_MENU)
+    await m.answer(
+        'Управление шаблонами постов аукциона.\n\n' + _TEMPLATE_PLACEHOLDERS_HELP,
+        keyboard=template_menu_kb
+    )
+
+
+@bot.on.private_message(StateRule(AuctionState.TEMPLATE_MENU), PayloadRule({'auction': 'back_to_menu'}))
+async def auction_templates_back(m: Message):
+    await auction_main_menu(m)
+
+
+async def _show_template_list(m: Message, kind: str):
+    """Показывает список шаблонов заданного типа с возможностью добавить новый."""
+    templates = await db.select([db.AuctionTemplate.id, db.AuctionTemplate.name, db.AuctionTemplate.is_default]).where(
+        db.AuctionTemplate.kind == kind
+    ).order_by(db.AuctionTemplate.id.asc()).gino.all()
+
+    kind_title = 'публичного' if kind == 'public' else 'закрытого'
+    reply = f'Шаблоны {kind_title} поста:\n\n'
+    if not templates:
+        reply += '(пока не создано ни одного шаблона — используется встроенный текст по умолчанию)\n'
+    for i, (tid, name, is_default) in enumerate(templates):
+        mark = ' ⭐ (по умолчанию)' if is_default else ''
+        reply += f'{i + 1}. {name}{mark}\n'
+
+    kb = Keyboard()
+    for i, (tid, name, is_default) in enumerate(templates):
+        if i % 2 == 0:
+            kb.row()
+        kb.add(Text(str(i + 1), {'view_template': tid}), KeyboardButtonColor.SECONDARY)
+    kb.row().add(Text('➕ Новый шаблон', {'new_template': kind}), KeyboardButtonColor.POSITIVE)
+    kb.row().add(Text('Назад', {'auction': 'back_to_templates'}), KeyboardButtonColor.NEGATIVE)
+
+    states.set(m.from_id, f'{AuctionState.TEMPLATE_LIST}*{kind}')
+    await m.answer(reply, keyboard=kb)
+
+
+@bot.on.private_message(StateRule(AuctionState.TEMPLATE_MENU), PayloadRule({'tpl_kind': 'public'}))
+async def show_public_templates(m: Message):
+    await _show_template_list(m, 'public')
+
+
+@bot.on.private_message(StateRule(AuctionState.TEMPLATE_MENU), PayloadRule({'tpl_kind': 'private'}))
+async def show_private_templates(m: Message):
+    await _show_template_list(m, 'private')
+
+
+@bot.on.private_message(StateRule(AuctionState.TEMPLATE_LIST), PayloadRule({'auction': 'back_to_templates'}))
+async def template_list_back(m: Message):
+    await auction_templates_menu(m)
+
+
+@bot.on.private_message(StateRule(AuctionState.TEMPLATE_LIST), PayloadMapRule({'new_template': str}))
+async def new_template_start(m: Message):
+    """Начало создания нового шаблона."""
+    kind = m.payload['new_template']
+    states.set(m.from_id, f'{AuctionState.ENTER_TEMPLATE_NAME}*{kind}')
+    await m.answer('Введите название шаблона (для вашего удобства в списке):', keyboard=Keyboard())
+
+
+@bot.on.private_message(StateRule(AuctionState.ENTER_TEMPLATE_NAME))
+async def new_template_name(m: Message):
+    parts = states.get(m.from_id).split('*')
+    kind = parts[1]
+    name = m.text.strip()
+    if not name:
+        await m.answer('Название не может быть пустым. Введите название шаблона:')
+        return
+    states.set(m.from_id, f'{AuctionState.ENTER_TEMPLATE_BODY}*{kind}*{name}')
+    await m.answer('Введите текст шаблона.\n\n' + _TEMPLATE_PLACEHOLDERS_HELP)
+
+
+@bot.on.private_message(StateRule(AuctionState.ENTER_TEMPLATE_BODY))
+async def new_template_body(m: Message):
+    parts = states.get(m.from_id).split('*', 2)
+    kind = parts[1]
+    name = parts[2]
+    body = m.text
+    if not body:
+        await m.answer('Текст шаблона не может быть пустым. Введите текст шаблона:')
+        return
+
+    existing_count = await db.select([func.count(db.AuctionTemplate.id)]).where(
+        db.AuctionTemplate.kind == kind
+    ).gino.scalar()
+    await db.AuctionTemplate.create(
+        kind=kind, name=name, body=body, is_default=(existing_count == 0)
+    )
+    states.set(m.from_id, AuctionState.TEMPLATE_MENU)
+    await m.answer('✅ Шаблон создан.', keyboard=template_menu_kb)
+
+
+@bot.on.private_message(StateRule(AuctionState.TEMPLATE_LIST), PayloadMapRule({'view_template': int}))
+async def view_template_detail(m: Message):
+    """Показывает шаблон и предлагает управление им."""
+    template_id = m.payload['view_template']
+    template = await db.AuctionTemplate.get(template_id)
+    if not template:
+        await m.answer('Шаблон не найден.')
+        return
+
+    kb = Keyboard(inline=True).add(
+        Callback('⭐ Сделать по умолчанию', {'tpl_default': template_id}), KeyboardButtonColor.POSITIVE
+    ).row().add(
+        Callback('🗑 Удалить', {'tpl_delete': template_id}), KeyboardButtonColor.NEGATIVE
+    )
+    default_mark = ' (сейчас по умолчанию)' if template.is_default else ''
+    await m.answer(f'📄 «{template.name}»{default_mark}\n\n{template.body}', keyboard=kb)
+
+
+@bot.on.raw_event('message_event', MessageEvent, PayloadMapRule({'tpl_default': int}))
+async def set_template_default(m: MessageEvent):
+    admin = await db.select([db.User.admin]).where(db.User.user_id == m.user_id).gino.scalar()
+    is_judge = await db.select([db.User.judge]).where(db.User.user_id == m.user_id).gino.scalar()
+    if not (admin or is_judge):
+        await m.show_snackbar('Нет прав')
+        return
+    template_id = m.payload['tpl_default']
+    template = await db.AuctionTemplate.get(template_id)
+    if not template:
+        await m.show_snackbar('Шаблон не найден')
+        return
+    await db.AuctionTemplate.update.values(is_default=False).where(
+        db.AuctionTemplate.kind == template.kind).gino.status()
+    await db.AuctionTemplate.update.values(is_default=True).where(
+        db.AuctionTemplate.id == template_id).gino.status()
+    await m.show_snackbar('Установлено по умолчанию!')
+
+
+@bot.on.raw_event('message_event', MessageEvent, PayloadMapRule({'tpl_delete': int}))
+async def delete_template(m: MessageEvent):
+    admin = await db.select([db.User.admin]).where(db.User.user_id == m.user_id).gino.scalar()
+    is_judge = await db.select([db.User.judge]).where(db.User.user_id == m.user_id).gino.scalar()
+    if not (admin or is_judge):
+        await m.show_snackbar('Нет прав')
+        return
+    template_id = m.payload['tpl_delete']
+    await db.AuctionTemplate.delete.where(db.AuctionTemplate.id == template_id).gino.status()
+    await m.show_snackbar('Шаблон удалён')
 
 
 @bot.on.private_message(StateRule(AuctionState.MENU), PayloadRule({'auction': 'back'}))
@@ -376,11 +604,48 @@ async def auction_set_private(m: Message):
 
 
 async def _finalize_auction_type(m: Message, is_public: bool):
-    """Финализация создания аукциона — сохраняет тип и запускает."""
+    """Финализация создания аукциона — сохраняет тип, при наличии нескольких шаблонов даёт их выбрать."""
     parts = states.get(m.from_id).split('*')
     auction_id = int(parts[1])
     await db.Auction.update.values(is_public=is_public).where(db.Auction.id == auction_id).gino.status()
 
+    kind = 'public' if is_public else 'private'
+    templates = await db.select([db.AuctionTemplate.id, db.AuctionTemplate.name]).where(
+        db.AuctionTemplate.kind == kind
+    ).order_by(db.AuctionTemplate.id.asc()).gino.all()
+
+    if len(templates) <= 1:
+        await _show_auction_confirmation(m, auction_id)
+        return
+
+    reply = 'Выберите шаблон оформления поста:\n\n'
+    for i, (tid, name) in enumerate(templates):
+        reply += f'{i + 1}. {name}\n'
+    kb = Keyboard()
+    for i, (tid, name) in enumerate(templates):
+        if i % 2 == 0:
+            kb.row()
+        kb.add(Text(str(i + 1), {'auction_select_template': tid}), KeyboardButtonColor.SECONDARY)
+    states.set(m.from_id, f'{AuctionState.SELECT_TEMPLATE}*{auction_id}*{kind}')
+    await m.answer(reply, keyboard=kb)
+
+
+@bot.on.private_message(StateRule(AuctionState.SELECT_TEMPLATE), PayloadMapRule({'auction_select_template': int}))
+async def auction_pick_template(m: Message):
+    """Сохраняет выбранный администратором шаблон и переходит к подтверждению."""
+    parts = states.get(m.from_id).split('*')
+    auction_id = int(parts[1])
+    kind = parts[2]
+    template_id = m.payload['auction_select_template']
+
+    values = {'public_template_id': template_id} if kind == 'public' else {'private_template_id': template_id}
+    await db.Auction.update.values(**values).where(db.Auction.id == auction_id).gino.status()
+
+    await _show_auction_confirmation(m, auction_id)
+
+
+async def _show_auction_confirmation(m: Message, auction_id: int):
+    """Показывает финальные данные аукциона с кнопкой подтверждения."""
     auction = await db.Auction.get(auction_id)
     lot_text = await _get_lot_description(auction)
 
@@ -402,9 +667,8 @@ async def confirm_auction_create(m: Message):
         await m.answer('Аукцион не найден.')
         return
 
-    lot_text = await _get_lot_description(auction)
-
     if auction.is_public:
+        lot_text = await _get_lot_description(auction, kind='public')
         if auction.start_at > now():
             asyncio.get_event_loop().create_task(public_auctions(auction_id))
         else:
@@ -412,9 +676,7 @@ async def confirm_auction_create(m: Message):
             try:
                 post_resp = await user_bot.api.wall.post(
                     owner_id=GROUP_ID,
-                    message=f'🏦 Открыт аукцион!\n\n{lot_text}\n\n'
-                            f'Сделайте ставку в комментариях в формате: СТАВКА [сумма]\n'
-                            f'Например: СТАВКА 500',
+                    message=lot_text,
                     attachments=auction.photo or '',
                     from_group=True
                 )
@@ -425,6 +687,7 @@ async def confirm_auction_create(m: Message):
                 await m.answer(f'Ошибка при публикации поста: {e}')
     else:
         # Закрытый аукцион — рассылка участникам по фильтрам
+        lot_text = await _get_lot_description(auction, kind='private')
         await _send_private_auction_invite(auction_id, lot_text)
 
     # Планируем завершение

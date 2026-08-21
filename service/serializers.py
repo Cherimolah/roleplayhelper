@@ -1006,13 +1006,15 @@ async def info_debuff_pov():
         'Эффект применяется к тексту, который юзербот пересылает игроку в режиме от первого лица.\n\n'
         '1. Нет — дебаф не влияет на текст в POV\n'
         '2. Ограниченная видимость — часть слов замазывается символами *\n'
-        '3. Контузия — буквы в словах перемешиваются случайным образом\n'
-        '4. Слепота — виден только диалог, нарратив скрыт\n'
-        '5. Глухота — нарратив виден, диалог замазывается *\n'
+        '3. Ограниченная видимость (скрыт отправитель) — то же, но имя отправителя убирается из поста\n'
+        '4. Контузия — буквы в словах перемешиваются случайным образом\n'
+        '5. Слепота — виден только диалог, нарратив скрыт\n'
+        '6. Глухота — нарратив виден, диалог замазывается *\n'
     )
     keyboard = Keyboard()
     keyboard.add(Text('Нет', {'debuff_pov': 'none'}), KeyboardButtonColor.NEGATIVE).row()
     keyboard.add(Text('Ограниченная видимость', {'debuff_pov': 'limited_visibility'}), KeyboardButtonColor.PRIMARY).row()
+    keyboard.add(Text('Огр. видимость (скрыт отправитель)', {'debuff_pov': 'limited_visibility_hidden'}), KeyboardButtonColor.PRIMARY).row()
     keyboard.add(Text('Контузия', {'debuff_pov': 'concussion'}), KeyboardButtonColor.PRIMARY).row()
     keyboard.add(Text('Слепота', {'debuff_pov': 'blindness'}), KeyboardButtonColor.PRIMARY).row()
     keyboard.add(Text('Глухота', {'debuff_pov': 'deafness'}), KeyboardButtonColor.PRIMARY)
@@ -1023,6 +1025,7 @@ async def serialize_debuff_pov(pov_effect) -> str:
     """Человекочитаемое название POV-эффекта для отображения в карточке дебафа."""
     names = {
         'limited_visibility': 'Ограниченная видимость',
+        'limited_visibility_hidden': 'Ограниченная видимость (скрыт отправитель)',
         'concussion': 'Контузия',
         'blindness': 'Слепота',
         'deafness': 'Глухота',
